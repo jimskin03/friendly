@@ -15,6 +15,9 @@
   <img src="docs/img/friendly-mobile.png" alt="Friendly 2.0 Mobile Interface" width="280" />
 </div>
 
+## 🎬 Demo
+
+[▶ Watch the Friendly 2.0 screen recording (MP4)](docs/video/friendly-demo.mp4)
 
 ## ✨ Features
 
