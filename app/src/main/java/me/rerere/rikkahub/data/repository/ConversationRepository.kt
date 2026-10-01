@@ -52,6 +52,14 @@ class ConversationRepository(
         }
     }
 
+    fun getLatestConversationTitleOfFolder(folderId: Uuid): Flow<String?> {
+        return conversationDAO.getLatestConversationTitleOfFolder(folderId.toString())
+    }
+
+    fun getConversationCountOfFolder(folderId: Uuid): Flow<Int> {
+        return conversationDAO.getConversationCountOfFolder(folderId.toString())
+    }
+
     fun getConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
         return conversationDAO
             .getConversationsOfAssistant(assistantId.toString())

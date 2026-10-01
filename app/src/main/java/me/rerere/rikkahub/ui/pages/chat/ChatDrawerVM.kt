@@ -142,12 +142,12 @@ class ChatDrawerVM(
         _selectedFolderId.value = folderId
     }
 
-    fun createFolder(name: String) {
+    fun createFolder(name: String, label: String = "planning") {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             val assistantId = assistantIdFlow.first()
-            folderRepo.createFolder(assistantId, trimmed)
+            folderRepo.createFolder(assistantId, trimmed, label)
         }
     }
 

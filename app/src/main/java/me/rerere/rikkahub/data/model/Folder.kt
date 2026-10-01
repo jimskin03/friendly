@@ -8,6 +8,7 @@ data class Folder(
     val id: Uuid = Uuid.random(),
     val assistantId: Uuid,
     val name: String,
+    val label: String = "planning",
     val sortIndex: Int = 0,
     val createAt: Instant = Instant.now(),
 )

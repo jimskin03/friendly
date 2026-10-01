@@ -78,6 +78,8 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Folder
+import me.rerere.rikkahub.data.model.FolderLabel
+import me.rerere.rikkahub.ui.components.ui.CreateFolderDialog
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import dev.chrisbanes.haze.HazeState
@@ -577,36 +579,13 @@ fun ChatDrawerContent(
     }
 
 
-    if (showCreateFolderDialog) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showCreateFolderDialog = false },
-            title = { Text(stringResource(R.string.chat_page_create_folder)) },
-            text = {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text(stringResource(R.string.chat_page_folder_name)) }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        drawerVm.createFolder(name)
-                        showCreateFolderDialog = false
-                    },
-                    enabled = name.isNotBlank()
-                ) { Text(stringResource(R.string.chat_page_save)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateFolderDialog = false }) {
-                    Text(stringResource(R.string.chat_page_cancel))
-                }
-            }
-        )
-    }
+    CreateFolderDialog(
+        visible = showCreateFolderDialog,
+        onDismissRequest = { showCreateFolderDialog = false },
+        onConfirm = { name, label ->
+            drawerVm.createFolder(name, label.id)
+        }
+    )
 
 
     folderToRename?.let { folder ->
@@ -828,10 +807,11 @@ private fun FolderBar(
         }
         items(folders) { folder ->
             var menuExpanded by remember { mutableStateOf(false) }
+            val folderLabel = remember(folder.label) { FolderLabel.fromId(folder.label) }
             Box {
                 FolderChip(
                     label = folder.name,
-                    icon = HugeIcons.Folder01,
+                    icon = folderLabel.icon,
                     selected = selectedFolderId == folder.id,
                     onClick = { onSelect(folder.id) },
                     onLongClick = { menuExpanded = true },

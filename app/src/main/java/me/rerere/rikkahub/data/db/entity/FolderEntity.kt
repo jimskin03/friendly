@@ -17,6 +17,8 @@ data class FolderEntity(
     val assistantId: String,
     @ColumnInfo("name")
     val name: String,
+    @ColumnInfo("label", defaultValue = "'planning'")
+    val label: String = "planning",
     @ColumnInfo("sort_index", defaultValue = "0")
     val sortIndex: Int = 0,
     @ColumnInfo("create_at")

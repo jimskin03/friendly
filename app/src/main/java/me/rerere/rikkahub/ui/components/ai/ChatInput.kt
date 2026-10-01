@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
@@ -144,6 +146,7 @@ fun ChatInput(
     onStartVoiceMode: (() -> Unit)? = null,
     voiceState: VoiceSessionState = VoiceSessionState(),
     onStopVoiceMode: () -> Unit = {},
+    includeNavigationBarPadding: Boolean = true,
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
@@ -222,9 +225,9 @@ fun ChatInput(
         Column(
             modifier = modifier
                 .imePadding()
-                .navigationBarsPadding()
+                .then(if (includeNavigationBarPadding) Modifier.navigationBarsPadding() else Modifier)
                 .padding(horizontal = 8.dp)
-                .padding(bottom = 8.dp),
+                .padding(bottom = if (includeNavigationBarPadding) 8.dp else 2.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             MessageQueuePanel(
@@ -416,6 +419,10 @@ private fun SendButton(
     modifier: Modifier = Modifier,
 ) {
     val showStop = loading && empty
+    val isReady = !showStop && !empty
+    val sendGradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
+    )
     val containerColor = when {
         showStop -> MaterialTheme.colorScheme.errorContainer
         empty -> MaterialTheme.colorScheme.surfaceContainerHigh
@@ -424,26 +431,24 @@ private fun SendButton(
     val contentColor = when {
         showStop -> MaterialTheme.colorScheme.onErrorContainer
         empty -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        else -> MaterialTheme.colorScheme.onPrimary
+        else -> Color.White
     }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(30.dp)
+            .size(32.dp)
             .testTag("chat_send_button")
             .clip(CircleShape)
+            .then(
+                if (isReady) Modifier.background(sendGradient)
+                else Modifier.background(containerColor)
+            )
             .combinedClickable(
                 enabled = showStop || !empty,
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            shape = CircleShape,
-            color = containerColor,
-            content = {},
-        )
         Icon(
             imageVector = if (showStop) HugeIcons.Cancel01 else HugeIcons.ArrowUp02,
             contentDescription = stringResource(if (showStop) R.string.stop else R.string.send),

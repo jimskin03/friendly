@@ -94,6 +94,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
@@ -122,6 +123,13 @@ fun ChatList(
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError> = emptyList(),
+    folders: List<Folder> = emptyList(),
+    onSelectFolder: (Uuid?) -> Unit = {},
+    onSeeAllFolders: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenActivity: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onQuickCreateFolder: (name: String, labelId: String) -> Unit = { _, _ -> },
     onDismissError: (Uuid) -> Unit = {},
     onClearAllErrors: () -> Unit = {},
     onRegenerate: (UIMessage) -> Unit = {},
@@ -162,6 +170,13 @@ fun ChatList(
                 settings = settings,
                 hazeState = hazeState,
                 errors = errors,
+                folders = folders,
+                onSelectFolder = onSelectFolder,
+                onSeeAllFolders = onSeeAllFolders,
+                onOpenSearch = onOpenSearch,
+                onOpenActivity = onOpenActivity,
+                onOpenSettings = onOpenSettings,
+                onQuickCreateFolder = onQuickCreateFolder,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = onRegenerate,
@@ -190,6 +205,13 @@ private fun ChatListNormal(
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError>,
+    folders: List<Folder>,
+    onSelectFolder: (Uuid?) -> Unit,
+    onSeeAllFolders: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenActivity: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onQuickCreateFolder: (name: String, labelId: String) -> Unit,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
     onRegenerate: (UIMessage) -> Unit,
@@ -300,7 +322,11 @@ private fun ChatListNormal(
         ChatFontProvider(displaySetting = settings.displaySetting) {
             LazyColumn(
                 state = state,
-                contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
+                contentPadding = if (conversation.messageNodes.isEmpty()) {
+                    PaddingValues(bottom = 16.dp + innerPadding.calculateBottomPadding())
+                } else {
+                    PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding())
+                },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
@@ -310,48 +336,20 @@ private fun ChatListNormal(
             ) {
             if (conversation.messageNodes.isEmpty() && !loading) {
                 item(key = "AssistantHome") {
-                    val homeAssistant = assistant
-                    val quickStarters = homeAssistant
-                        ?.let { settings.getQuickMessagesOfAssistant(it) }
-                        .orEmpty()
-                    val starters = if (quickStarters.isNotEmpty()) {
-                        quickStarters.take(6).map { message ->
-                            AssistantStarter(
-                                label = message.title.ifBlank { message.content }.take(42),
-                                prompt = message.content,
-                            )
-                        }
-                    } else {
-                        listOf(
-                            AssistantStarter(
-                                label = stringResource(R.string.assistant_starter_plan),
-                                prompt = stringResource(R.string.assistant_starter_plan_prompt),
-                            ),
-                            AssistantStarter(
-                                label = stringResource(R.string.assistant_starter_summarize),
-                                prompt = stringResource(R.string.assistant_starter_summarize_prompt),
-                            ),
-                            AssistantStarter(
-                                label = stringResource(R.string.assistant_starter_search),
-                                prompt = stringResource(R.string.assistant_starter_search_prompt),
-                            ),
-                            AssistantStarter(
-                                label = stringResource(R.string.assistant_starter_remember),
-                                prompt = stringResource(R.string.assistant_starter_remember_prompt),
-                            ),
-                        )
-                    }
-                    val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
-                    Column(modifier = Modifier.fillParentMaxHeight()) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         AssistantHome(
-                            name = homeAssistant?.name?.ifBlank { defaultAssistantName } ?: defaultAssistantName,
-                            avatar = homeAssistant?.avatar ?: Avatar.Dummy,
-                            modelName = settings.getCurrentChatModel()?.displayName,
-                            starters = starters,
+                            userNickname = settings.displaySetting.userNickname,
+                            folders = folders,
+                            onSelectFolder = onSelectFolder,
+                            onSeeAllFolders = onSeeAllFolders,
                             onStarterClick = onClickSuggestion,
-                            modifier = Modifier.weight(1f),
+                            onOpenSearch = onOpenSearch,
+                            onOpenActivity = onOpenActivity,
+                            onOpenSettings = onOpenSettings,
+                            onQuickCreateFolder = onQuickCreateFolder,
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        if (homeAssistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
+                        if (assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
                             ConversationSystemPromptButton(
                                 customSystemPrompt = conversation.customSystemPrompt,
                                 onSystemPromptChange = onConversationSystemPromptChange,

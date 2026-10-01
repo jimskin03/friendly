@@ -22,10 +22,11 @@ class FolderRepository(
         return folderDAO.getFolderById(id.toString())?.toFolder()
     }
 
-    suspend fun createFolder(assistantId: Uuid, name: String): Folder {
+    suspend fun createFolder(assistantId: Uuid, name: String, label: String = "planning"): Folder {
         val folder = Folder(
             assistantId = assistantId,
             name = name,
+            label = label,
             createAt = Instant.now(),
         )
         folderDAO.insert(folder.toEntity())
@@ -34,6 +35,10 @@ class FolderRepository(
 
     suspend fun renameFolder(id: Uuid, name: String) {
         folderDAO.rename(id.toString(), name)
+    }
+
+    suspend fun updateFolderLabel(id: Uuid, label: String) {
+        folderDAO.updateLabel(id.toString(), label)
     }
 
 
@@ -47,6 +52,7 @@ private fun FolderEntity.toFolder(): Folder = Folder(
     id = Uuid.parse(id),
     assistantId = Uuid.parse(assistantId),
     name = name,
+    label = label,
     sortIndex = sortIndex,
     createAt = Instant.ofEpochMilli(createAt),
 )
@@ -55,6 +61,7 @@ private fun Folder.toEntity(): FolderEntity = FolderEntity(
     id = id.toString(),
     assistantId = assistantId.toString(),
     name = name,
+    label = label,
     sortIndex = sortIndex,
     createAt = createAt.toEpochMilli(),
 )

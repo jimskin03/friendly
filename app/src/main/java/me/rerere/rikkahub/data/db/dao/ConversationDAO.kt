@@ -30,6 +30,12 @@ interface ConversationDAO {
     @Query("SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE folder_id = :folderId ORDER BY is_pinned DESC, update_at DESC")
     fun getConversationsOfFolderPaging(folderId: String): PagingSource<Int, LightConversationEntity>
 
+    @Query("SELECT title FROM conversationentity WHERE folder_id = :folderId ORDER BY update_at DESC LIMIT 1")
+    fun getLatestConversationTitleOfFolder(folderId: String): Flow<String?>
+
+    @Query("SELECT COUNT(*) FROM conversationentity WHERE folder_id = :folderId")
+    fun getConversationCountOfFolder(folderId: String): Flow<Int>
+
     @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId ORDER BY is_pinned DESC, update_at DESC LIMIT :limit")
     suspend fun getRecentConversationsOfAssistant(assistantId: String, limit: Int): List<ConversationEntity>
 
