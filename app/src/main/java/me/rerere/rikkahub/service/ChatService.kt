@@ -272,7 +272,7 @@ class ChatService(
     }
 
 
-    suspend fun initializeConversation(conversationId: Uuid) {
+    suspend fun initializeConversation(conversationId: Uuid, folderId: Uuid? = null) {
         sessionManager.withSession(conversationId) { session ->
             session.initialize {
                 conversationRepo.getConversationById(conversationId) ?: run {
@@ -283,8 +283,11 @@ class ChatService(
                         id = conversationId,
                         assistantId = assistant.id,
                         newConversation = true
-                    ).updateCurrentMessages(assistant.presetMessages)
+                    ).copy(folderId = folderId).updateCurrentMessages(assistant.presetMessages)
                 }
+            }
+            if (folderId != null && session.state.value.folderId == null) {
+                updateConversationState(conversationId) { it.copy(folderId = folderId) }
             }
             settingsStore.updateAssistant(session.state.value.assistantId)
         }
@@ -1059,7 +1062,7 @@ class ChatService(
 
 
     suspend fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?) {
-        if (sessionManager.get(conversationId) != null) {
+        sessionManager.withSession(conversationId) {
             updateConversationState(conversationId) { it.copy(folderId = folderId) }
         }
         conversationRepo.updateConversationFolderId(conversationId, folderId)

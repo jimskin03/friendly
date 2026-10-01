@@ -7,13 +7,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,12 +33,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.FolderLabel
+import kotlin.uuid.Uuid
 
 @Composable
 fun FolderBadge(
@@ -230,4 +240,151 @@ fun CreateFolderDialog(
             }
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MoveToFolderSheet(
+    folders: List<Folder>,
+    currentFolderId: Uuid?,
+    onDismissRequest: () -> Unit,
+    onSelectFolder: (Uuid?) -> Unit,
+    onCreateNewFolder: (name: String, labelId: String) -> Unit,
+) {
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Save to folder",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                )
+                TextButton(onClick = { showCreateDialog = true }) {
+                    Icon(HugeIcons.Add01, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("New folder")
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                // Unfiled / Remove from folder option
+                item {
+                    Surface(
+                        onClick = {
+                            onSelectFolder(null)
+                            onDismissRequest()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.Transparent,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    HugeIcons.Folder01,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            Text(
+                                text = "None (Unfiled)",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (currentFolderId == null) {
+                                Icon(
+                                    HugeIcons.Tick01,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Existing folders
+                items(folders, key = { it.id.toString() }) { folder ->
+                    val label = FolderLabel.fromId(folder.label)
+                    val isSelected = folder.id == currentFolderId
+                    Surface(
+                        onClick = {
+                            onSelectFolder(folder.id)
+                            onDismissRequest()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.Transparent,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            FolderBadge(
+                                label = label,
+                                size = 36.dp,
+                                iconSize = 18.dp,
+                                shapeRadius = 10.dp,
+                            )
+                            Text(
+                                text = folder.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    HugeIcons.Tick01,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreateDialog) {
+        CreateFolderDialog(
+            visible = true,
+            onDismissRequest = { showCreateDialog = false },
+            onConfirm = { name, label ->
+                onCreateNewFolder(name, label.id)
+                showCreateDialog = false
+            }
+        )
+    }
 }

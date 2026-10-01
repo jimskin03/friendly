@@ -33,6 +33,9 @@ class Navigator(private val backStack: MutableList<NavKey>) {
     fun popBackStack() {
         if (backStack.size > 1) backStack.removeLastOrNull()
     }
+
+    val canPop: Boolean
+        get() = backStack.size > 1
 }
 
 class NavigateOptionsBuilder {

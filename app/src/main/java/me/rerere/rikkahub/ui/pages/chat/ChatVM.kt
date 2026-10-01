@@ -370,4 +370,15 @@ class ChatVM(
         }
     }
 
+    fun setFolderId(folderId: Uuid?) {
+        viewModelScope.launch {
+            chatService.moveConversationToFolder(_conversationId, folderId)
+        }
+    }
+
+    fun moveConversationToFolder(folderId: Uuid?) {
+        viewModelScope.launch {
+            chatService.moveConversationToFolder(_conversationId, folderId)
+        }
+    }
 }

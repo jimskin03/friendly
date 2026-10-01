@@ -132,9 +132,14 @@ fun FolderConversationsPage(
                             val newChatId = Uuid.random()
                             scope.launch {
                                 if (folderUuid != null) {
+                                    chatService.initializeConversation(newChatId, folderUuid)
                                     chatService.moveConversationToFolder(newChatId, folderUuid)
                                 }
-                                navigateToChatPage(navController, newChatId)
+                                navigateToChatPage(
+                                    navigator = navController,
+                                    chatId = newChatId,
+                                    folderId = folderId,
+                                )
                             }
                         }
                     ) {
@@ -152,9 +157,14 @@ fun FolderConversationsPage(
                     val newChatId = Uuid.random()
                     scope.launch {
                         if (folderUuid != null) {
+                            chatService.initializeConversation(newChatId, folderUuid)
                             chatService.moveConversationToFolder(newChatId, folderUuid)
                         }
-                        navigateToChatPage(navController, newChatId)
+                        navigateToChatPage(
+                            navigator = navController,
+                            chatId = newChatId,
+                            folderId = folderId,
+                        )
                     }
                 },
                 containerColor = folderLabel.color,
@@ -205,9 +215,14 @@ fun FolderConversationsPage(
                             val newChatId = Uuid.random()
                             scope.launch {
                                 if (folderUuid != null) {
+                                    chatService.initializeConversation(newChatId, folderUuid)
                                     chatService.moveConversationToFolder(newChatId, folderUuid)
                                 }
-                                navigateToChatPage(navController, newChatId)
+                                navigateToChatPage(
+                                    navigator = navController,
+                                    chatId = newChatId,
+                                    folderId = folderId,
+                                )
                             }
                         }
                     ) {
@@ -236,7 +251,11 @@ fun FolderConversationsPage(
                         SwipeableFolderConversationItem(
                             conversation = conversation,
                             onClick = {
-                                navigateToChatPage(navController, conversation.id)
+                                navigateToChatPage(
+                                    navigator = navController,
+                                    chatId = conversation.id,
+                                    folderId = folderId,
+                                )
                             },
                             onDelete = {
                                 scope.launch {

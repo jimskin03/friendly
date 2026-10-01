@@ -78,10 +78,16 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
-import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.model.Folder
+import me.rerere.rikkahub.data.model.FolderLabel
+import me.rerere.rikkahub.ui.components.ui.CreateFolderDialog
+import me.rerere.rikkahub.ui.components.ui.FolderBadge
+import me.rerere.rikkahub.ui.components.ui.MoveToFolderSheet
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -112,7 +118,13 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
 @Composable
-fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+fun ChatPage(
+    id: Uuid,
+    text: String?,
+    files: List<Uri>,
+    nodeId: Uuid? = null,
+    folderId: String? = null,
+) {
     val vm: ChatVM = koinViewModel(
         parameters = {
             parametersOf(id.toString())
@@ -130,41 +142,26 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val hazeState = rememberHazeState()
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-
-    // Handle back press when drawer is open
-    BackHandler(enabled = drawerState.isOpen) {
-        scope.launch {
-            drawerState.close()
-        }
-    }
-
-    // Clear input focus so popup transitions cannot reopen the keyboard.
-    LaunchedEffect(drawerState.isOpen) {
-        if (drawerState.isOpen) {
-            focusManager.clearFocus(force = true)
-            softwareKeyboardController?.hide()
-        }
-    }
 
     val windowAdaptiveInfo = currentWindowDpSize()
     val isBigScreen =
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
 
-
-    LaunchedEffect(isBigScreen) {
-        if (isBigScreen && drawerState.isOpen) {
-            drawerState.close()
-        }
-    }
-
     val startVoiceMode = rememberVoiceModeStarter(vm, setting)
 
     val inputState = vm.inputState
 
+    LaunchedEffect(id, folderId) {
+        if (folderId != null) {
+            val folderUuid = runCatching { Uuid.parse(folderId) }.getOrNull()
+            if (folderUuid != null) {
+                vm.setFolderId(folderUuid)
+            }
+        }
+    }
 
     LaunchedEffect(files, text) {
         if (files.isNotEmpty()) {
@@ -208,80 +205,37 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    when {
-        isBigScreen -> {
-            PermanentNavigationDrawer(
-                drawerContent = {
-                    ChatDrawerContent(
-                        navController = navController,
-                        current = conversation,
-                        vm = vm,
-                        settings = setting,
-                        hazeState = hazeState,
-                    )
-                }
-            ) {
-                ChatPageContent(
-                    hazeState = hazeState,
-                    onStartVoiceMode = startVoiceMode,
-                    inputState = inputState,
-                    loadingJob = loadingJob,
-                    processingStatus = processingStatus,
-                    setting = setting,
-                    conversation = conversation,
-                    drawerState = drawerState,
-                    navController = navController,
-                    vm = vm,
-                    chatListState = chatListState,
-                    enableWebSearch = enableWebSearch,
-                    currentChatModel = currentChatModel,
-                    bigScreen = true,
-                    errors = errors,
-                    onDismissError = { vm.dismissError(it) },
-                    onClearAllErrors = { vm.clearAllErrors() },
-                )
-            }
-        }
-
-        else -> {
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                gesturesEnabled = conversation.messageNodes.isNotEmpty(),
-                drawerContent = {
-                    ChatDrawerContent(
-                        navController = navController,
-                        current = conversation,
-                        vm = vm,
-                        settings = setting,
-                        hazeState = hazeState,
-                    )
-                }
-            ) {
-                ChatPageContent(
-                    hazeState = hazeState,
-                    onStartVoiceMode = startVoiceMode,
-                    inputState = inputState,
-                    loadingJob = loadingJob,
-                    processingStatus = processingStatus,
-                    setting = setting,
-                    conversation = conversation,
-                    drawerState = drawerState,
-                    navController = navController,
-                    vm = vm,
-                    chatListState = chatListState,
-                    enableWebSearch = enableWebSearch,
-                    currentChatModel = currentChatModel,
-                    bigScreen = false,
-                    errors = errors,
-                    onDismissError = { vm.dismissError(it) },
-                    onClearAllErrors = { vm.clearAllErrors() },
-                )
-            }
-            BackHandler(drawerState.isOpen) {
-                scope.launch { drawerState.close() }
-            }
+    val handleBack: () -> Unit = {
+        if (navController.canPop) {
+            navController.popBackStack()
+        } else {
+            navController.clearAndNavigate(Screen.Chat(Uuid.random().toString()))
         }
     }
+
+    BackHandler(enabled = conversation.messageNodes.isNotEmpty()) {
+        handleBack()
+    }
+
+    ChatPageContent(
+        hazeState = hazeState,
+        onStartVoiceMode = startVoiceMode,
+        inputState = inputState,
+        loadingJob = loadingJob,
+        processingStatus = processingStatus,
+        setting = setting,
+        conversation = conversation,
+        navController = navController,
+        vm = vm,
+        chatListState = chatListState,
+        enableWebSearch = enableWebSearch,
+        currentChatModel = currentChatModel,
+        bigScreen = isBigScreen,
+        errors = errors,
+        onDismissError = { vm.dismissError(it) },
+        onClearAllErrors = { vm.clearAllErrors() },
+        onBack = handleBack,
+    )
 }
 
 @Composable
@@ -294,7 +248,6 @@ private fun ChatPageContent(
     setting: Settings,
     bigScreen: Boolean,
     conversation: Conversation,
-    drawerState: DrawerState,
     navController: Navigator,
     vm: ChatVM,
     chatListState: LazyListState,
@@ -303,6 +256,7 @@ private fun ChatPageContent(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -341,6 +295,7 @@ private fun ChatPageContent(
     }
     val folders by drawerVm.folders.collectAsStateWithLifecycle()
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
+    var showMoveToFolderSheet by rememberSaveable { mutableStateOf(false) }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -353,11 +308,14 @@ private fun ChatPageContent(
                     TopBar(
                         settings = setting,
                         conversation = conversation,
-                        bigScreen = bigScreen,
-                        drawerState = drawerState,
+                        folders = folders,
                         previewMode = previewMode,
+                        onBack = onBack,
+                        onMoveFolder = {
+                            showMoveToFolderSheet = true
+                        },
                         onNewChat = {
-                            navigateToChatPage(navController)
+                            navController.clearAndNavigate(Screen.Chat(Uuid.random().toString()))
                         },
                         onClickMenu = {
                             previewMode = !previewMode
@@ -375,7 +333,7 @@ private fun ChatPageContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     ChatInput(
-                        includeNavigationBarPadding = false,
+                        includeNavigationBarPadding = conversation.messageNodes.isNotEmpty(),
                         onStartVoiceMode = onStartVoiceMode,
                         voiceState = voiceState,
                         onStopVoiceMode = vm.voiceSession::stop,
@@ -486,23 +444,25 @@ private fun ChatPageContent(
                             showFilesSheet = true
                         },
                     )
-                    HomeBottomBar(
-                        onNewFolder = {
-                            showCreateFolderDialog = true
-                        },
-                        onAssistant = {
-                            navController.navigate(Screen.Assistant)
-                        },
-                        onAnalyze = {
-                            navController.navigate(Screen.Stats)
-                        },
-                        onFavorite = {
-                            navController.navigate(Screen.Favorite)
-                        },
-                        onMore = {
-                            navController.navigate(Screen.Setting)
-                        },
-                    )
+                    if (conversation.messageNodes.isEmpty()) {
+                        HomeBottomBar(
+                            onNewFolder = {
+                                showCreateFolderDialog = true
+                            },
+                            onAssistant = {
+                                navController.navigate(Screen.Assistant)
+                            },
+                            onAnalyze = {
+                                navController.navigate(Screen.Stats)
+                            },
+                            onFavorite = {
+                                navController.navigate(Screen.Favorite)
+                            },
+                            onMore = {
+                                navController.navigate(Screen.Setting)
+                            },
+                        )
+                    }
                 }
             },
             containerColor = Color.Transparent,
@@ -626,6 +586,25 @@ private fun ChatPageContent(
                 }
             )
         }
+
+        if (showMoveToFolderSheet) {
+            MoveToFolderSheet(
+                folders = folders,
+                currentFolderId = conversation.folderId,
+                onDismissRequest = { showMoveToFolderSheet = false },
+                onSelectFolder = { selectedFolderId ->
+                    vm.moveConversationToFolder(selectedFolderId)
+                    val folderName = folders.firstOrNull { it.id == selectedFolderId }?.name
+                    toaster.show(
+                        if (folderName != null) "Saved to $folderName" else "Removed from folder",
+                        type = ToastType.Success
+                    )
+                },
+                onCreateNewFolder = { name, labelId ->
+                    drawerVm.createFolder(name, labelId)
+                }
+            )
+        }
     }
 }
 
@@ -711,11 +690,12 @@ private fun ChatFilesPickerSheet(
 private fun TopBar(
     settings: Settings,
     conversation: Conversation,
-    drawerState: DrawerState,
-    bigScreen: Boolean,
+    folders: List<Folder>,
     previewMode: Boolean,
-    onClickMenu: () -> Unit,
+    onBack: () -> Unit,
+    onMoveFolder: () -> Unit,
     onNewChat: () -> Unit,
+    onClickMenu: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -727,14 +707,8 @@ private fun TopBar(
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         navigationIcon = {
-            if (!bigScreen) {
-                IconButton(
-                    onClick = {
-                        scope.launch { drawerState.open() }
-                    }
-                ) {
-                    Icon(HugeIcons.Menu03, "Messages")
-                }
+            IconButton(onClick = onBack) {
+                Icon(HugeIcons.ArrowLeft01, stringResource(R.string.back))
             }
         },
         title = {
@@ -794,6 +768,25 @@ private fun TopBar(
             }
         },
         actions = {
+            val currentFolder = remember(conversation.folderId, folders) {
+                folders.firstOrNull { it.id == conversation.folderId }
+            }
+            if (currentFolder != null) {
+                val label = FolderLabel.fromId(currentFolder.label)
+                IconButton(onClick = onMoveFolder) {
+                    FolderBadge(
+                        label = label,
+                        size = 30.dp,
+                        iconSize = 16.dp,
+                        shapeRadius = 8.dp,
+                    )
+                }
+            } else {
+                IconButton(onClick = onMoveFolder) {
+                    Icon(HugeIcons.Folder01, "Save to folder")
+                }
+            }
+
             IconButton(
                 onClick = {
                     onClickMenu()
