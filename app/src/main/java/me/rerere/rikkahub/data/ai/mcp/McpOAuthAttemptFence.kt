@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.data.ai.mcp
 
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.data.datastore.Settings
@@ -38,7 +40,7 @@ internal class McpOAuthAttemptFence {
      * Reserves a new attempt and invalidates the previous one when no commit gate is held.
      * Returns without waiting. The attempt cannot publish until [activate].
      */
-    fun open(configId: Uuid): Long = open(configId, attemptOut = null, job = null)
+    fun open(configId: Uuid): Long = openInternal(configId, attemptOut = null, job = null)
 
     /**
      * Same as [open], then stores the id in [attemptOut] and starts [job].
@@ -46,9 +48,9 @@ internal class McpOAuthAttemptFence {
      * previous job leaves [withCurrentCommit].
      */
     fun open(configId: Uuid, attemptOut: AtomicLong, job: Job): Long =
-        open(configId, attemptOut, job as Job?)
+        openInternal(configId, attemptOut, job)
 
-    private fun open(configId: Uuid, attemptOut: AtomicLong?, job: Job?): Long {
+    private fun openInternal(configId: Uuid, attemptOut: AtomicLong?, job: Job?): Long {
         val server = slot(configId)
         val previous = synchronized(server) {
             val attempt = ++server.next
@@ -164,23 +166,24 @@ internal class McpOAuthAttemptPublisher(
         attempt: Long,
         oauth: McpOAuthState?,
         afterPersist: (() -> Unit)? = null,
-    ): Boolean {
+    ): Boolean = coroutineScope {
+        val currentJob = coroutineContext[Job]
         val published = fence.withCurrentCommit(configId, attempt) {
             if (readSettings().init) return@withCurrentCommit false
             val written = persistMcpOAuth(configId, oauth) {
-                fence.isCurrent(configId, attempt) && coroutineContext.isActive
+                fence.isCurrent(configId, attempt) && (currentJob == null || currentJob.isActive)
             }
             if (!written) return@withCurrentCommit false
-            coroutineContext.ensureActive()
+            ensureActive()
             if (!fence.isCurrent(configId, attempt)) return@withCurrentCommit false
             val patched = settingsWithOAuth(readSettings(), configId, oauth) ?: return@withCurrentCommit false
             if (!assignSettings(patched)) return@withCurrentCommit false
-            if (afterPersist != null && fence.isCurrent(configId, attempt) && coroutineContext.isActive) {
+            if (afterPersist != null && fence.isCurrent(configId, attempt) && isActive) {
                 afterPersist()
             }
             true
         }
-        return published == true
+        published == true
     }
 
     private fun settingsWithOAuth(current: Settings, configId: Uuid, oauth: McpOAuthState?): Settings? {
