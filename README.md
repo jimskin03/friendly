@@ -12,12 +12,17 @@
 <br />
 
 <div align="center">
-  <img src="docs/img/friendly-mobile.png" alt="Friendly 2.0 Mobile Interface" width="280" />
+  <video
+    src="https://github.com/user-attachments/assets/e11266ad-b193-4f27-a948-19d16640dc40"
+    width="280"
+    controls
+    playsinline
+    preload="metadata"
+    title="Friendly 2.0 screen recording"
+  >
+    Friendly 2.0 screen recording
+  </video>
 </div>
-
-## 🎬 Demo
-
-[▶ Watch the Friendly 2.0 screen recording (MP4)](docs/video/friendly-demo.mp4)
 
 ## ✨ Features
 
