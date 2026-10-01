@@ -395,7 +395,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         // Client function tools and model built-in tools share the same array.
         val useFunctionTools =
-            params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)
+            params.tools.isNotEmpty() && params.model.hasToolAbility
         val useBuiltInTools = params.model.tools.any {
             it == BuiltInTools.Search || it == BuiltInTools.UrlContext
         }

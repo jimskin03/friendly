@@ -497,7 +497,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
 
             val useFunctionTools =
-                params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+                params.model.hasToolAbility && params.tools.isNotEmpty()
             val toolDefinitions = buildList {
                 if (useFunctionTools) {
                     params.tools.forEach { tool ->

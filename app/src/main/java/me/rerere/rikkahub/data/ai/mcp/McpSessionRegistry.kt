@@ -140,8 +140,19 @@ internal class McpSessionRegistry(
             addClient(freshConfig)
         }
 
-        val sdkClient = session.client
-            ?: throw McpClientUnavailableException("MCP client $serverId is not connected")
+        val sdkClient = session.client ?: run {
+            val cfg = session.connectedConfig ?: session.config
+            Log.i(TAG, "MCP client $serverId is not connected, attempting to connect...")
+            runCatching {
+                connectSession(
+                    session = session,
+                    requestedConfig = cfg,
+                    cancelPendingReconnect = true,
+                    forceReconnect = false,
+                )
+            }
+            session.client ?: throw McpClientUnavailableException("MCP client $serverId is not connected")
+        }
         val config = session.connectedConfig ?: session.config
         Log.i(TAG, "Calling tool $toolName on $serverId (${config.commonOptions.name})")
         return try {

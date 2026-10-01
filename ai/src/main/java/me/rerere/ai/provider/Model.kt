@@ -14,10 +14,17 @@ data class Model(
     val customBodies: List<CustomBody> = emptyList(),
     val inputModalities: List<Modality> = listOf(Modality.TEXT),
     val outputModalities: List<Modality> = listOf(Modality.TEXT),
-    val abilities: List<ModelAbility> = emptyList(),
+    val abilities: List<ModelAbility> = listOf(ModelAbility.TOOL),
     val tools: Set<BuiltInTools> = emptySet(),
     val providerOverwrite: ProviderSetting? = null,
-)
+) {
+    /**
+     * Determines whether this model supports calling tools.
+     * For chat models, tool capability is enabled if explicitly specified or if abilities is empty.
+     */
+    val hasToolAbility: Boolean
+        get() = type == ModelType.CHAT && (ModelAbility.TOOL in abilities || abilities.isEmpty())
+}
 
 @Serializable
 enum class ModelType {

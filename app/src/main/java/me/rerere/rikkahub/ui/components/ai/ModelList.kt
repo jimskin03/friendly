@@ -864,7 +864,12 @@ fun ModelModalityTag(model: Model) {
 
 @Composable
 fun ModelAbilityTag(model: Model) {
-    model.abilities.fastForEach { ability ->
+    val abilities = if (model.abilities.isEmpty() && model.type == ModelType.CHAT) {
+        listOf(ModelAbility.TOOL)
+    } else {
+        model.abilities
+    }
+    abilities.fastForEach { ability ->
         when (ability) {
             ModelAbility.TOOL -> {
                 Tag(

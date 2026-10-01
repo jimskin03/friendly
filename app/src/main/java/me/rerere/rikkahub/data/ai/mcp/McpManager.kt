@@ -25,6 +25,7 @@ import me.rerere.oauth.OAuthLoopbackCallbackServer
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -98,11 +99,18 @@ class McpManager(
 
     fun getStatus(config: McpServerConfig): Flow<McpStatus> = sessionRegistry.getStatus(config.id)
 
-    fun getAllAvailableTools(): List<Triple<Uuid, String, McpTool>> {
+    fun getAllAvailableTools(assistant: Assistant? = null): List<Triple<Uuid, String, McpTool>> {
         val settings = settingsStore.settingsFlow.value
-        val assistant = settings.getCurrentAssistant()
+        val targetAssistant = assistant ?: settings.getCurrentAssistant()
+        val targetServerIds = if (targetAssistant.mcpServers.isNotEmpty()) {
+            targetAssistant.mcpServers
+        } else if (settings.assistants.size <= 1 || targetAssistant.id == settings.assistantId) {
+            settings.mcpServers.filter { it.commonOptions.enable }.map { it.id }.toSet()
+        } else {
+            emptySet()
+        }
         return settings.mcpServers
-            .filter { it.commonOptions.enable && it.id in assistant.mcpServers }
+            .filter { it.commonOptions.enable && it.id in targetServerIds }
             .flatMap { server ->
                 server.commonOptions.tools
                     .filter { tool -> tool.enable }

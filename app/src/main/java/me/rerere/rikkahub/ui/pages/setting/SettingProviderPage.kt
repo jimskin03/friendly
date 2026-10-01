@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.registry.ModelRegistry
@@ -562,7 +563,7 @@ fun SettingProviderPage(
                                         m.copy(
                                             inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(m.modelId),
                                             outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(m.modelId),
-                                            abilities = ModelRegistry.MODEL_ABILITIES.getData(m.modelId)
+                                            abilities = ModelRegistry.MODEL_ABILITIES.getData(m.modelId).ifEmpty { listOf(ModelAbility.TOOL) }
                                         )
                                     }
                                 )
@@ -623,7 +624,7 @@ fun SettingProviderPage(
                                                 item.copy(
                                                     inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(item.modelId),
                                                     outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(item.modelId),
-                                                    abilities = ModelRegistry.MODEL_ABILITIES.getData(item.modelId)
+                                                    abilities = ModelRegistry.MODEL_ABILITIES.getData(item.modelId).ifEmpty { listOf(ModelAbility.TOOL) }
                                                 )
                                             )
                                             onUpdateSettingsProvider(updated)

@@ -714,11 +714,12 @@ object ModelRegistry {
     }
 
     val MODEL_ABILITIES = ModelData { modelId ->
-        val abilities = resolveModels(modelId)
+        val resolved = resolveModels(modelId)
+        val abilities = resolved
             .flatMap { it.abilities }
             .toSet()
         buildList {
-            if (ModelAbility.TOOL in abilities) add(ModelAbility.TOOL)
+            if (resolved.isEmpty() || ModelAbility.TOOL in abilities) add(ModelAbility.TOOL)
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
         }
     }

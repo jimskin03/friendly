@@ -258,7 +258,7 @@ class ResponseAPI(
 
 
             val useFunctionTools =
-                params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+                params.model.hasToolAbility && params.tools.isNotEmpty()
             if (useFunctionTools || params.model.tools.isNotEmpty()) {
                 putJsonArray("tools") {
                     if (useFunctionTools) {

@@ -91,6 +91,7 @@ import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
@@ -117,10 +118,18 @@ import org.koin.compose.koinInject
 fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val mcpConfigs = settings.mcpServers
-    val creationState = useEditState<McpServerConfig> {
+    val creationState = useEditState<McpServerConfig> { newServer ->
+        val currentAssistant = settings.getCurrentAssistant()
         vm.updateSettings(
             settings.copy(
-                mcpServers = mcpConfigs + it
+                mcpServers = mcpConfigs + newServer,
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == currentAssistant.id) {
+                        assistant.copy(mcpServers = assistant.mcpServers + newServer.id)
+                    } else {
+                        assistant
+                    }
+                }
             )
         )
     }
@@ -236,9 +245,22 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
         McpImportModal(
             onDismiss = { showImportDialog = false },
             onImport = { newConfigs ->
-                val existingIds = mcpConfigs.map { it.commonOptions.name }.toSet()
-                val toAdd = newConfigs.filter { it.commonOptions.name.isNotBlank() && it.commonOptions.name !in existingIds }
-                vm.updateSettings(settings.copy(mcpServers = mcpConfigs + toAdd))
+                val existingNames = mcpConfigs.map { it.commonOptions.name }.toSet()
+                val toAdd = newConfigs.filter { it.commonOptions.name.isNotBlank() && it.commonOptions.name !in existingNames }
+                val currentAssistant = settings.getCurrentAssistant()
+                val toAddIds = toAdd.map { it.id }.toSet()
+                vm.updateSettings(
+                    settings.copy(
+                        mcpServers = mcpConfigs + toAdd,
+                        assistants = settings.assistants.map { assistant ->
+                            if (assistant.id == currentAssistant.id) {
+                                assistant.copy(mcpServers = assistant.mcpServers + toAddIds)
+                            } else {
+                                assistant
+                            }
+                        }
+                    )
+                )
                 showImportDialog = false
             }
         )

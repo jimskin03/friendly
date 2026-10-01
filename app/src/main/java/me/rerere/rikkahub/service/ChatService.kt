@@ -614,8 +614,8 @@ class ChatService(
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
             // memory tool
-            if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (useExternalWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+            if (!model.hasToolAbility) {
+                if (useExternalWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,

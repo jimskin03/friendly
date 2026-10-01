@@ -22,6 +22,20 @@ internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boo
     return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
 }
 
+internal fun sanitizeMcpToolName(serverName: String, toolName: String): String {
+    val safeServer = serverName.replace(Regex("[^a-zA-Z0-9]"), "_").trim('_').ifBlank { "server" }
+    val safeTool = toolName.replace(Regex("[^a-zA-Z0-9_]"), "_").trim('_').ifBlank { "tool" }
+    val combined = "mcp__${safeServer}__${safeTool}"
+    if (combined.length <= 64) {
+        return combined
+    }
+    val hash = (safeServer + safeTool).hashCode().toUInt().toString(16)
+    val prefix = "mcp__"
+    val maxLen = 64 - prefix.length - hash.length - 1
+    val truncated = "${safeServer}_${safeTool}".take(maxLen).trimEnd('_')
+    return "${prefix}${truncated}_${hash}"
+}
+
 class InvalidMcpServerNamesException(val names: List<String>) :
     IllegalStateException("Invalid MCP server names: ${names.joinToString(", ")}")
 
@@ -73,18 +87,12 @@ class ChatToolFactory(
             )
         }
 
-        val mcpTools = mcpManager.getAllAvailableTools()
-        val invalidNames = mcpTools
-            .map { it.second }
-            .distinct()
-            .filter { name -> name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } }
-        if (invalidNames.isNotEmpty()) {
-            throw InvalidMcpServerNamesException(invalidNames)
-        }
+        val mcpTools = mcpManager.getAllAvailableTools(assistant)
         mcpTools.forEach { (serverId, serverName, tool) ->
+            val toolDefName = sanitizeMcpToolName(serverName, tool.name)
             add(
                 Tool(
-                    name = "mcp__${serverName}__${tool.name}",
+                    name = toolDefName,
                     description = tool.description ?: "",
                     parameters = { tool.inputSchema },
                     needsApproval = { tool.needsApproval },

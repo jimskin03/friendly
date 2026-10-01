@@ -50,6 +50,43 @@ class ChatCompletionsToolSchemaTest {
         assertFalse(parameters.containsKey("required"))
     }
 
+    @Test
+    fun `tool with model having empty abilities is still included`() {
+        val tool = Tool(
+            name = "calculate",
+            description = "Math calculator.",
+            execute = { emptyList() },
+        )
+
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildChatCompletionRequest",
+            List::class.java,
+            TextGenerationParams::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType,
+        )
+        method.isAccessible = true
+
+        val body = method.invoke(
+            api,
+            listOf(UIMessage.user("Calculate 2+2")),
+            TextGenerationParams(
+                model = Model(
+                    modelId = "custom-chat-model",
+                    abilities = emptyList(),
+                ),
+                tools = listOf(tool),
+            ),
+            ProviderSetting.OpenAI(),
+            false,
+        ) as JsonObject
+
+        val tools = body["tools"]?.jsonArray
+        assertEquals(1, tools?.size)
+        val func = tools?.single()?.jsonObject?.get("function")?.jsonObject
+        assertEquals("calculate", func?.get("name")?.jsonPrimitive?.content)
+    }
+
     private fun buildRequest(tool: Tool): JsonObject {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildChatCompletionRequest",

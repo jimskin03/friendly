@@ -381,7 +381,7 @@ internal fun ModelSettingsForm(
     fun setModelId(id: String) {
         val inputModality = ModelRegistry.MODEL_INPUT_MODALITIES.getData(id)
         val outputModality = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(id)
-        val abilities = ModelRegistry.MODEL_ABILITIES.getData(id)
+        val abilities = ModelRegistry.MODEL_ABILITIES.getData(id).ifEmpty { listOf(ModelAbility.TOOL) }
         onModelChange(
             model.copy(
                 modelId = id,
