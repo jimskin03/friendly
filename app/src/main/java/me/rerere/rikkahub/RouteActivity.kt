@@ -338,6 +338,14 @@ class RouteActivity : ComponentActivity() {
                                 HistoryPage()
                             }
 
+                            entry<Screen.FolderConversations> { key ->
+                                me.rerere.rikkahub.ui.pages.folder.FolderConversationsPage(
+                                    folderId = key.folderId,
+                                    folderName = key.folderName,
+                                    folderLabelId = key.folderLabelId,
+                                )
+                            }
+
                             entry<Screen.Favorite> {
                                 FavoritePage()
                             }
@@ -585,6 +593,13 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object History : Screen
+
+    @Serializable
+    data class FolderConversations(
+        val folderId: String,
+        val folderName: String,
+        val folderLabelId: String = "planning",
+    ) : Screen
 
     @Serializable
     data object Favorite : Screen

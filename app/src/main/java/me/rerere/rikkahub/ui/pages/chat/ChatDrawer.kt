@@ -202,7 +202,7 @@ fun ChatDrawerContent(
             )
             .border(BorderStroke(1.dp, glassEdgeColor()), glassShape),
         drawerShape = drawerShape,
-        drawerContainerColor = if (backdropEnabled) Color.Transparent else glassVeil,
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         drawerContentColor = MaterialTheme.colorScheme.onSurface,
         drawerTonalElevation = 0.dp,
     ) {

@@ -246,6 +246,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         else -> {
             ModalNavigationDrawer(
                 drawerState = drawerState,
+                gesturesEnabled = conversation.messageNodes.isNotEmpty(),
                 drawerContent = {
                     ChatDrawerContent(
                         navController = navController,
@@ -490,20 +491,16 @@ private fun ChatPageContent(
                             showCreateFolderDialog = true
                         },
                         onAssistant = {
-                            if (conversation.messageNodes.isNotEmpty()) {
-                                navigateToChatPage(navController)
-                            }
+                            navController.navigate(Screen.Assistant)
                         },
                         onAnalyze = {
-                            navController.navigate(Screen.History)
+                            navController.navigate(Screen.Stats)
                         },
                         onFavorite = {
                             navController.navigate(Screen.Favorite)
                         },
                         onMore = {
-                            scope.launch {
-                                drawerState.open()
-                            }
+                            navController.navigate(Screen.Setting)
                         },
                     )
                 }
@@ -521,12 +518,17 @@ private fun ChatPageContent(
                 hazeState = hazeState,
                 errors = errors,
                 folders = folders,
-                onSelectFolder = { folderId ->
-                    drawerVm.selectFolder(folderId)
-                    scope.launch { drawerState.open() }
+                onSelectFolder = { folder ->
+                    navController.navigate(
+                        Screen.FolderConversations(
+                            folderId = folder.id.toString(),
+                            folderName = folder.name,
+                            folderLabelId = folder.label,
+                        )
+                    )
                 },
                 onSeeAllFolders = {
-                    scope.launch { drawerState.open() }
+                    navController.navigate(Screen.History)
                 },
                 onOpenSearch = {
                     navController.navigate(Screen.MessageSearch)

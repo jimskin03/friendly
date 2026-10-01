@@ -75,7 +75,7 @@ private val DefaultTemplateFolders = listOf(
 fun AssistantHome(
     userNickname: String,
     folders: List<Folder>,
-    onSelectFolder: (Uuid?) -> Unit,
+    onSelectFolder: (Folder) -> Unit,
     onSeeAllFolders: () -> Unit,
     onStarterClick: (String) -> Unit,
     onOpenSearch: () -> Unit,
@@ -366,7 +366,7 @@ private fun ShortcutCards(
 @Composable
 private fun FoldersSection(
     folders: List<Folder>,
-    onSelectFolder: (Uuid?) -> Unit,
+    onSelectFolder: (Folder) -> Unit,
     onSeeAllFolders: () -> Unit,
     onQuickCreateFolder: (name: String, labelId: String) -> Unit,
 ) {
@@ -424,19 +424,19 @@ private fun FoldersSection(
                     }
                     FolderRowItem(
                         title = folder.name,
-                        subtitle = label.title + " workspace",
+                        subtitle = "Saved chat sessions",
                         label = label,
                         time = timeString,
-                        onClick = { onSelectFolder(folder.id) },
+                        onClick = { onSelectFolder(folder) },
                     )
                 }
             } else {
-                // If user has not created custom folders, show the default template items from the screenshot
+                // If user has not created custom folders, show the default template items
                 DefaultTemplateFolders.forEach { template ->
                     val label = FolderLabel.fromId(template.labelId)
                     FolderRowItem(
                         title = template.name,
-                        subtitle = template.subtitle,
+                        subtitle = "Saved chat sessions",
                         label = label,
                         time = template.time,
                         onClick = {
