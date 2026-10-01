@@ -159,6 +159,12 @@ class ChatDrawerVM(
         }
     }
 
+    fun updateFolderLabel(folderId: Uuid, label: String) {
+        viewModelScope.launch {
+            folderRepo.updateFolderLabel(folderId, label)
+        }
+    }
+
 
     fun deleteFolder(folderId: Uuid): Boolean {
         if (chatService.hasGeneratingConversationInFolder(folderId)) {

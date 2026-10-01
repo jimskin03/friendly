@@ -518,7 +518,7 @@ private fun ChatPageContent(
                     )
                 },
                 onSeeAllFolders = {
-                    navController.navigate(Screen.History)
+                    navController.navigate(Screen.Folders)
                 },
                 onOpenSearch = {
                     navController.navigate(Screen.MessageSearch)

@@ -349,6 +349,10 @@ class RouteActivity : ComponentActivity() {
                                 )
                             }
 
+                            entry<Screen.Folders> {
+                                me.rerere.rikkahub.ui.pages.folder.FoldersPage()
+                            }
+
                             entry<Screen.Favorite> {
                                 FavoritePage()
                             }
@@ -606,6 +610,9 @@ sealed interface Screen : NavKey {
         val folderName: String,
         val folderLabelId: String = "planning",
     ) : Screen
+
+    @Serializable
+    data object Folders : Screen
 
     @Serializable
     data object Favorite : Screen
