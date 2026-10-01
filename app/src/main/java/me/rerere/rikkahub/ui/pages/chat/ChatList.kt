@@ -8,6 +8,7 @@ import me.rerere.hugeicons.stroke.ArrowDownDouble
 import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.CursorPointer01
 import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -21,7 +22,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,7 +66,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
@@ -91,6 +90,9 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
+import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
@@ -306,6 +308,59 @@ private fun ChatListNormal(
                     .hazeSource(state = hazeState)
                     .padding(top = innerPadding.calculateTopPadding()),
             ) {
+            if (conversation.messageNodes.isEmpty() && !loading) {
+                item(key = "AssistantHome") {
+                    val homeAssistant = assistant
+                    val quickStarters = homeAssistant
+                        ?.let { settings.getQuickMessagesOfAssistant(it) }
+                        .orEmpty()
+                    val starters = if (quickStarters.isNotEmpty()) {
+                        quickStarters.take(6).map { message ->
+                            AssistantStarter(
+                                label = message.title.ifBlank { message.content }.take(42),
+                                prompt = message.content,
+                            )
+                        }
+                    } else {
+                        listOf(
+                            AssistantStarter(
+                                label = stringResource(R.string.assistant_starter_plan),
+                                prompt = stringResource(R.string.assistant_starter_plan_prompt),
+                            ),
+                            AssistantStarter(
+                                label = stringResource(R.string.assistant_starter_summarize),
+                                prompt = stringResource(R.string.assistant_starter_summarize_prompt),
+                            ),
+                            AssistantStarter(
+                                label = stringResource(R.string.assistant_starter_search),
+                                prompt = stringResource(R.string.assistant_starter_search_prompt),
+                            ),
+                            AssistantStarter(
+                                label = stringResource(R.string.assistant_starter_remember),
+                                prompt = stringResource(R.string.assistant_starter_remember_prompt),
+                            ),
+                        )
+                    }
+                    val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
+                    Column(modifier = Modifier.fillParentMaxHeight()) {
+                        AssistantHome(
+                            name = homeAssistant?.name?.ifBlank { defaultAssistantName } ?: defaultAssistantName,
+                            avatar = homeAssistant?.avatar ?: Avatar.Dummy,
+                            modelName = settings.getCurrentChatModel()?.displayName,
+                            starters = starters,
+                            onStarterClick = onClickSuggestion,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (homeAssistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
+                            ConversationSystemPromptButton(
+                                customSystemPrompt = conversation.customSystemPrompt,
+                                onSystemPromptChange = onConversationSystemPromptChange,
+                            )
+                        }
+                    }
+                }
+            }
+
             itemsIndexed(
                 items = conversation.messageNodes,
                 key = { index, item -> item.id },
@@ -361,7 +416,7 @@ private fun ChatListNormal(
                 }
             }
 
-            if (!loading && assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
+            if (!loading && conversation.messageNodes.isNotEmpty() && assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
                 item(key = "ConversationSystemPrompt") {
                     ConversationSystemPromptButton(
                         customSystemPrompt = conversation.customSystemPrompt,
@@ -380,15 +435,11 @@ private fun ChatListNormal(
                         RabbitLoadingIndicator(
                             modifier = Modifier.size(28.dp)
                         )
-                        AnimatedVisibility(
-                            visible = processingStatus != null,
-                        ) {
-                            Text(
-                                text = processingStatus ?: "",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        Text(
+                            text = processingStatus ?: stringResource(R.string.assistant_home_working),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -664,8 +715,12 @@ private fun ChatListPreview(
                     horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 ) {
                     Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        shape = if (isUser) RoundedCornerShape(18.dp) else MaterialTheme.shapes.medium,
+                        color = if (isUser) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
                     ) {
                         Row(
                             modifier = Modifier
@@ -717,19 +772,29 @@ private fun ChatSuggestionsRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items(conversation.chatSuggestions) { suggestion ->
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .clickable {
-                        onClickSuggestion(suggestion)
-                    }
-                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                    .padding(vertical = 4.dp, horizontal = 8.dp),
+            Surface(
+                onClick = { onClickSuggestion(suggestion) },
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
-                Text(
-                    text = suggestion,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Sparkles,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = suggestion,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
