@@ -74,7 +74,6 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -395,7 +394,7 @@ private fun ChatPageContent(
                             )
                         )
                     },
-                    onSendClick = {
+                    onSendClick = { fromVoiceInput ->
                         if (currentChatModel == null) {
                             toaster.show("Please select a model first", type = ToastType.Error)
                             return@ChatInput
@@ -406,7 +405,10 @@ private fun ChatPageContent(
                                 messageId = inputState.editingMessage!!,
                             )
                         } else {
-                            vm.handleMessageSend(inputState.getContents())
+                            vm.handleMessageSend(
+                                inputState.getContents(),
+                                fromVoiceInput = fromVoiceInput,
+                            )
                             scope.launch {
                                 delay(100.milliseconds)
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
@@ -610,10 +612,7 @@ private fun ChatFilesPickerSheet(
             onPickVideo = attachmentPickerActions.onPickVideo,
             onPickAudio = attachmentPickerActions.onPickAudio,
             onPickFile = attachmentPickerActions.onPickFile,
-            onStartVoiceMode = if (
-                setting.getSelectedASRProvider()?.supportsServerVadVoiceMode == true &&
-                voiceState.phase == VoicePhase.Off
-            ) {
+            onStartVoiceMode = if (voiceState.phase == VoicePhase.Off) {
                 {
                     dismissAll()
                     focusManager.clearFocus(force = true)

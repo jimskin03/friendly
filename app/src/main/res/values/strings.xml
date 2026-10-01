@@ -680,6 +680,8 @@
   <string name="setting_display_page_auto_collapse_thinking_title">Auto Collapse Thinking</string>
   <string name="setting_display_page_auto_play_tts_desc">Automatically play TTS after assistant message generation completes</string>
   <string name="setting_display_page_auto_play_tts_title">Auto-play TTS After Generation</string>
+  <string name="setting_display_page_reply_with_voice_title">Reply with voice</string>
+  <string name="setting_display_page_reply_with_voice_desc">Speak the assistant reply when the message came from voice mode or voice input</string>
   <string name="setting_display_page_chat_font_family_default">Default</string>
   <string name="setting_display_page_chat_font_family_custom">Custom</string>
   <string name="setting_display_page_chat_font_family_monospace">Monospace</string>
@@ -1404,6 +1406,8 @@
   <string name="setting_display_page_background_effect_type">Background effect type</string>
   <string name="setting_display_page_background_effect_blur">Blur</string>
   <string name="setting_display_page_background_effect_glass">Glass</string>
+  <string name="setting_display_page_surface_transparency_title">Dashboard and composer transparency</string>
+  <string name="setting_display_page_surface_transparency_desc">0 is solid. 100 is fully see-through. Applies to the chat drawer and the message box.</string>
   <string name="skills_page_search_placeholder">Search skills</string>
   <string name="skills_page_search_no_result">No matching skills</string>
   <string name="assistant_page_local_tools_chart_display_title">Chart Display</string>

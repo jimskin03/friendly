@@ -155,6 +155,11 @@ private val outputTransformers by lazy {
     )
 }
 
+data class GenerationDone(
+    val conversationId: Uuid,
+    val fromVoiceInput: Boolean = false,
+)
+
 class ChatService(
     private val context: Application,
     private val appScope: AppScope,
@@ -207,8 +212,8 @@ class ChatService(
     }
 
 
-    private val _generationDoneFlow = MutableSharedFlow<Uuid>()
-    val generationDoneFlow: SharedFlow<Uuid> = _generationDoneFlow.asSharedFlow()
+    private val _generationDoneFlow = MutableSharedFlow<GenerationDone>()
+    val generationDoneFlow: SharedFlow<GenerationDone> = _generationDoneFlow.asSharedFlow()
 
     fun cleanup() = runCatching { sessionManager.cleanup() }
 
@@ -340,12 +345,17 @@ class ChatService(
         dispatchNextQueuedMessage(conversationId)
     }
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+    fun sendMessage(
+        conversationId: Uuid,
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        fromVoiceInput: Boolean = false,
+    ) {
         if (content.isEmptyInputMessage()) return
         val session = sessionManager.getOrCreate(conversationId)
         synchronized(session) {
             if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
-            session.messageQueue.enqueue(content, answer)
+            session.messageQueue.enqueue(content, answer, fromVoiceInput = fromVoiceInput)
             dispatchNextQueuedMessage(conversationId)
         }
     }
@@ -426,7 +436,11 @@ class ChatService(
                 })
                 // Voice owns playback, including when its observer has already left the page.
                 // The ordinary autoplay collector must not read a late voice reply again.
-                if (queued.reply == null) _generationDoneFlow.emit(conversationId)
+                if (queued.reply == null) {
+                    _generationDoneFlow.emit(
+                        GenerationDone(conversationId, fromVoiceInput = queued.fromVoiceInput),
+                    )
+                }
             } catch (e: Exception) {
                 queued.reply?.completeExceptionally(e)
                 e.printStackTrace()
@@ -499,7 +513,7 @@ class ChatService(
                     }
                 }
 
-                _generationDoneFlow.emit(conversationId)
+                _generationDoneFlow.emit(GenerationDone(conversationId))
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 session.messageQueue.pause()
@@ -577,7 +591,7 @@ class ChatService(
                         handleMessageComplete(conversationId)
                     }
 
-                    _generationDoneFlow.emit(conversationId)
+                    _generationDoneFlow.emit(GenerationDone(conversationId))
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e

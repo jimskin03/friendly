@@ -190,6 +190,34 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         )
                     }
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_surface_transparency_title)) },
+                        supportingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(stringResource(R.string.setting_display_page_surface_transparency_desc))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Slider(
+                                        value = displaySetting.chatSurfaceTransparency.toFloat(),
+                                        onValueChange = {
+                                            updateDisplaySetting(
+                                                displaySetting.copy(
+                                                    chatSurfaceTransparency = it.roundToInt().coerceIn(0, 100),
+                                                )
+                                            )
+                                        },
+                                        valueRange = 0f..100f,
+                                        steps = 99,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(text = "${displaySetting.chatSurfaceTransparency}")
+                                }
+                            }
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_enable_message_generation_haptic_effect_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_enable_message_generation_haptic_effect_desc)) },
                         trailingContent = {
@@ -353,6 +381,18 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                                 checked = displaySetting.autoPlayTTSAfterGeneration,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(autoPlayTTSAfterGeneration = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_reply_with_voice_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_reply_with_voice_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.replyWithVoice,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(replyWithVoice = it))
                                 }
                             )
                         },

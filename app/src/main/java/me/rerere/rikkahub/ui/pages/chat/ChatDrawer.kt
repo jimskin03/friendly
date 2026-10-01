@@ -189,7 +189,7 @@ fun ChatDrawerContent(
 
     val drawerShape = DrawerDefaults.shape
     val glassShape = drawerShape as? RoundedCornerShape ?: RoundedCornerShape(16.dp)
-    val glassVeil = glassVeilColor()
+    val glassVeil = glassVeilColor(settings.displaySetting.chatSurfaceTransparency)
     val backdropEnabled = settings.displaySetting.enableBlurEffect
     ModalDrawerSheet(
         modifier = Modifier

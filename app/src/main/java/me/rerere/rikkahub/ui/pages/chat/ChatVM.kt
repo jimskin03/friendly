@@ -40,6 +40,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.GenerationDone
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.AppAnalytics
@@ -139,7 +140,7 @@ class ChatVM(
     fun resumeMessageQueue() = chatService.resumeMessageQueue(_conversationId)
 
 
-    val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
+    val generationDoneFlow: SharedFlow<GenerationDone> = chatService.generationDoneFlow
 
 
     val mcpManager = chatService.mcpManager
@@ -199,11 +200,20 @@ class ChatVM(
         )
 
 
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
+    fun handleMessageSend(
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        fromVoiceInput: Boolean = false,
+    ) {
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message")
 
-        chatService.sendMessage(_conversationId, content, answer)
+        chatService.sendMessage(
+            _conversationId,
+            content,
+            answer,
+            fromVoiceInput = fromVoiceInput && answer,
+        )
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {

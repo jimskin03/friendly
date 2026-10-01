@@ -28,8 +28,17 @@ class VoiceSessionControllerTest {
             state.value = ASRState(status = ASRStatus.Listening)
         }
         override fun pauseCapture() { paused = true }
-        override fun stop() {}
+        var pendingTranscript = ""
+        var releaseOnStop = false
+        override fun stop() {
+            if (releaseOnStop) {
+                state.value = state.value.copy(status = ASRStatus.Idle, transcript = pendingTranscript)
+            }
+        }
         override fun dispose() { disposed = true }
+        fun level(value: Float) {
+            state.value = state.value.copy(amplitudes = listOf(value))
+        }
         fun begin() {
             state.value = state.value.copy(voiceTurn = ASRVoiceTurn("a"))
         }
@@ -212,6 +221,31 @@ class VoiceSessionControllerTest {
             rig.queue.pause()
             awaitCondition { rig.voice.state.value.phase == VoicePhase.Error }
             assertEquals(R.string.chat_page_voice_queue_paused.toString(), rig.voice.state.value.error)
+        } finally { rig.close() }
+    }
+
+    @Test fun `client silence sends the API transcript after the speaker pauses`() = runBlocking<Unit> {
+        val rig = Rig()
+        try {
+            rig.voice.start(
+                createAsr = { FakeAsr().also { rig.asrs.add(it) } },
+                speak = null,
+                stopSpeaking = {},
+                serverVad = false,
+                silenceDurationMs = 40,
+            )
+            val asr = rig.recorder()
+            asr.pendingTranscript = "hello there"
+            asr.releaseOnStop = true
+            asr.level(0.8f)
+            delay(120)
+            asr.level(0.05f)
+            awaitCondition { rig.replies.size == 1 }
+            assertEquals(
+                "hello there",
+                (rig.queue.state.value.messages.single().parts.single() as UIMessagePart.Text).text,
+            )
+            assertTrue(asr.disposed)
         } finally { rig.close() }
     }
 

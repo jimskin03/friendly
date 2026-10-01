@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import me.rerere.rikkahub.ui.components.ui.GlassSurface
 import me.rerere.rikkahub.ui.components.ui.contrastRatio
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +37,17 @@ class GlassSurfaceTest {
         val effective = veil.compositeOver(Color.White)
         assertTrue(contrastRatio(Color.White, effective) >= GlassSurface.MinimumContrast)
         assertTrue(effective.luminance() < 0.4f)
+    }
+
+    @Test
+    fun transparencyPercentSetsVeilAlphaFromSolidToClear() {
+        val surface = Color(0xFF1B2023)
+        val solid = GlassSurface.veil(surface, Color.White, darkTheme = true, transparencyPercent = 0)
+        val mid = GlassSurface.veil(surface, Color.White, darkTheme = true, transparencyPercent = 40)
+        val clear = GlassSurface.veil(surface, Color.White, darkTheme = true, transparencyPercent = 100)
+        assertEquals(1f, solid.alpha, 0.001f)
+        assertEquals(0.6f, mid.alpha, 0.001f)
+        assertEquals(0f, clear.alpha, 0.001f)
     }
 
     @Test

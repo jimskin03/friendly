@@ -85,6 +85,7 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Fullscreen
+import me.rerere.hugeicons.stroke.Mic01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -133,7 +134,7 @@ fun ChatInput(
     onUpdateSearchService: (Int) -> Unit,
     onMoreClick: () -> Unit,
     onCancelClick: () -> Unit,
-    onSendClick: () -> Unit,
+    onSendClick: (fromVoiceInput: Boolean) -> Unit,
     onLongSendClick: () -> Unit,
     messageQueue: MessageQueueState = MessageQueueState(),
     onRemoveQueuedMessage: (Uuid) -> Unit = {},
@@ -146,7 +147,7 @@ fun ChatInput(
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
-    val glassVeil = glassVeilColor()
+    val glassVeil = glassVeilColor(settings.displaySetting.chatSurfaceTransparency)
     val backdropEnabled = settings.displaySetting.enableBlurEffect
 
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -164,11 +165,18 @@ fun ChatInput(
         providers = settings.providers,
         type = ModelType.CHAT,
     )
+    var voiceDraft by remember { mutableStateOf<String?>(null) }
 
     fun sendMessage() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
-        if (loading && state.isEmpty()) onCancelClick() else onSendClick()
+        if (loading && state.isEmpty()) {
+            onCancelClick()
+        } else {
+            val fromVoice = voiceDraft != null && state.textContent.text.toString() == voiceDraft
+            voiceDraft = null
+            onSendClick(fromVoice)
+        }
     }
 
     fun sendMessageWithoutAnswer() {
@@ -334,6 +342,15 @@ fun ChatInput(
                             )
                         }
 
+                        if (!voiceState.isActive && !asrState.isRecording && onStartVoiceMode != null) {
+                            ActionIconButton(onClick = onStartVoiceMode) {
+                                Icon(
+                                    imageVector = HugeIcons.Mic01,
+                                    contentDescription = stringResource(R.string.chat_page_voice_title),
+                                )
+                            }
+                        }
+
                         if (!voiceState.isActive && (asrState.isAvailable || asrState.isRecording)) {
                             AsrButton(
                                 state = asrState,
@@ -348,7 +365,9 @@ fun ChatInput(
                                                 asr.start { transcript ->
                                                     val spacer =
                                                         if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
-                                                    state.setMessageText(asrBaseText + spacer + transcript)
+                                                    val draft = asrBaseText + spacer + transcript
+                                                    if (transcript.isNotBlank()) voiceDraft = draft
+                                                    state.setMessageText(draft)
                                                 }
                                             }
                                         }

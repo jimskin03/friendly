@@ -20,8 +20,10 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.providers.DashScopeASRController
-import me.rerere.asr.providers.VolcengineASRController
+import me.rerere.asr.providers.MiMoASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
+import me.rerere.asr.providers.StepASRController
+import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
@@ -67,7 +69,6 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
     val start: () -> Unit = {
         val blocked = when {
             provider == null -> context.getString(R.string.chat_page_voice_configure_asr)
-            !provider.supportsServerVadVoiceMode -> context.getString(R.string.chat_page_voice_unsupported_asr)
             settings.getCurrentChatModel() == null -> context.getString(R.string.chat_page_voice_select_model)
             asr.state.value.isRecording -> context.getString(R.string.chat_page_voice_finish_dictation)
             vm.messageQueue.value.paused && vm.messageQueue.value.messages.isNotEmpty() ->
@@ -82,7 +83,7 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
             !permission.allRequiredPermissionsGranted -> permission.requestPermissions()
             else -> voice.start(
                 createAsr = { createVoiceAsr(context, client, checkNotNull(provider)) },
-                speak = if (tts.isAvailable.value) {
+                speak = if (settings.displaySetting.replyWithVoice && tts.isAvailable.value) {
                     { reply ->
                         var text = reply
                         if (settings.displaySetting.ttsOnlyReadQuoted) {
@@ -104,6 +105,7 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
                     }
                 } else null,
                 stopSpeaking = tts::stop,
+                serverVad = checkNotNull(provider).supportsServerVadVoiceMode,
             )
         }
     }
@@ -133,7 +135,14 @@ private fun createVoiceAsr(context: Context, client: OkHttpClient, provider: ASR
             check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
             VolcengineASRController(context, client, provider)
         }
-        else -> error(context.getString(R.string.chat_page_voice_no_endpointing))
+        is ASRProviderSetting.MiMo -> {
+            check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
+            MiMoASRController(context, client, provider)
+        }
+        is ASRProviderSetting.Step -> {
+            check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
+            StepASRController(context, client, provider)
+        }
     }
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)

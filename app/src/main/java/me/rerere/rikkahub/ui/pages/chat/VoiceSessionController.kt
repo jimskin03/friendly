@@ -24,6 +24,9 @@ import me.rerere.asr.ASRStatus
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.MessageQueuePausedException
 
+private const val SPEECH_THRESHOLD = 0.4f
+private const val CLIENT_SILENCE_MS = 800L
+
 enum class VoicePhase { Off, Connecting, Listening, Transcribing, Speaking, Error }
 
 data class VoiceSessionState(
@@ -44,6 +47,8 @@ class VoiceSessionController(
     private val mutableState = MutableStateFlow(VoiceSessionState())
     val state = mutableState.asStateFlow()
     private var job: Job? = null
+    private var serverVad: Boolean = true
+    private var silenceDurationMs: Long = CLIENT_SILENCE_MS
 
     private sealed interface Event {
         data class Utterance(val text: String) : Event
@@ -55,8 +60,12 @@ class VoiceSessionController(
         createAsr: () -> ASRController,
         speak: (suspend (String) -> Unit)?,
         stopSpeaking: () -> Unit,
+        serverVad: Boolean = true,
+        silenceDurationMs: Long = CLIENT_SILENCE_MS,
     ) {
         if (job?.isCompleted == false) return
+        this.serverVad = serverVad
+        this.silenceDurationMs = silenceDurationMs
         mutableState.value = VoiceSessionState(VoicePhase.Connecting)
         job = scope.launch {
             try {
@@ -104,7 +113,7 @@ class VoiceSessionController(
         try {
             while (isActive) {
                 // Finish any sentence already in progress before giving TTS the microphone pause.
-                if (speak != null && replies.isNotEmpty() && asr?.state?.value?.voiceTurn?.itemId == null) {
+                if (speak != null && replies.isNotEmpty() && !turnOpen(asr)) {
                     capture?.cancelAndJoin()
                     capture = null
                     asr = null
@@ -151,7 +160,62 @@ class VoiceSessionController(
         }
     }
 
+    private fun turnOpen(asr: ASRController?): Boolean {
+        val snapshot = asr?.state?.value ?: return false
+        if (snapshot.voiceTurn.itemId != null) return true
+        if (serverVad) return false
+        return (snapshot.amplitudes.lastOrNull() ?: 0f) >= SPEECH_THRESHOLD
+    }
+
     private suspend fun listen(asr: ASRController): String {
+        return if (serverVad) listenServer(asr) else listenClient(asr)
+    }
+
+    private suspend fun listenClient(asr: ASRController): String {
+        try {
+            asr.start {}
+            withTimeout(15_000) {
+                asr.state.first {
+                    check(it.errorMessage == null) { it.errorMessage.orEmpty() }
+                    it.status == ASRStatus.Listening || it.status == ASRStatus.Error
+                }.also { check(it.status == ASRStatus.Listening) { "Unable to start speech recognition" } }
+            }
+            var heardSpeech = false
+            var quietSince = 0L
+            withTimeout(120_000) {
+                while (true) {
+                    val snapshot = asr.state.value
+                    check(snapshot.errorMessage == null) { snapshot.errorMessage.orEmpty() }
+                    check(snapshot.status == ASRStatus.Listening) { "Speech recognition disconnected" }
+                    val level = snapshot.amplitudes.lastOrNull() ?: 0f
+                    val now = System.currentTimeMillis()
+                    if (level >= SPEECH_THRESHOLD) {
+                        heardSpeech = true
+                        quietSince = 0L
+                    } else if (heardSpeech && quietSince == 0L) {
+                        quietSince = now
+                    }
+                    mutableState.update { current ->
+                        current.copy(phase = VoicePhase.Listening, transcript = snapshot.transcript)
+                    }
+                    if (heardSpeech && quietSince != 0L && now - quietSince >= silenceDurationMs) break
+                    delay(50)
+                }
+            }
+            asr.stop()
+            mutableState.update { it.copy(phase = VoicePhase.Transcribing) }
+            return withTimeout(30_000) {
+                asr.state.first { it.status == ASRStatus.Idle || it.status == ASRStatus.Error }
+                    .also { check(it.errorMessage == null) { it.errorMessage.orEmpty() } }
+                    .transcript
+                    .trim()
+            }
+        } finally {
+            asr.dispose()
+        }
+    }
+
+    private suspend fun listenServer(asr: ASRController): String {
         try {
             asr.start {}
             withTimeout(15_000) {

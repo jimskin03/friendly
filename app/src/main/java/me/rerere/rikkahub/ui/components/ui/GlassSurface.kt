@@ -45,12 +45,17 @@ internal object GlassSurface {
         contentColor: Color,
         darkTheme: Boolean,
         minimumContrast: Float = MinimumContrast,
+        transparencyPercent: Int? = null,
     ): Color {
         val opaqueSurface = surface.copy(alpha = 1f)
         val base = if (darkTheme) {
             lerp(Color.Black, opaqueSurface, DarkBaseMix)
         } else {
             lerp(Color.White, opaqueSurface, LightBaseMix)
+        }
+        if (transparencyPercent != null) {
+            val alpha = 1f - transparencyPercent.coerceIn(0, 100) / 100f
+            return base.copy(alpha = alpha)
         }
         val content = contentColor.copy(alpha = 1f)
         val worstBackdrop = if (content.luminance() >= 0.5f) Color.White else Color.Black
@@ -81,12 +86,13 @@ internal fun contrastRatio(foreground: Color, background: Color): Float {
 
 @Composable
 @ReadOnlyComposable
-fun glassVeilColor(): Color {
+fun glassVeilColor(transparencyPercent: Int): Color {
     val scheme = MaterialTheme.colorScheme
     return GlassSurface.veil(
         surface = scheme.surface,
         contentColor = scheme.onSurface,
         darkTheme = LocalDarkMode.current,
+        transparencyPercent = transparencyPercent,
     )
 }
 

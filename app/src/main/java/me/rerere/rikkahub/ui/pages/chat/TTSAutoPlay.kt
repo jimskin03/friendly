@@ -18,10 +18,11 @@ fun TTSAutoPlay(vm: ChatVM, setting: Settings, conversation: Conversation) {
     val currentConversation by rememberUpdatedState(conversation)
     val updatedSetting by rememberUpdatedState(setting)
     LaunchedEffect(Unit) {
-        vm.generationDoneFlow.collect { conversationId ->
-            if (conversationId == currentConversation.id &&
+        vm.generationDoneFlow.collect { done ->
+            val speakVoiceReply = done.fromVoiceInput && updatedSetting.displaySetting.replyWithVoice
+            if (done.conversationId == currentConversation.id &&
                 !vm.voiceSession.state.value.isActive &&
-                updatedSetting.displaySetting.autoPlayTTSAfterGeneration
+                (updatedSetting.displaySetting.autoPlayTTSAfterGeneration || speakVoiceReply)
             ) {
                 val lastMessage = currentConversation.currentMessages.lastOrNull()
                 if (lastMessage != null && lastMessage.role == MessageRole.ASSISTANT) {
