@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -25,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.DrawerDefaults
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -42,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -75,8 +80,12 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
+import dev.chrisbanes.haze.HazeState
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
+import me.rerere.rikkahub.ui.components.ui.chatBackdrop
+import me.rerere.rikkahub.ui.components.ui.glassEdgeColor
+import me.rerere.rikkahub.ui.components.ui.glassVeilColor
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
@@ -101,6 +110,7 @@ fun ChatDrawerContent(
     vm: ChatVM,
     settings: Settings,
     current: Conversation,
+    hazeState: HazeState,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -177,8 +187,26 @@ fun ChatDrawerContent(
         }
     }
 
+    val drawerShape = DrawerDefaults.shape
+    val glassShape = drawerShape as? RoundedCornerShape ?: RoundedCornerShape(16.dp)
+    val glassVeil = glassVeilColor()
+    val backdropEnabled = settings.displaySetting.enableBlurEffect
     ModalDrawerSheet(
-        modifier = Modifier.width(300.dp)
+        modifier = Modifier
+            .width(300.dp)
+            .chatBackdrop(
+                hazeState = hazeState,
+                enabled = backdropEnabled,
+                effect = settings.displaySetting.backgroundEffectType,
+                shape = glassShape,
+                veil = glassVeil,
+                backdropBlur = 24.dp,
+            )
+            .border(BorderStroke(1.dp, glassEdgeColor()), glassShape),
+        drawerShape = drawerShape,
+        drawerContainerColor = if (backdropEnabled) Color.Transparent else glassVeil,
+        drawerContentColor = MaterialTheme.colorScheme.onSurface,
+        drawerTonalElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(8.dp),
