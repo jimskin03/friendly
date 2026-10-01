@@ -232,7 +232,11 @@ internal class McpSessionRegistry(
                 return@withLock ConnectResult.Success
             }
 
-            statusStore.update(config.id, McpStatus.Connecting)
+            val waitingForBrowser = oauthCoordinator.isAuthorizationInProgress(config.id) &&
+                config.commonOptions.oauth?.accessToken.isNullOrBlank()
+            if (!waitingForBrowser) {
+                statusStore.update(config.id, McpStatus.Connecting)
+            }
             val oldClient = session.client
             session.client = null
             session.connectedConfig = null
@@ -246,6 +250,7 @@ internal class McpSessionRegistry(
                 sdkClient.connect(transport)
                 val syncedConfig = syncTools(session, sdkClient, config)
                 if (sessions[config.id] !== session ||
+                    !hasSameConnectionParameters(session.config, config) ||
                     !hasSameConnectionParameters(config, syncedConfig)
                 ) {
                     closeClient(sdkClient, config.commonOptions.name)
@@ -265,6 +270,19 @@ internal class McpSessionRegistry(
             } catch (e: Exception) {
                 closeClient(sdkClient, config.commonOptions.name)
                 Log.e(TAG, "Failed to connect MCP server ${config.id}", e)
+                if (sessions[config.id] !== session ||
+                    !hasSameConnectionParameters(session.config, config)
+                ) {
+                    return@withLock ConnectResult.Stale
+                }
+                val stillWaitingForBrowser = oauthCoordinator.isAuthorizationInProgress(config.id) &&
+                    config.commonOptions.oauth?.accessToken.isNullOrBlank()
+                if (stillWaitingForBrowser) {
+                    if (statusStore.status.value[config.id] != McpStatus.Authorizing) {
+                        statusStore.update(config.id, McpStatus.Authorizing)
+                    }
+                    return@withLock ConnectResult.NeedsAuthorization
+                }
                 if (oauthCoordinator.needsAuthorization(config, e)) {
                     statusStore.update(config.id, McpStatus.NeedsAuthorization)
                     ConnectResult.NeedsAuthorization

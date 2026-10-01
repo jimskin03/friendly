@@ -66,6 +66,7 @@ class McpManager(
         port = MCP_OAUTH_CALLBACK_PORT,
         callbackPath = MCP_OAUTH_CALLBACK_PATH,
     )
+    private lateinit var sessionRegistry: McpSessionRegistry
     private val oauthCoordinator = McpOAuthCoordinator(
         settingsStore = settingsStore,
         appScope = appScope,
@@ -74,16 +75,21 @@ class McpManager(
         callbackServer = oauthCallbackServer,
         authorizationLauncher = CustomTabsOAuthAuthorizationLauncher,
         updateStatus = statusStore::update,
-    )
-    private val sessionRegistry = McpSessionRegistry(
-        settingsStore = settingsStore,
-        appScope = appScope,
-        httpClient = httpClient,
-        oauthCoordinator = oauthCoordinator,
-        statusStore = statusStore,
+        requestReconnect = { configId ->
+            val config = settingsStore.settingsFlow.value.mcpServers.find { it.id == configId }
+                ?: return@McpOAuthCoordinator
+            sessionRegistry.addClient(config)
+        },
     )
 
     init {
+        sessionRegistry = McpSessionRegistry(
+            settingsStore = settingsStore,
+            appScope = appScope,
+            httpClient = httpClient,
+            oauthCoordinator = oauthCoordinator,
+            statusStore = statusStore,
+        )
         appScope.launch {
             settingsStore.settingsFlow
                 .map { settings -> settings.mcpServers }

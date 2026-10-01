@@ -17,10 +17,13 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.flow.update
+import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -29,6 +32,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthState
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
@@ -189,7 +193,11 @@ class SettingsStore(
             persistSettings(context.settingsStore, settings)
         }
 
-        private suspend fun persistSettings(dataStore: DataStore<Preferences>, settings: Settings) {
+        internal suspend fun persistSettings(
+            dataStore: DataStore<Preferences>,
+            settings: Settings,
+            mcpOAuthPolicy: McpOAuthWritePolicy = McpOAuthWritePolicy.Replace,
+        ) {
             dataStore.edit { preferences ->
                 preferences[DYNAMIC_COLOR] = settings.dynamicColor
                 preferences[THEME_ID] = settings.themeId
@@ -224,7 +232,9 @@ class SettingsStore(
                 preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
                 preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, (settings.searchServices.size - 1).coerceAtLeast(0))
 
-                preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
+                preferences[MCP_SERVERS] = JsonInstant.encodeToString(
+                    mcpServersForFullWrite(preferences, settings, mcpOAuthPolicy)
+                )
                 preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
                 preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
                 preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
@@ -248,6 +258,47 @@ class SettingsStore(
                 preferences[LAUNCH_COUNT] = settings.launchCount
                 preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
             }
+        }
+
+        private fun mcpServersForFullWrite(
+            preferences: Preferences,
+            settings: Settings,
+            mcpOAuthPolicy: McpOAuthWritePolicy,
+        ): List<McpServerConfig> {
+            if (mcpOAuthPolicy != McpOAuthWritePolicy.PreserveStored) return settings.mcpServers
+            val stored = preferences[MCP_SERVERS]?.let { raw ->
+                runCatching { JsonInstant.decodeFromString<List<McpServerConfig>>(raw) }.getOrNull()
+            } ?: return settings.mcpServers
+            return settings.mcpServers.preservingStoredMcpOAuth(stored)
+        }
+
+        internal suspend fun writeMcpServerOAuth(
+            dataStore: DataStore<Preferences>,
+            serverId: Uuid,
+            oauth: McpOAuthState?,
+            shouldWrite: () -> Boolean = { true },
+        ): Boolean {
+            var written = false
+            dataStore.edit { preferences ->
+                written = false
+                coroutineContext.ensureActive()
+                if (!shouldWrite()) return@edit
+                val stored = preferences[MCP_SERVERS] ?: return@edit
+                val servers = JsonInstant.decodeFromString<List<McpServerConfig>>(stored)
+                var found = false
+                val updated = servers.map { server ->
+                    if (server.id != serverId) {
+                        server
+                    } else {
+                        found = true
+                        server.clone(commonOptions = server.commonOptions.copy(oauth = oauth))
+                    }
+                }
+                if (!found) return@edit
+                preferences[MCP_SERVERS] = JsonInstant.encodeToString(updated)
+                written = true
+            }
+            return written
         }
     }
 
@@ -456,14 +507,70 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        settingsFlow.value = settings
-        persistSettings(dataStore, settings)
+        var persisted = settings
+        settingsFlow.update { latest ->
+            settings.withLatestMcpOAuth(latest).also { persisted = it }
+        }
+        persistSettings(dataStore, persisted, McpOAuthWritePolicy.PreserveStored)
     }
 
     suspend fun update(fn: (Settings) -> Settings) {
         update(fn(settingsFlow.value))
     }
 
+    /**
+     * Publishes [settings] to the in-memory flow. OAuth attempt publication calls this
+     * while its per-server commit gate is held, after the cancellable DataStore edit returns.
+     */
+    internal fun assignSettingsInMemory(settings: Settings): Boolean {
+        if (settings.init) {
+            Log.w(TAG, "Cannot update dummy settings")
+            return false
+        }
+        settingsFlow.value = settings
+        return true
+    }
+
+    /**
+     * Writes OAuth state for one stored MCP server and leaves every other preference alone.
+     * [shouldWrite] runs inside the DataStore edit, before this call mutates preferences.
+     * That check is not atomic with the file commit. Callers that must drop a superseded
+     * attempt keep their per-server commit gate held until this function returns. The edit
+     * stays cancellable. Clear, refresh, and authorization token changes use this path so a
+     * full [Settings] snapshot cannot replace them.
+     *
+     * @return true when [serverId] was present in the latest stored list and its OAuth state was written.
+     */
+    internal suspend fun persistMcpServerOAuth(
+        serverId: Uuid,
+        oauth: McpOAuthState?,
+        shouldWrite: () -> Boolean = { true },
+    ): Boolean = writeMcpServerOAuth(dataStore, serverId, oauth, shouldWrite)
+
+    /**
+     * Memory and disk update for one server's OAuth state. Other preferences are left alone.
+     */
+    internal suspend fun updateMcpServerOAuth(serverId: Uuid, oauth: McpOAuthState?): Boolean {
+        val remembered = settingsFlow.value.mcpServers.any { it.id == serverId }
+        val written = persistMcpServerOAuth(serverId, oauth)
+        if (!written && !remembered) return false
+        settingsFlow.update { current ->
+            if (current.init || current.mcpServers.none { it.id == serverId }) {
+                current
+            } else {
+                current.copy(
+                    mcpServers = current.mcpServers.map { server ->
+                        if (server.id != serverId) {
+                            server
+                        } else {
+                            server.clone(commonOptions = server.commonOptions.copy(oauth = oauth))
+                        }
+                    }
+                )
+            }
+        }
+        return true
+    }
 
     suspend fun incrementLaunchCount(): Int {
         var count = 0
@@ -615,6 +722,35 @@ data class Settings(
     companion object {
 
         fun dummy() = Settings(init = true)
+    }
+}
+
+internal enum class McpOAuthWritePolicy {
+    /** Backup restore writes the snapshot's OAuth state. */
+    Replace,
+
+    /** Generic settings writes keep the latest stored OAuth state for servers that remain. */
+    PreserveStored,
+}
+
+internal fun Settings.withLatestMcpOAuth(latest: Settings): Settings {
+    if (latest.init) return this
+    return copy(mcpServers = mcpServers.preservingStoredMcpOAuth(latest.mcpServers))
+}
+
+internal fun List<McpServerConfig>.preservingStoredMcpOAuth(
+    stored: List<McpServerConfig>,
+): List<McpServerConfig> {
+    if (stored.isEmpty()) return this
+    val storedById = stored.associateBy { it.id }
+    return map { incoming ->
+        val previous = storedById[incoming.id] ?: return@map incoming
+        val storedOAuth = previous.commonOptions.oauth
+        if (incoming.commonOptions.oauth == storedOAuth) {
+            incoming
+        } else {
+            incoming.clone(commonOptions = incoming.commonOptions.copy(oauth = storedOAuth))
+        }
     }
 }
 

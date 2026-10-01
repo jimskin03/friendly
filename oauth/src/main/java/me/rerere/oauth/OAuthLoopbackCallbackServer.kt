@@ -107,7 +107,7 @@ class OAuthLoopbackCallbackServer(
     private suspend fun ensureStarted(): String {
         redirectUri?.let { return it }
 
-        val newServer = embeddedServer(CIO, host = LOOPBACK_HOST, port = port) {
+        val newServer = embeddedServer(CIO, host = IPV4_LOOPBACK, port = port) {
             routing {
                 get(callbackPath) {
                     handleCallback(call)
@@ -117,7 +117,7 @@ class OAuthLoopbackCallbackServer(
         try {
             newServer.startSuspend(wait = false)
             val resolvedPort = newServer.engine.resolvedConnectors().single().port
-            return "http://$LOOPBACK_HOST:$resolvedPort$callbackPath".also {
+            return "http://$IPV4_LOOPBACK:$resolvedPort$callbackPath".also {
                 server = newServer
                 redirectUri = it
             }
@@ -157,7 +157,6 @@ class OAuthLoopbackCallbackServer(
             error = error,
             errorDescription = call.request.queryParameters["error_description"],
         )
-        val responseHtml = if (error == null) successHtml() else errorHtml()
         if (!registration.claimed.compareAndSet(false, true)) {
             call.respondText(
                 text = callbackAlreadyHandledHtml(),
@@ -167,15 +166,16 @@ class OAuthLoopbackCallbackServer(
             return
         }
 
-        try {
-            call.respondText(
-                text = responseHtml,
-                contentType = ContentType.Text.Html,
-                status = HttpStatusCode.OK,
-            )
-        } finally {
-            registration.result.complete(result)
-        }
+        // Hand the code to the app before writing the page. Chrome can render the
+        // body and keep the socket open; waiting for respondText to return stalls
+        // token exchange and leaves the server looking unauthorized.
+        registration.result.complete(result)
+        call.response.header(HttpHeaders.Connection, "close")
+        call.respondText(
+            text = if (error == null) successHtml() else errorHtml(),
+            contentType = ContentType.Text.Html,
+            status = HttpStatusCode.OK,
+        )
     }
 
     internal suspend fun closeSession(
@@ -197,7 +197,7 @@ class OAuthLoopbackCallbackServer(
 
     private suspend fun stopServerIfIdle() {
         if (callbacks.isEmpty()) {
-            server?.stopSuspend(gracePeriodMillis = 0, timeoutMillis = 1_000)
+            server?.stopSuspend(gracePeriodMillis = 400, timeoutMillis = 2_000)
             server = null
             redirectUri = null
             localizedContext = null
@@ -215,7 +215,8 @@ class OAuthLoopbackCallbackServer(
     }
 
     private companion object {
-        const val LOOPBACK_HOST = "127.0.0.1"
+        const val IPV4_LOOPBACK = "127.0.0.1"
+        const val APP_BRAND = "Friendly"
     }
 
     private fun successHtml() = callbackPage(
@@ -228,7 +229,7 @@ class OAuthLoopbackCallbackServer(
         ),
         hint = localizedString(
             R.string.oauth_callback_success_hint,
-            "You can close this tab and return to RikkaHub.",
+            "You can close this tab and return to Friendly.",
         ),
     )
 
@@ -242,7 +243,7 @@ class OAuthLoopbackCallbackServer(
         ),
         hint = localizedString(
             R.string.oauth_callback_error_hint,
-            "Close this tab and try again from RikkaHub.",
+            "Close this tab and try again from Friendly.",
         ),
     )
 
@@ -259,7 +260,7 @@ class OAuthLoopbackCallbackServer(
         ),
         hint = localizedString(
             R.string.oauth_callback_invalid_hint,
-            "Return to RikkaHub and start the authorization again.",
+            "Return to Friendly and start the authorization again.",
         ),
     )
 
@@ -276,7 +277,7 @@ class OAuthLoopbackCallbackServer(
         ),
         hint = localizedString(
             R.string.oauth_callback_handled_hint,
-            "You can safely close this tab and return to RikkaHub.",
+            "You can safely close this tab and return to Friendly.",
         ),
     )
 
@@ -308,7 +309,7 @@ class OAuthLoopbackCallbackServer(
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
               <meta name="color-scheme" content="light dark">
-              <title>$safeTitle · RikkaHub</title>
+              <title>$safeTitle · $APP_BRAND</title>
               <style>
                 :root {
                   color-scheme: light dark;
@@ -397,7 +398,7 @@ class OAuthLoopbackCallbackServer(
             </head>
             <body class="$tone">
               <main role="status" aria-live="polite">
-                <p class="brand">RikkaHub</p>
+                <p class="brand">$APP_BRAND</p>
                 <div class="status">
                   <div class="icon" aria-hidden="true">$symbol</div>
                   <h1>$safeTitle</h1>

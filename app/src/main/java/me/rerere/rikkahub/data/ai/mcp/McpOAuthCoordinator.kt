@@ -3,10 +3,12 @@ package me.rerere.rikkahub.data.ai.mcp
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -16,6 +18,8 @@ import me.rerere.oauth.OAuthLoopbackCallbackServer
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
@@ -36,16 +40,27 @@ internal class McpOAuthCoordinator(
     private val callbackServer: OAuthLoopbackCallbackServer,
     private val authorizationLauncher: OAuthAuthorizationLauncher,
     private val updateStatus: (Uuid, McpStatus) -> Unit,
+    private val requestReconnect: suspend (Uuid) -> Unit = {},
 ) {
-    private val authorizationJobs = ConcurrentHashMap<Uuid, Job>()
+    private val attempts = McpOAuthAttemptFence()
     private val refreshLocks = ConcurrentHashMap<Uuid, Mutex>()
+    private val attemptPublisher = McpOAuthAttemptPublisher(
+        fence = attempts,
+        readSettings = { settingsStore.settingsFlow.value },
+        assignSettings = settingsStore::assignSettingsInMemory,
+        persistMcpOAuth = settingsStore::persistMcpServerOAuth,
+    )
 
     fun startAuthorization(config: McpServerConfig, context: Context) {
-        authorizationJobs.remove(config.id)?.cancel()
-        val job = appScope.launch {
+        val appContext = context.applicationContext
+        val attemptOut = AtomicLong()
+        lateinit var job: Job
+        job = appScope.launch(start = CoroutineStart.LAZY) {
+            val attempt = attemptOut.get()
+            if (!attempts.activate(config.id, attempt)) return@launch
             updateStatus(config.id, McpStatus.Authorizing)
             try {
-                authorize(config, context.applicationContext)
+                authorize(config, appContext, attempt)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -53,17 +68,18 @@ internal class McpOAuthCoordinator(
                 updateStatus(config.id, McpStatus.Error.from(e, fallbackMessage = "OAuth authorization failed"))
             }
         }
-        authorizationJobs[config.id] = job
-        job.invokeOnCompletion { authorizationJobs.remove(config.id, job) }
+        attempts.open(config.id, attemptOut, job)
     }
 
     fun cancelAuthorization(configId: Uuid) {
-        authorizationJobs.remove(configId)?.cancel()
+        attempts.close(configId)
         updateStatus(configId, McpStatus.NeedsAuthorization)
     }
 
+    fun isAuthorizationInProgress(configId: Uuid): Boolean = attempts.isActive(configId)
+
     fun forget(configId: Uuid) {
-        authorizationJobs.remove(configId)?.cancel()
+        attempts.close(configId)
         refreshLocks.remove(configId)
     }
 
@@ -115,10 +131,17 @@ internal class McpOAuthCoordinator(
     }
 
     suspend fun needsAuthorization(config: McpServerConfig, error: Throwable): Boolean {
-        if (looksUnauthorized(error) && config.commonOptions.oauth?.enabled == true) return true
-        if (config.commonOptions.headers.any { it.first.equals("Authorization", ignoreCase = true) }) {
-            return false
-        }
+        val oauth = config.commonOptions.oauth
+        val decision = shouldRequestMcpAuthorization(
+            hasAccessToken = !oauth?.accessToken.isNullOrBlank(),
+            oauthEnabled = oauth?.enabled == true,
+            hasManualAuthorizationHeader = config.commonOptions.headers.any {
+                it.first.equals("Authorization", ignoreCase = true)
+            },
+            error = error,
+            protectedResourceDiscovered = false,
+        )
+        if (decision != null) return decision
         return runCatching { discoveryClient.discoverProtectedResource(config.serverUrl) }
             .onFailure {
                 Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it.message}")
@@ -126,7 +149,7 @@ internal class McpOAuthCoordinator(
             .isSuccess
     }
 
-    private suspend fun authorize(config: McpServerConfig, context: Context) = withContext(Dispatchers.IO) {
+    private suspend fun authorize(config: McpServerConfig, context: Context, attempt: Long) = withContext(Dispatchers.IO) {
         val serverUrl = config.serverUrl
         require(serverUrl.isNotBlank()) { "Server URL is empty, unable to authorize" }
 
@@ -170,9 +193,10 @@ internal class McpOAuthCoordinator(
                 clientSecret = registration.clientSecret
             }
 
-            persistOAuthState(
-                config.id,
-                (existing ?: McpOAuthState()).copy(
+            val persistedClient = attemptPublisher.commit(
+                configId = config.id,
+                attempt = attempt,
+                oauth = (existing ?: McpOAuthState()).copy(
                     enabled = true,
                     clientId = clientId,
                     clientSecret = clientSecret,
@@ -181,8 +205,9 @@ internal class McpOAuthCoordinator(
                     registrationEndpoint = metadata.registrationEndpoint,
                     redirectUri = redirectUri,
                     scope = scope,
-                )
+                ),
             )
+            if (!persistedClient) return@withContext
 
             val authorizationUrl = oauthClient.buildAuthorizationUrl(
                 OAuthHttpClient.AuthorizationRequest(
@@ -215,9 +240,12 @@ internal class McpOAuthCoordinator(
                     resources = listOf(resource),
                 )
             )
-            persistOAuthState(
-                config.id,
-                McpOAuthState(
+            val reconnectContext = coroutineContext
+            var reconnectJob: Job? = null
+            val persistedTokens = attemptPublisher.commit(
+                configId = config.id,
+                attempt = attempt,
+                oauth = McpOAuthState(
                     enabled = true,
                     clientId = clientId,
                     clientSecret = clientSecret,
@@ -229,8 +257,16 @@ internal class McpOAuthCoordinator(
                     accessToken = token.accessToken,
                     refreshToken = token.refreshToken,
                     expiresAt = computeExpiry(token.expiresIn),
-                )
-            )
+                ),
+            ) {
+                // Scheduled only while this attempt is still current. Main keeps reconnect
+                // off the commit caller, which is holding the per-server commit gate.
+                reconnectJob = CoroutineScope(reconnectContext).launch(Dispatchers.Main) {
+                    requestReconnect(config.id)
+                }
+            }
+            if (!persistedTokens) return@withContext
+            reconnectJob?.join()
         } finally {
             withContext(NonCancellable) {
                 callbackSession.close()
@@ -242,14 +278,7 @@ internal class McpOAuthCoordinator(
         if (description.isNullOrBlank()) "Authorization failed: $error" else "Authorization failed: $error ($description)"
 
     private suspend fun persistOAuthState(configId: Uuid, oauth: McpOAuthState?) {
-        settingsStore.update { old ->
-            old.copy(
-                mcpServers = old.mcpServers.map { server ->
-                    if (server.id != configId) server
-                    else server.clone(commonOptions = server.commonOptions.copy(oauth = oauth))
-                }
-            )
-        }
+        settingsStore.updateMcpServerOAuth(configId, oauth)
     }
 
     private fun computeExpiry(expiresIn: Long?): Long =
@@ -259,15 +288,36 @@ internal class McpOAuthCoordinator(
             0L
         }
 
-    private fun looksUnauthorized(error: Throwable): Boolean {
-        val message = generateSequence(error) { it.cause }
-            .mapNotNull { it.message }
-            .joinToString(" ")
-            .lowercase()
-        return message.contains("401") ||
-            message.contains("unauthorized") ||
-            message.contains("invalid_token") ||
-            message.contains("invalid access token") ||
-            message.contains("missing or invalid")
-    }
+}
+
+internal fun looksLikeMcpAuthFailure(error: Throwable): Boolean {
+    val message = generateSequence(error) { it.cause }
+        .mapNotNull { it.message }
+        .joinToString(" ")
+        .lowercase()
+    return message.contains("401") ||
+        message.contains("403") ||
+        message.contains("unauthorized") ||
+        message.contains("forbidden") ||
+        message.contains("insufficient_scope") ||
+        message.contains("invalid_token") ||
+        message.contains("invalid access token") ||
+        message.contains("missing or invalid")
+}
+
+/**
+ * @return true or false when the decision does not need a metadata probe; null to probe.
+ * A stored access token is a completed OAuth handoff. Only an auth failure may ask again.
+ */
+internal fun shouldRequestMcpAuthorization(
+    hasAccessToken: Boolean,
+    oauthEnabled: Boolean,
+    hasManualAuthorizationHeader: Boolean,
+    error: Throwable,
+    protectedResourceDiscovered: Boolean,
+): Boolean? {
+    if (hasAccessToken) return looksLikeMcpAuthFailure(error)
+    if (looksLikeMcpAuthFailure(error) && oauthEnabled) return true
+    if (hasManualAuthorizationHeader) return false
+    return if (protectedResourceDiscovered) true else null
 }
