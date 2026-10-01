@@ -1062,10 +1062,15 @@ class ChatService(
 
 
     suspend fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?) {
-        sessionManager.withSession(conversationId) {
-            updateConversationState(conversationId) { it.copy(folderId = folderId) }
+        sessionManager.withSession(conversationId) { session ->
+            session.initialize {
+                conversationRepo.getConversationById(conversationId) ?: session.state.value
+            }
+            session.updateMetadata(
+                update = { it.copy(folderId = folderId) },
+                persist = { conversationRepo.updateConversationFolderId(conversationId, folderId) },
+            )
         }
-        conversationRepo.updateConversationFolderId(conversationId, folderId)
     }
 
 

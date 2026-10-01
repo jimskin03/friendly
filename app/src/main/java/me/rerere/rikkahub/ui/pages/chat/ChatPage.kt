@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -124,6 +125,8 @@ fun ChatPage(
     files: List<Uri>,
     nodeId: Uuid? = null,
     folderId: String? = null,
+    folderName: String? = null,
+    folderLabelId: String? = null,
 ) {
     val vm: ChatVM = koinViewModel(
         parameters = {
@@ -136,6 +139,7 @@ fun ChatPage(
 
     val setting by vm.settings.collectAsStateWithLifecycle()
     val conversation by vm.conversation.collectAsStateWithLifecycle()
+    val isInitializing by vm.isInitializing.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
@@ -158,7 +162,7 @@ fun ChatPage(
         if (folderId != null) {
             val folderUuid = runCatching { Uuid.parse(folderId) }.getOrNull()
             if (folderUuid != null) {
-                vm.setFolderId(folderUuid)
+                vm.initFolderId(folderUuid)
             }
         }
     }
@@ -213,7 +217,7 @@ fun ChatPage(
         }
     }
 
-    BackHandler(enabled = conversation.messageNodes.isNotEmpty()) {
+    BackHandler(enabled = navController.canPop || conversation.messageNodes.isNotEmpty()) {
         handleBack()
     }
 
@@ -225,6 +229,10 @@ fun ChatPage(
         processingStatus = processingStatus,
         setting = setting,
         conversation = conversation,
+        isInitializing = isInitializing,
+        folderId = folderId,
+        folderName = folderName,
+        folderLabelId = folderLabelId,
         navController = navController,
         vm = vm,
         chatListState = chatListState,
@@ -248,6 +256,10 @@ private fun ChatPageContent(
     setting: Settings,
     bigScreen: Boolean,
     conversation: Conversation,
+    isInitializing: Boolean = false,
+    folderId: String? = null,
+    folderName: String? = null,
+    folderLabelId: String? = null,
     navController: Navigator,
     vm: ChatVM,
     chatListState: LazyListState,
@@ -297,6 +309,18 @@ private fun ChatPageContent(
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
     var showMoveToFolderSheet by rememberSaveable { mutableStateOf(false) }
 
+    val effectiveFolderUuid = remember(conversation.folderId, folderId) {
+        conversation.folderId ?: runCatching { folderId?.let { Uuid.parse(it) } }.getOrNull()
+    }
+    val currentFolder = remember(effectiveFolderUuid, folders) {
+        if (effectiveFolderUuid != null) {
+            folders.firstOrNull { it.id == effectiveFolderUuid }
+        } else null
+    }
+    val activeFolderName = folderName ?: currentFolder?.name
+    val activeFolderLabelId = folderLabelId ?: currentFolder?.label ?: "planning"
+    val isFolderChat = effectiveFolderUuid != null || activeFolderName != null
+
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
@@ -304,12 +328,15 @@ private fun ChatPageContent(
         AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         Scaffold(
             topBar = {
-                if (conversation.messageNodes.isNotEmpty()) {
+                if (conversation.messageNodes.isNotEmpty() || isFolderChat) {
                     TopBar(
                         settings = setting,
                         conversation = conversation,
                         folders = folders,
                         previewMode = previewMode,
+                        currentFolder = currentFolder,
+                        folderName = activeFolderName,
+                        folderLabelId = activeFolderLabelId,
                         onBack = onBack,
                         onMoveFolder = {
                             showMoveToFolderSheet = true
@@ -333,7 +360,7 @@ private fun ChatPageContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     ChatInput(
-                        includeNavigationBarPadding = conversation.messageNodes.isNotEmpty(),
+                        includeNavigationBarPadding = conversation.messageNodes.isNotEmpty() || isFolderChat,
                         onStartVoiceMode = onStartVoiceMode,
                         voiceState = voiceState,
                         onStopVoiceMode = vm.voiceSession::stop,
@@ -444,7 +471,7 @@ private fun ChatPageContent(
                             showFilesSheet = true
                         },
                     )
-                    if (conversation.messageNodes.isEmpty()) {
+                    if (conversation.messageNodes.isEmpty() && !isFolderChat) {
                         HomeBottomBar(
                             onNewFolder = {
                                 showCreateFolderDialog = true
@@ -478,6 +505,9 @@ private fun ChatPageContent(
                 hazeState = hazeState,
                 errors = errors,
                 folders = folders,
+                folderName = if (isFolderChat) (activeFolderName ?: "Folder") else null,
+                folderLabelId = activeFolderLabelId,
+                isInitializing = isInitializing,
                 onSelectFolder = { folder ->
                     navController.navigate(
                         Screen.FolderConversations(
@@ -692,6 +722,9 @@ private fun TopBar(
     conversation: Conversation,
     folders: List<Folder>,
     previewMode: Boolean,
+    currentFolder: Folder? = null,
+    folderName: String? = null,
+    folderLabelId: String? = null,
     onBack: () -> Unit,
     onMoveFolder: () -> Unit,
     onNewChat: () -> Unit,
@@ -729,50 +762,87 @@ private fun TopBar(
                 val assistantName = assistant.name.ifBlank { defaultAssistantName }
                 val sessionTitle = conversation.title.trim()
                 val modelName = model?.displayName
-                val detail = when {
-                    sessionTitle.isNotEmpty() && !modelName.isNullOrBlank() -> "$sessionTitle · $modelName"
-                    sessionTitle.isNotEmpty() -> sessionTitle
-                    !modelName.isNullOrBlank() -> stringResource(
-                        R.string.assistant_home_ready_with_model,
-                        modelName,
-                    )
-                    else -> stringResource(R.string.assistant_home_ready)
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 1.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                    Column {
-                        Text(
-                            text = assistantName,
-                            maxLines = 1,
-                            style = MaterialTheme.typography.titleMedium,
-                            overflow = TextOverflow.Ellipsis,
+                val activeFolderName = folderName ?: currentFolder?.name
+                val activeFolderLabelId = folderLabelId ?: currentFolder?.label ?: "planning"
+                val activeFolderLabel = remember(activeFolderLabelId) { FolderLabel.fromId(activeFolderLabelId) }
+
+                if (activeFolderName != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        FolderBadge(
+                            label = activeFolderLabel,
+                            size = 32.dp,
+                            iconSize = 16.dp,
+                            shapeRadius = 10.dp,
                         )
-                        Text(
-                            text = detail,
-                            overflow = TextOverflow.Ellipsis,
-                            maxLines = 1,
-                            color = LocalContentColor.current.copy(alpha = 0.65f),
-                            style = MaterialTheme.typography.labelMedium,
+                        Column {
+                            Text(
+                                text = if (sessionTitle.isNotEmpty()) sessionTitle else activeFolderName,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = if (sessionTitle.isNotEmpty()) {
+                                    "$activeFolderName · $assistantName"
+                                } else {
+                                    "Saved in $activeFolderName · $assistantName"
+                                },
+                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 1,
+                                color = LocalContentColor.current.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                } else {
+                    val detail = when {
+                        sessionTitle.isNotEmpty() && !modelName.isNullOrBlank() -> "$sessionTitle · $modelName"
+                        sessionTitle.isNotEmpty() -> sessionTitle
+                        !modelName.isNullOrBlank() -> stringResource(
+                            R.string.assistant_home_ready_with_model,
+                            modelName,
                         )
+                        else -> stringResource(R.string.assistant_home_ready)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 1.dp)
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Column {
+                            Text(
+                                text = assistantName,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.titleMedium,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = detail,
+                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 1,
+                                color = LocalContentColor.current.copy(alpha = 0.65f),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
                     }
                 }
             }
         },
         actions = {
-            val currentFolder = remember(conversation.folderId, folders) {
+            val folderToDisplay = currentFolder ?: remember(conversation.folderId, folders) {
                 folders.firstOrNull { it.id == conversation.folderId }
             }
-            if (currentFolder != null) {
-                val label = FolderLabel.fromId(currentFolder.label)
+            if (folderToDisplay != null) {
+                val label = FolderLabel.fromId(folderToDisplay.label)
                 IconButton(onClick = onMoveFolder) {
                     FolderBadge(
                         label = label,

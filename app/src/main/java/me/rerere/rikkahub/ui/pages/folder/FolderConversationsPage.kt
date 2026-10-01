@@ -133,12 +133,13 @@ fun FolderConversationsPage(
                             scope.launch {
                                 if (folderUuid != null) {
                                     chatService.initializeConversation(newChatId, folderUuid)
-                                    chatService.moveConversationToFolder(newChatId, folderUuid)
                                 }
                                 navigateToChatPage(
                                     navigator = navController,
                                     chatId = newChatId,
                                     folderId = folderId,
+                                    folderName = folderName,
+                                    folderLabelId = folderLabelId,
                                 )
                             }
                         }
@@ -158,12 +159,13 @@ fun FolderConversationsPage(
                     scope.launch {
                         if (folderUuid != null) {
                             chatService.initializeConversation(newChatId, folderUuid)
-                            chatService.moveConversationToFolder(newChatId, folderUuid)
                         }
                         navigateToChatPage(
                             navigator = navController,
                             chatId = newChatId,
                             folderId = folderId,
+                            folderName = folderName,
+                            folderLabelId = folderLabelId,
                         )
                     }
                 },
@@ -216,12 +218,13 @@ fun FolderConversationsPage(
                             scope.launch {
                                 if (folderUuid != null) {
                                     chatService.initializeConversation(newChatId, folderUuid)
-                                    chatService.moveConversationToFolder(newChatId, folderUuid)
                                 }
                                 navigateToChatPage(
                                     navigator = navController,
                                     chatId = newChatId,
                                     folderId = folderId,
+                                    folderName = folderName,
+                                    folderLabelId = folderLabelId,
                                 )
                             }
                         }
@@ -255,6 +258,8 @@ fun FolderConversationsPage(
                                     navigator = navController,
                                     chatId = conversation.id,
                                     folderId = folderId,
+                                    folderName = folderName,
+                                    folderLabelId = folderLabelId,
                                 )
                             },
                             onDelete = {

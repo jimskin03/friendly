@@ -47,12 +47,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
+import me.rerere.rikkahub.data.model.FolderLabel
+import me.rerere.rikkahub.ui.components.ui.FolderEmptyChatView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -143,6 +146,9 @@ fun ChatList(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    folderName: String? = null,
+    folderLabelId: String? = null,
+    isInitializing: Boolean = false,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -190,6 +196,9 @@ fun ChatList(
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
+                folderName = folderName,
+                folderLabelId = folderLabelId,
+                isInitializing = isInitializing,
             )
         }
     }
@@ -225,6 +234,9 @@ private fun ChatListNormal(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    folderName: String? = null,
+    folderLabelId: String? = null,
+    isInitializing: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -334,26 +346,48 @@ private fun ChatListNormal(
                     .hazeSource(state = hazeState)
                     .padding(top = innerPadding.calculateTopPadding()),
             ) {
-            if (conversation.messageNodes.isEmpty() && !loading) {
-                item(key = "AssistantHome") {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        AssistantHome(
-                            userNickname = settings.displaySetting.userNickname,
-                            folders = folders,
-                            onSelectFolder = onSelectFolder,
-                            onSeeAllFolders = onSeeAllFolders,
+            if (isInitializing) {
+                item(key = "InitializingIndicator") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 100.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+                }
+            } else if (conversation.messageNodes.isEmpty() && !loading) {
+                if (folderName != null) {
+                    item(key = "FolderEmptyChat") {
+                        FolderEmptyChatView(
+                            folderName = folderName,
+                            folderLabel = FolderLabel.fromId(folderLabelId ?: "planning"),
                             onStarterClick = onClickSuggestion,
-                            onOpenSearch = onOpenSearch,
-                            onOpenActivity = onOpenActivity,
-                            onOpenSettings = onOpenSettings,
-                            onQuickCreateFolder = onQuickCreateFolder,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        if (assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
-                            ConversationSystemPromptButton(
-                                customSystemPrompt = conversation.customSystemPrompt,
-                                onSystemPromptChange = onConversationSystemPromptChange,
+                    }
+                } else {
+                    item(key = "AssistantHome") {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            AssistantHome(
+                                userNickname = settings.displaySetting.userNickname,
+                                folders = folders,
+                                onSelectFolder = onSelectFolder,
+                                onSeeAllFolders = onSeeAllFolders,
+                                onStarterClick = onClickSuggestion,
+                                onOpenSearch = onOpenSearch,
+                                onOpenActivity = onOpenActivity,
+                                onOpenSettings = onOpenSettings,
+                                onQuickCreateFolder = onQuickCreateFolder,
+                                modifier = Modifier.fillMaxWidth(),
                             )
+                            if (assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
+                                ConversationSystemPromptButton(
+                                    customSystemPrompt = conversation.customSystemPrompt,
+                                    onSystemPromptChange = onConversationSystemPromptChange,
+                                )
+                            }
                         }
                     }
                 }

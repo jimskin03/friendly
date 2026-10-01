@@ -12,10 +12,13 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -87,15 +90,19 @@ class ChatVM(
         .getConversationJobs()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    init {
+    private val _isInitializing = MutableStateFlow(true)
+    val isInitializing: StateFlow<Boolean> = _isInitializing.asStateFlow()
 
+    init {
         chatService.addConversationReference(_conversationId)
 
-
         viewModelScope.launch {
-            chatService.initializeConversation(_conversationId)
+            try {
+                chatService.initializeConversation(_conversationId)
+            } finally {
+                _isInitializing.value = false
+            }
         }
-
 
         context.writeStringPreference("lastConversationId", _conversationId.toString())
     }
@@ -366,6 +373,15 @@ class ChatVM(
                         }
                     }
                 )
+            }
+        }
+    }
+
+    fun initFolderId(folderId: Uuid) {
+        viewModelScope.launch {
+            isInitializing.first { !it }
+            if (conversation.value.folderId != folderId) {
+                chatService.moveConversationToFolder(_conversationId, folderId)
             }
         }
     }

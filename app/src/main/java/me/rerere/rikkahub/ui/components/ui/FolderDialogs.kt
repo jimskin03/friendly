@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,10 +36,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
@@ -386,5 +390,127 @@ fun MoveToFolderSheet(
                 showCreateDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun FolderEmptyChatView(
+    folderName: String,
+    folderLabel: FolderLabel,
+    onStarterClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Spacer(modifier = Modifier.height(28.dp))
+        FolderBadge(
+            label = folderLabel,
+            size = 68.dp,
+            iconSize = 34.dp,
+            shapeRadius = 22.dp,
+        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "New chat in $folderName",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "Messages in this session are saved to \"$folderName\".",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val suggestions = remember(folderLabel) {
+            when (folderLabel.id) {
+                "travel" -> listOf(
+                    "Help me plan a 5-day itinerary",
+                    "Packing list for an upcoming trip",
+                    "Top hidden gems to visit",
+                )
+                "finance" -> listOf(
+                    "Help me budget my monthly expenses",
+                    "Analyze investment strategies",
+                    "Track my savings goal progress",
+                )
+                "study" -> listOf(
+                    "Explain this topic in simple terms",
+                    "Create flashcards for revision",
+                    "Summarize key study notes",
+                )
+                "work" -> listOf(
+                    "Draft an executive summary",
+                    "Help me organize project milestones",
+                    "Write a professional follow-up email",
+                )
+                "health" -> listOf(
+                    "Create a balanced meal plan",
+                    "Design a 3-day workout routine",
+                    "Tips for healthy daily habits",
+                )
+                "creative" -> listOf(
+                    "Brainstorm creative story ideas",
+                    "Help me write dialogue",
+                    "Generate fresh concept outlines",
+                )
+                "code" -> listOf(
+                    "Review my architecture design",
+                    "Explain this algorithm",
+                    "Help me debug an issue",
+                )
+                else -> listOf(
+                    "Brainstorm ideas for this project",
+                    "Draft an outline or plan",
+                    "Ask any question to get started",
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            suggestions.forEach { prompt ->
+                Surface(
+                    onClick = { onStarterClick(prompt) },
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = prompt,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            imageVector = HugeIcons.ArrowRight01,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }

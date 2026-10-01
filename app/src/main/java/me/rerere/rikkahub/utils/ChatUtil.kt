@@ -17,8 +17,10 @@ fun navigateToChatPage(
     initFiles: List<Uri> = emptyList(),
     nodeId: Uuid? = null,
     folderId: String? = null,
+    folderName: String? = null,
+    folderLabelId: String? = null,
 ) {
-    Log.i(TAG, "navigateToChatPage: navigate to $chatId, folderId: $folderId")
+    Log.i(TAG, "navigateToChatPage: navigate to $chatId, folderId: $folderId, folderName: $folderName")
     navigator.navigate(
         Screen.Chat(
             id = chatId.toString(),
@@ -26,6 +28,8 @@ fun navigateToChatPage(
             files = initFiles.map { it.toString() },
             nodeId = nodeId?.toString(),
             folderId = folderId,
+            folderName = folderName,
+            folderLabelId = folderLabelId,
         )
     )
 }
