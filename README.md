@@ -6,9 +6,15 @@
 </div>
 
 <div align="center">
-  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
+  <img src="docs/img/friendly-product.jpg" alt="Friendly 2.0 Product Showcase" width="100%" />
 </div>
+
+<br />
+
+<div align="center">
+  <img src="docs/img/friendly-mobile.png" alt="Friendly 2.0 Mobile Interface" width="280" />
+</div>
+
 
 ## ✨ Features
 
