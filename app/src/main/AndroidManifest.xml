@@ -33,12 +33,12 @@
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
-    <!-- 用于解析屏幕使用时间里各 App 的名称(可见性受 Android 11+ 包可见性限制) -->
+    <!-- For resolving app names in screen time -->
     <intent>
       <action android:name="android.intent.action.MAIN" />
       <category android:name="android.intent.category.LAUNCHER" />
     </intent>
-    <!-- 用于识别桌面 launcher 以便在屏幕使用时间中排除 -->
+    <!-- For identifying launcher to exclude from screen time -->
     <intent>
       <action android:name="android.intent.action.MAIN" />
       <category android:name="android.intent.category.HOME" />
@@ -92,11 +92,6 @@
       </intent-filter>
 
       <intent-filter>
-        <action android:name="me.rerere.rikkahub.action.TRANSLATE" />
-        <category android:name="android.intent.category.DEFAULT" />
-      </intent-filter>
-
-      <intent-filter>
         <action android:name="me.rerere.rikkahub.action.IMAGE_GEN" />
         <category android:name="android.intent.category.DEFAULT" />
       </intent-filter>
@@ -114,6 +109,9 @@
 
         <category android:name="android.intent.category.DEFAULT" />
 
+        <data
+          android:host="shortcut"
+          android:scheme="friendly" />
         <data
           android:host="shortcut"
           android:scheme="rikkahub" />

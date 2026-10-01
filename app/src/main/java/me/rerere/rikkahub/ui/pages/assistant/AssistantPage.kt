@@ -86,14 +86,14 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    // 搜索关键词状态
+
     var searchQuery by remember { mutableStateOf("") }
-    // 标签过滤状态
+
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
-    // 待删除的助手
+
     var deleteTarget by remember { mutableStateOf<Assistant?>(null) }
 
-    // 根据搜索关键词和选中的标签过滤助手
+
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
         settings.assistants.filter { assistant ->
             val matchesSearch = searchQuery.isBlank() ||
@@ -147,7 +147,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 }
             }
 
-            // 搜索框
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -169,7 +169,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // 标签过滤器
+
             AssistantTagsFilterRow(
                 settings = settings,
                 vm = vm,

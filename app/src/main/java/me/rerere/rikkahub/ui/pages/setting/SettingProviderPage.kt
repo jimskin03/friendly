@@ -1,23 +1,11 @@
 package me.rerere.rikkahub.ui.pages.setting
 
-import android.net.Uri
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Camera01
-import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Image02
-import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Sparkles
-import me.rerere.hugeicons.stroke.Cancel01
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,640 +14,706 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
-import io.github.g00fy2.quickie.QRResult
-import io.github.g00fy2.quickie.ScanQRCode
+import kotlinx.coroutines.launch
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.registry.ModelRegistry
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
+import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
-import me.rerere.rikkahub.ui.components.ui.ItemAction
-import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
-import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
-import me.rerere.rikkahub.ui.components.ui.Tag
-import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
-import me.rerere.rikkahub.ui.components.ui.longPressReorder
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
+import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
+import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
+import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
+import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.ImageUtils
-import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
+import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
 @Composable
-fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
+fun SettingProviderPage(
+    initialProviderId: Uuid? = null,
+    vm: SettingVM = koinViewModel()
+) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val navController = LocalNavController.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    var searchQuery by remember { mutableStateOf("") }
-    var deleteTarget by remember { mutableStateOf<ProviderSetting?>(null) }
-    val lazyListState = rememberLazyListState()
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val newProviders = settings.providers.toMutableList().apply {
-            add(to.index, removeAt(from.index))
+    val toaster = LocalToaster.current
+    val context = LocalContext.current
+    val providerManager = koinInject<ProviderManager>()
+    val scope = rememberCoroutineScope()
+
+    var selectedProviderId by rememberSaveable(initialProviderId) {
+        mutableStateOf(initialProviderId?.toString() ?: settings.providers.firstOrNull()?.id?.toString())
+    }
+
+    val selectedProvider = settings.providers.find { it.id.toString() == selectedProviderId }
+        ?: settings.providers.firstOrNull()
+
+    var currentConfig by remember(selectedProvider?.id) {
+        mutableStateOf(selectedProvider)
+    }
+
+    LaunchedEffect(selectedProvider) {
+        if (selectedProvider != null && currentConfig?.id != selectedProvider.id) {
+            currentConfig = selectedProvider
+        }
+    }
+
+    val onUpdateSettingsProvider: (ProviderSetting) -> Unit = { updated ->
+        currentConfig = updated
+        val newProviders = settings.providers.map {
+            if (it.id == updated.id) updated else it
         }
         vm.updateSettings(settings.copy(providers = newProviders))
     }
 
-    val filteredProviders = remember(settings.providers, searchQuery) {
-        if (searchQuery.isBlank()) {
-            settings.providers
-        } else {
-            settings.providers.filter { provider ->
-                provider.name.contains(searchQuery, ignoreCase = true)
-            }
+    var showAddProviderDialog by remember { mutableStateOf(false) }
+    var showDeleteProviderDialog by remember { mutableStateOf(false) }
+
+    val addModelDialogState = useEditState<Model> { newModel ->
+        currentConfig?.let { prov ->
+            val updated = prov.addModel(newModel.copy(displayName = newModel.displayName.trim()))
+            onUpdateSettingsProvider(updated)
         }
     }
 
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var fetchedModels by remember(selectedProvider?.id) { mutableStateOf<List<Model>>(emptyList()) }
+    var showModelPickerSheet by remember { mutableStateOf(false) }
+    var modelSearchQuery by remember { mutableStateOf("") }
+
     Scaffold(
+        containerColor = CustomColors.topBarColors.containerColor,
         topBar = {
-            LargeFlexibleTopAppBar(
+            TopAppBar(
+                navigationIcon = { BackButton() },
+                colors = CustomColors.topBarColors,
                 title = {
-                    Text(text = stringResource(R.string.setting_provider_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
+                    Text(
+                        text = stringResource(R.string.setting_page_providers),
+                        style = MaterialTheme.typography.titleLarge
+                    )
                 },
                 actions = {
-                    RecommendProviderButton { provider ->
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(provider.copyProvider(Uuid.random())) + settings.providers
-                            )
+                    IconButton(onClick = { showAddProviderDialog = true }) {
+                        Icon(
+                            HugeIcons.Add01,
+                            contentDescription = stringResource(R.string.setting_provider_page_add_provider)
                         )
                     }
-                    ImportProviderButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it.copyProvider(Uuid.random())) + settings.providers
-                            )
-                        )
-                    }
-                    AddButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it) + settings.providers
-                            )
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = CustomColors.topBarColors
+                }
             )
-        },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor,
-    ) { innerPadding ->
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = innerPadding.calculateTopPadding())
+                .padding(paddingValues)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Search bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text(stringResource(R.string.setting_provider_page_search_providers)) },
-                leadingIcon = {
-                    Icon(HugeIcons.Search01, contentDescription = null)
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(HugeIcons.Cancel01, contentDescription = "Clear")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = CircleShape,
+            // Provider selector chips
+            Text(
+                text = stringResource(R.string.setting_page_providers),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
             )
 
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .imePadding(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp) +
-                    PaddingValues(bottom = innerPadding.calculateBottomPadding()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                state = lazyListState,
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(filteredProviders, key = { it.id }) { provider ->
-                    ReorderableItem(
-                        state = reorderableState,
-                        key = provider.id
-                    ) { isDragging ->
-                        ProviderItem(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(longPressReorder(isDragging, enabled = searchQuery.isBlank())),
-                            provider = provider,
-                            onClick = {
-                                navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
-                            },
-                            onDelete = {
-                                deleteTarget = provider
+                items(settings.providers, key = { it.id }) { provider ->
+                    val isSelected = provider.id.toString() == selectedProvider?.id?.toString()
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            selectedProviderId = provider.id.toString()
+                            currentConfig = provider
+                        },
+                        leadingIcon = {
+                            AutoAIIcon(name = provider.name, modifier = Modifier.size(18.dp))
+                        },
+                        label = {
+                            Text(provider.name)
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = { showAddProviderDialog = true },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(HugeIcons.Add01, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.add))
+                    }
+                }
+            }
+
+            if (currentConfig != null) {
+                val activeProvider = currentConfig!!
+
+                // Provider Configuration Card
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = CustomColors.listItemColors.containerColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            AutoAIIcon(activeProvider.name, modifier = Modifier.size(28.dp))
+                            OutlinedTextField(
+                                value = activeProvider.name,
+                                onValueChange = { newName ->
+                                    val updated = activeProvider.copyProvider(name = newName)
+                                    currentConfig = updated
+                                    onUpdateSettingsProvider(updated)
+                                },
+                                label = { Text(stringResource(R.string.setting_provider_page_name)) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (activeProvider.enabled) {
+                                        stringResource(R.string.setting_provider_page_enabled)
+                                    } else {
+                                        stringResource(R.string.setting_provider_page_disabled)
+                                    },
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Switch(
+                                    checked = activeProvider.enabled,
+                                    onCheckedChange = { isEnabled ->
+                                        val updated = activeProvider.copyProvider(enabled = isEnabled)
+                                        onUpdateSettingsProvider(updated)
+                                    }
+                                )
+                            }
+                        }
+
+                        ProviderConfigure(
+                            provider = activeProvider,
+                            onEdit = { updated ->
+                                currentConfig = updated
                             }
                         )
+
+                        if (activeProvider is ProviderSetting.OpenAI) {
+                            SettingProviderBalanceOption(
+                                provider = activeProvider,
+                                balanceOption = activeProvider.balanceOption,
+                                onEdit = {
+                                    val updated = activeProvider.copyProvider(balanceOption = it)
+                                    currentConfig = updated
+                                }
+                            )
+                            ProviderBalanceText(
+                                providerSetting = activeProvider,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+
+                        // Action Row: Test, Fetch, Add Model, Reset URL, Delete, Save
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ProviderConnectionTester(internalProvider = activeProvider)
+
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        isFetchingModels = true
+                                        try {
+                                            val list = providerManager.getProviderByType(activeProvider)
+                                                .listModels(activeProvider)
+                                                .sortedBy { it.modelId }
+                                                .toList()
+                                            fetchedModels = list
+                                            if (list.isEmpty()) {
+                                                toaster.show("No models found from provider", type = ToastType.Info)
+                                            } else {
+                                                showModelPickerSheet = true
+                                            }
+                                        } catch (e: Exception) {
+                                            toaster.show("Fetch failed: ${e.message}", type = ToastType.Error)
+                                        } finally {
+                                            isFetchingModels = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                if (isFetchingModels) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(HugeIcons.Refresh03, contentDescription = "Fetch Models")
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    addModelDialogState.open(Model())
+                                }
+                            ) {
+                                Icon(
+                                    HugeIcons.Add01,
+                                    contentDescription = stringResource(R.string.setting_provider_page_add_model)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val reset = activeProvider.resetBaseUrlToDefault()
+                                    currentConfig = reset
+                                    onUpdateSettingsProvider(reset)
+                                },
+                                enabled = !activeProvider.isUsingDefaultBaseUrl()
+                            ) {
+                                Icon(
+                                    imageVector = HugeIcons.Refresh03,
+                                    contentDescription = stringResource(R.string.setting_model_page_reset_to_default)
+                                )
+                            }
+
+                            if (!activeProvider.builtIn) {
+                                IconButton(onClick = { showDeleteProviderDialog = true }) {
+                                    Icon(HugeIcons.Delete01, null, tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+
+                            Spacer(Modifier.weight(1f))
+
+                            Button(
+                                onClick = {
+                                    val providerToSave = activeProvider.copyProvider(name = activeProvider.name.trim())
+                                    onUpdateSettingsProvider(providerToSave)
+                                    toaster.show(
+                                        context.getString(R.string.setting_provider_page_save_success),
+                                        type = ToastType.Success
+                                    )
+                                }
+                            ) {
+                                Icon(HugeIcons.Tick01, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.setting_provider_page_save))
+                            }
+                        }
+                    }
+                }
+
+                // Models Section
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "${stringResource(R.string.setting_provider_page_models)} (${activeProvider.models.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedButton(
+                        onClick = { addModelDialogState.open(Model()) }
+                    ) {
+                        Icon(HugeIcons.Add01, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.setting_provider_page_add_model))
+                    }
+                }
+
+                if (activeProvider.models.size > 4) {
+                    OutlinedTextField(
+                        value = modelSearchQuery,
+                        onValueChange = { modelSearchQuery = it },
+                        placeholder = { Text(stringResource(R.string.setting_provider_page_filter_placeholder)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                val displayedModels = remember(activeProvider.models, modelSearchQuery) {
+                    if (modelSearchQuery.isBlank()) activeProvider.models
+                    else activeProvider.models.filter {
+                        it.displayName.contains(modelSearchQuery, ignoreCase = true) ||
+                            it.modelId.contains(modelSearchQuery, ignoreCase = true)
+                    }
+                }
+
+                if (displayedModels.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.setting_provider_page_no_models),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(R.string.setting_provider_page_add_models_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        displayedModels.forEach { modelItem ->
+                            ModelCard(
+                                model = modelItem,
+                                onDelete = {
+                                    val updated = activeProvider.delModel(modelItem)
+                                    onUpdateSettingsProvider(updated)
+                                },
+                                onEdit = { editedModel ->
+                                    val updated = activeProvider.editModel(editedModel)
+                                    onUpdateSettingsProvider(updated)
+                                },
+                                parentProvider = activeProvider
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    RikkaConfirmDialog(
-        show = deleteTarget != null,
-        title = stringResource(R.string.confirm_delete),
-        confirmText = stringResource(R.string.delete),
-        dismissText = stringResource(R.string.cancel),
-        onConfirm = {
-            deleteTarget?.let { target ->
-                vm.updateSettings(settings.copy(providers = settings.providers.filter { it.id != target.id }))
-            }
-            deleteTarget = null
-        },
-        onDismiss = { deleteTarget = null },
-    ) {
-        Text(stringResource(R.string.setting_provider_page_delete_dialog_text))
-    }
-}
-
-@Composable
-private fun RecommendProviderButton(
-    onAdd: (ProviderSetting) -> Unit
-) {
-    val toaster = LocalToaster.current
-    var showSheet by remember { mutableStateOf(false) }
-    val importSuccessMessage = stringResource(R.string.setting_provider_page_import_success)
-
-    IconButton(
-        onClick = { showSheet = true }
-    ) {
-        Icon(HugeIcons.Sparkles, contentDescription = stringResource(R.string.setting_provider_page_recommend))
-    }
-
-    if (showSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showSheet = false },
-            sheetState = rememberBottomSheetState(
+    // Add Model Bottom Sheet
+    if (addModelDialogState.isEditing) {
+        addModelDialogState.currentState?.let { modelState ->
+            val sheetState = rememberBottomSheetState(
                 initialValue = SheetValue.Hidden,
                 enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
             )
+            ModalBottomSheet(
+                onDismissRequest = { addModelDialogState.dismiss() },
+                sheetState = sheetState,
+                sheetGesturesEnabled = false
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.95f)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_add_model),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        ModelSettingsForm(
+                            model = modelState,
+                            onModelChange = { addModelDialogState.currentState = it },
+                            isEdit = false,
+                            parentProvider = currentConfig
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    ) {
+                        TextButton(onClick = { addModelDialogState.dismiss() }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = {
+                                if (modelState.modelId.isNotBlank() && modelState.displayName.isNotBlank()) {
+                                    addModelDialogState.confirm()
+                                }
+                            }
+                        ) {
+                            Text(stringResource(R.string.setting_provider_page_add))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fetched Model Picker Sheet
+    if (showModelPickerSheet && currentConfig != null) {
+        val activeProvider = currentConfig!!
+        ModalBottomSheet(
+            onDismissRequest = { showModelPickerSheet = false }
         ) {
+            var filterText by remember { mutableStateOf("") }
+            val filterKeywords = filterText.split(" ").filter { it.isNotBlank() }
+            val filteredModels = fetchedModels.filter {
+                if (filterKeywords.isEmpty()) true
+                else filterKeywords.all { kw ->
+                    it.modelId.contains(kw, ignoreCase = true) || it.displayName.contains(kw, ignoreCase = true)
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
+                    .fillMaxHeight(0.9f)
+                    .padding(16.dp)
+                    .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.setting_provider_page_recommend),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-                RECOMMENDED_PROVIDERS.forEach { provider ->
-                    RecommendProviderItem(
-                        provider = provider,
-                        onAdd = {
-                            onAdd(provider)
-                            toaster.show(
-                                importSuccessMessage,
-                                type = ToastType.Success
-                            )
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_avaliable_models),
+                        style = MaterialTheme.typography.titleMedium
                     )
+                    val unselectedCount = filteredModels.count { m ->
+                        activeProvider.models.none { it.modelId == m.modelId }
+                    }
+                    TextButton(
+                        onClick = {
+                            if (unselectedCount > 0) {
+                                val updated = activeProvider.copyProvider(
+                                    models = activeProvider.models + filteredModels.filter { m ->
+                                        activeProvider.models.none { it.modelId == m.modelId }
+                                    }.map { m ->
+                                        m.copy(
+                                            inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(m.modelId),
+                                            outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(m.modelId),
+                                            abilities = ModelRegistry.MODEL_ABILITIES.getData(m.modelId)
+                                        )
+                                    }
+                                )
+                                onUpdateSettingsProvider(updated)
+                            } else {
+                                val updated = activeProvider.copyProvider(
+                                    models = activeProvider.models.filter { m ->
+                                        filteredModels.none { it.modelId == m.modelId }
+                                    }
+                                )
+                                onUpdateSettingsProvider(updated)
+                            }
+                        }
+                    ) {
+                        Text(
+                            if (unselectedCount > 0) stringResource(R.string.setting_provider_page_select_all, unselectedCount)
+                            else stringResource(R.string.setting_provider_page_deselect_models)
+                        )
+                    }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-private fun RecommendProviderItem(
-    provider: ProviderSetting,
-    onAdd: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AutoAIIcon(
-                name = provider.name,
-                modifier = Modifier.size(40.dp)
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = provider.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                OutlinedTextField(
+                    value = filterText,
+                    onValueChange = { filterText = it },
+                    placeholder = { Text(stringResource(R.string.setting_provider_page_filter_placeholder)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                    CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f)) {
-                        provider.description()
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredModels) { item ->
+                        val isAdded = activeProvider.models.any { it.modelId == item.modelId }
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                AutoAIIcon(item.modelId, Modifier.size(32.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item.modelId, style = MaterialTheme.typography.titleSmall)
+                                }
+                                IconButton(
+                                    onClick = {
+                                        if (isAdded) {
+                                            val toDel = activeProvider.models.firstOrNull { it.modelId == item.modelId } ?: item
+                                            val updated = activeProvider.delModel(toDel)
+                                            onUpdateSettingsProvider(updated)
+                                        } else {
+                                            val updated = activeProvider.addModel(
+                                                item.copy(
+                                                    inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(item.modelId),
+                                                    outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(item.modelId),
+                                                    abilities = ModelRegistry.MODEL_ABILITIES.getData(item.modelId)
+                                                )
+                                            )
+                                            onUpdateSettingsProvider(updated)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        if (isAdded) HugeIcons.Cancel01 else HugeIcons.Add01,
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
-            IconButton(onClick = onAdd) {
-                Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_provider_page_add))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ImportProviderButton(
-    onAdd: (ProviderSetting) -> Unit
-) {
-    val toaster = LocalToaster.current
-    val context = LocalContext.current
-    var showImportDialog by remember { mutableStateOf(false) }
-
-    val scanQrCodeLauncher = rememberLauncherForActivityResult(ScanQRCode()) { result ->
-        handleQRResult(result, onAdd, toaster, context)
-    }
-
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let {
-            handleImageQRCode(it, onAdd, toaster, context)
         }
     }
 
-    IconButton(
-        onClick = {
-            showImportDialog = true
-        }
-    ) {
-        Icon(HugeIcons.FileImport, null)
-    }
-
-    if (showImportDialog) {
+    // Add Provider Dialog
+    if (showAddProviderDialog) {
+        var newProvider by remember { mutableStateOf<ProviderSetting>(ProviderSetting.OpenAI(name = "Custom Provider")) }
         AlertDialog(
-            onDismissRequest = { showImportDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.setting_provider_page_import_dialog_title),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            },
+            onDismissRequest = { showAddProviderDialog = false },
+            title = { Text(stringResource(R.string.setting_provider_page_add_provider)) },
             text = {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_import_dialog_message),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    OutlinedTextField(
+                        value = newProvider.name,
+                        onValueChange = { newProvider = newProvider.copyProvider(name = it) },
+                        label = { Text(stringResource(R.string.setting_provider_page_name)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // 主要操作：扫描二维码
-                        Button(
-                            onClick = {
-                                showImportDialog = false
-                                scanQrCodeLauncher.launch(null)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = MaterialTheme.shapes.large
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    imageVector = HugeIcons.Camera01,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = stringResource(R.string.setting_provider_page_scan_qr_code),
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-
-                        // 次要操作：从相册选择
-                        OutlinedButton(
-                            onClick = {
-                                showImportDialog = false
-                                pickImageLauncher.launch(
-                                    androidx.activity.result.PickVisualMediaRequest(
-                                        ActivityResultContracts.PickVisualMedia.ImageOnly
-                                    )
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = MaterialTheme.shapes.large
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    imageVector = HugeIcons.Image02,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = stringResource(R.string.setting_provider_page_select_from_gallery),
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(
-                    onClick = { showImportDialog = false },
-                    shape = MaterialTheme.shapes.large
-                ) {
-                    Text(
-                        text = stringResource(R.string.cancel),
-                        style = MaterialTheme.typography.labelLarge
+                    ProviderConfigure(
+                        provider = newProvider,
+                        onEdit = { newProvider = it }
                     )
-                }
-            }
-        )
-    }
-}
-
-private fun handleQRResult(
-    result: QRResult,
-    onAdd: (ProviderSetting) -> Unit,
-    toaster: com.dokar.sonner.ToasterState,
-    context: android.content.Context
-) {
-    runCatching {
-        when (result) {
-            is QRResult.QRError -> {
-                toaster.show(
-                    context.getString(
-                        R.string.setting_provider_page_scan_error,
-                        result
-                    ), type = ToastType.Error
-                )
-            }
-
-            QRResult.QRMissingPermission -> {
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_no_permission),
-                    type = ToastType.Error
-                )
-            }
-
-            is QRResult.QRSuccess -> {
-                val setting = decodeProviderSetting(result.content.rawValue ?: "")
-                onAdd(setting)
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_import_success),
-                    type = ToastType.Success
-                )
-            }
-
-            QRResult.QRUserCanceled -> {}
-        }
-    }.onFailure { error ->
-        toaster.show(
-            context.getString(R.string.setting_provider_page_qr_decode_failed, error.message ?: ""),
-            type = ToastType.Error
-        )
-    }
-}
-
-private fun handleImageQRCode(
-    uri: Uri,
-    onAdd: (ProviderSetting) -> Unit,
-    toaster: com.dokar.sonner.ToasterState,
-    context: android.content.Context
-) {
-    runCatching {
-        // 使用ImageUtils解析二维码
-        val qrContent = ImageUtils.decodeQRCodeFromUri(context, uri)
-
-        if (qrContent.isNullOrEmpty()) {
-            toaster.show(
-                context.getString(R.string.setting_provider_page_no_qr_found),
-                type = ToastType.Error
-            )
-            return
-        }
-
-        val setting = decodeProviderSetting(qrContent)
-        onAdd(setting)
-        toaster.show(
-            context.getString(R.string.setting_provider_page_import_success),
-            type = ToastType.Success
-        )
-    }.onFailure { error ->
-        toaster.show(
-            context.getString(R.string.setting_provider_page_image_qr_decode_failed, error.message ?: ""),
-            type = ToastType.Error
-        )
-    }
-}
-
-
-@Composable
-private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
-    val dialogState = useEditState<ProviderSetting> {
-        onAdd(it.copyProvider(name = it.name.trim()))
-    }
-
-    IconButton(
-        onClick = {
-            dialogState.open(ProviderSetting.OpenAI())
-        }
-    ) {
-        Icon(HugeIcons.Add01, "Add")
-    }
-
-    if (dialogState.isEditing) {
-        AlertDialog(
-            onDismissRequest = {
-                dialogState.dismiss()
-            },
-            title = {
-                Text(stringResource(R.string.setting_provider_page_add_provider))
-            },
-            text = {
-                dialogState.currentState?.let {
-                    ProviderConfigure(it) { newState ->
-                        dialogState.currentState = newState
-                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        dialogState.confirm()
+                        val toAdd = newProvider.copyProvider(name = newProvider.name.trim())
+                        val newSettings = settings.copy(providers = settings.providers + toAdd)
+                        vm.updateSettings(newSettings)
+                        selectedProviderId = toAdd.id.toString()
+                        currentConfig = toAdd
+                        showAddProviderDialog = false
                     }
                 ) {
                     Text(stringResource(R.string.setting_provider_page_add))
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        dialogState.dismiss()
-                    }
-                ) {
+                TextButton(onClick = { showAddProviderDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
-            },
+            }
         )
     }
-}
 
-@Composable
-private fun ProviderItem(
-    provider: ProviderSetting,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = if (provider.enabled) {
-                CustomColors.listItemColors.containerColor
-            } else MaterialTheme.colorScheme.errorContainer,
-        ),
-        onClick = {
-            onClick()
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AutoAIIcon(
-                name = provider.name,
-                modifier = Modifier.size(40.dp)
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = provider.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                    CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f)) {
-                        provider.shortDescription()
+    // Delete Provider Dialog
+    if (showDeleteProviderDialog && currentConfig != null) {
+        val target = currentConfig!!
+        AlertDialog(
+            onDismissRequest = { showDeleteProviderDialog = false },
+            title = { Text(stringResource(R.string.confirm_delete)) },
+            text = { Text(stringResource(R.string.setting_provider_page_delete_dialog_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newSettings = settings.copy(providers = settings.providers - target)
+                        vm.updateSettings(newSettings)
+                        selectedProviderId = newSettings.providers.firstOrNull()?.id?.toString()
+                        currentConfig = newSettings.providers.firstOrNull()
+                        showDeleteProviderDialog = false
                     }
-                }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Tag(type = if (provider.enabled) TagType.SUCCESS else TagType.WARNING) {
-                        Text(stringResource(if (provider.enabled) R.string.setting_provider_page_enabled else R.string.setting_provider_page_disabled))
-                    }
-                    Tag(type = TagType.INFO) {
-                        Text(
-                            stringResource(
-                                R.string.setting_provider_page_model_count,
-                                provider.models.size
-                            )
-                        )
-                    }
-                    if (provider.name == "AiHubMix") {
-                        Tag(type = TagType.INFO) {
-                            Text("10% 优惠")
-                        }
-                    }
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteProviderDialog = false }) {
+                    Text(stringResource(R.string.cancel))
                 }
             }
-            ItemActionMenu(
-                actions = listOf(
-                    ItemAction(
-                        text = stringResource(R.string.delete),
-                        icon = HugeIcons.Delete01,
-                        destructive = true,
-                        enabled = !provider.builtIn,
-                        onClick = onDelete,
-                    ),
-                )
-            )
-        }
+        )
     }
 }

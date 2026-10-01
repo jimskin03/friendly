@@ -31,7 +31,6 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -44,17 +43,6 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
         contentPadding = contentPadding + PaddingValues(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item {
-            PromptSettingItem(
-                title = stringResource(R.string.setting_model_page_prompt_translation),
-                promptDescription = stringResource(R.string.setting_model_page_translate_prompt_vars),
-                promptValue = settings.translatePrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(translatePrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(translatePrompt = DEFAULT_TRANSLATION_PROMPT)) },
-                reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
-                onUpdateReasoningLevel = { vm.updateSettings(settings.copy(translateThinkingBudget = it.budgetTokens)) },
-            )
-        }
         item {
             PromptSettingItem(
                 title = stringResource(R.string.setting_model_page_prompt_title),

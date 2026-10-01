@@ -18,7 +18,7 @@ class TextReplacersTest {
 
     @Test
     fun `exact match counts non overlapping occurrences`() {
-        // "aaa" 中 "aa" 非重叠只出现 1 次, 不应被误判为多处
+
         val result = replaceText("aaa", "aa", "b", replaceAll = false)
         assertEquals("ba", result.updated)
         assertEquals(1, result.replacements)
@@ -58,7 +58,7 @@ class TextReplacersTest {
     @Test
     fun `line trimmed matches despite indentation mismatch and reindents new text`() {
         val content = "fun main() {\n    println(\"a\")\n    println(\"b\")\n}"
-        // 模型给的 old_text 丢失了缩进
+
         val result = replaceText(
             content = content,
             oldText = "println(\"a\")\nprintln(\"b\")",
@@ -101,7 +101,7 @@ class TextReplacersTest {
     @Test
     fun `line trimmed throws on ambiguous match without replace_all`() {
         val content = "    foo\nbar\n    foo"
-        // exact 找不到 tab 缩进的 "foo", line_trimmed 命中两处
+
         val e = assertThrows(IllegalArgumentException::class.java) {
             replaceText(content, "\tfoo", "baz", replaceAll = false)
         }
@@ -120,7 +120,7 @@ class TextReplacersTest {
     @Test
     fun `block anchor matches when middle lines differ slightly`() {
         val content = "fun calc() {\n    val x = a + b\n    return x\n}"
-        // 中间行的空格写错了, line_trimmed 失败, 首尾行锚点命中
+
         val result = replaceText(
             content = content,
             oldText = "fun calc() {\n    val x = a+b\n    return x\n}",
@@ -133,7 +133,7 @@ class TextReplacersTest {
 
     @Test
     fun `block anchor requires at least three lines`() {
-        // 两行的 old_text 中间行写错时不应启用锚点匹配
+
         assertThrows(IllegalArgumentException::class.java) {
             replaceText("start\nend", "start oops\nend", "x", replaceAll = false)
         }

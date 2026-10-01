@@ -29,9 +29,7 @@ class MessageContextLimitTest {
         assertEquals(emptyList<UIMessage>(), emptyList<UIMessage>().limitContext(5))
     }
 
-    /**
-     * limit 过小时无法构造滞回, 但至少不能崩溃, 也不能把上下文清空
-     */
+
     @Test
     fun `limitContext with tiny limit should degrade gracefully`() {
         val all = createTestMessages(20)
@@ -57,9 +55,7 @@ class MessageContextLimitTest {
         assertEquals(messages.subList(5, 11), result)
     }
 
-    /**
-     * 核心性质: 同一级台阶内追加消息时截断起点必须保持不动, 否则请求前缀每轮都变, 提示词缓存必然失效
-     */
+
     @Test
     fun `limitContext should keep the same start message while within one step`() {
         val all = createTestMessages(60)

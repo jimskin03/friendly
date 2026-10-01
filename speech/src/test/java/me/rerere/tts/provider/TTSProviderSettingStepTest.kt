@@ -23,7 +23,7 @@ class TTSProviderSettingStepTest {
 
     @Test
     fun step_is_registered_in_provider_types() {
-        // 没有注册到 Types 列表的话, 设置页的下拉菜单里就不会出现 Step 选项, 也没法新建
+
         assertTrue(TTSProviderSetting.Types.contains(TTSProviderSetting.Step::class))
     }
 
@@ -41,7 +41,7 @@ class TTSProviderSettingStepTest {
 
         assertEquals(original.id, copied.id)
         assertEquals("My Step", copied.name)
-        // 其余字段必须保持不变
+
         assertEquals("sk-test", copied.apiKey)
         assertEquals("stepaudio-2.5-tts", copied.model)
         assertEquals("cixingnansheng", copied.voice)

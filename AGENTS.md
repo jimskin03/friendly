@@ -2,16 +2,16 @@
 
 ## Project Overview
 
-RikkaHub is a native Android LLM chat client that supports switching between different AI providers
+Friendly 2.0 is a native Android LLM chat client that supports switching between focused AI providers
 for conversations.
 Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 ## Build, Test, and Development Commands
 
 ```bash
-./gradlew assembleDebug          # 构建 Debug APK
-./gradlew test                   # 运行所有模块的 JVM 单元测试
-./gradlew lint                   # 运行 Android Lint
+./gradlew assembleDebug          # Build Debug APK
+./gradlew test                   # Run JVM unit tests across all modules
+./gradlew lint                   # Run Android Lint
 ```
 
 ## Module Structure

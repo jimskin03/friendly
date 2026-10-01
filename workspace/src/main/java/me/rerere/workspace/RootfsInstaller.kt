@@ -151,8 +151,7 @@ class RootfsInstaller(
                         target.applyMode(header.mode)
                     }
 
-                    // LONG_NAME/LONG_LINK/PAX 已在上方 continue, 这里只有 OTHER 可达;
-                    // 数据区统一由下方的非 FILE skip 跳过, 这里再 skip 会双重跳过导致后续 header 错位
+
                     TarEntryType.LONG_NAME,
                     TarEntryType.LONG_LINK,
                     TarEntryType.PAX,
@@ -263,8 +262,7 @@ class RootfsInstaller(
         return result
     }
 
-    // 协程取消时调用方通过 runInterruptible 将取消转成线程中断, 这里在阻塞循环中检测并尽早退出,
-    // 避免离开页面后仍继续下载/解压并向已清空的 StateFlow 推送进度
+
     private fun checkInterrupted() {
         if (Thread.currentThread().isInterrupted) {
             throw InterruptedException("Rootfs install cancelled")

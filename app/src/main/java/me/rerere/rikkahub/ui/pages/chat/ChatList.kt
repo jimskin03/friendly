@@ -128,8 +128,6 @@ fun ChatList(
     onDelete: (UIMessage) -> Unit = {},
     onUpdateMessage: (MessageNode) -> Unit = {},
     onClickSuggestion: (String) -> Unit = {},
-    onTranslate: ((UIMessage, java.util.Locale) -> Unit)? = null,
-    onClearTranslation: (UIMessage) -> Unit = {},
     onJumpToMessage: (Int) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
@@ -170,8 +168,6 @@ fun ChatList(
                 onDelete = onDelete,
                 onUpdateMessage = onUpdateMessage,
                 onClickSuggestion = onClickSuggestion,
-                onTranslate = onTranslate,
-                onClearTranslation = onClearTranslation,
                 animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
@@ -200,8 +196,6 @@ private fun ChatListNormal(
     onDelete: (UIMessage) -> Unit,
     onUpdateMessage: (MessageNode) -> Unit,
     onClickSuggestion: (String) -> Unit,
-    onTranslate: ((UIMessage, java.util.Locale) -> Unit)?,
-    onClearTranslation: (UIMessage) -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
@@ -242,15 +236,15 @@ private fun ChatListNormal(
         return lastPos <= inputPos - 8
     }
 
-    // 聊天选择
+
     val selectedItems = remember { mutableStateListOf<Uuid>() }
     var selecting by remember { mutableStateOf(false) }
     var showExportSheet by remember { mutableStateOf(false) }
 
-    // 自动跟随键盘滚动
+
     ImeLazyListAutoScroller(lazyListState = state)
 
-    // 对话大小警告对话框
+
     val sizeInfo = rememberConversationSizeInfo(conversation)
     var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
     if (sizeInfo.showWarning && showSizeWarningDialog) {
@@ -274,7 +268,7 @@ private fun ChatListNormal(
         modifier = Modifier
             .fillMaxSize(),
     ) {
-        // 自动滚动到底部
+
         if (settings.displaySetting.enableAutoScroll) {
             LaunchedEffect(state) {
                 snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
@@ -289,7 +283,7 @@ private fun ChatListNormal(
             }
         }
 
-        // 判断最近是否滚动
+
         LaunchedEffect(state.isScrollInProgress) {
             if (state.isScrollInProgress) {
                 isRecentScroll = true
@@ -347,7 +341,7 @@ private fun ChatListNormal(
                                 onDelete(node.currentMessage)
                             },
                             onShare = {
-                                selecting = true  // 使用 CoroutineScope 延迟状态更新
+                                selecting = true
                                 selectedItems.clear()
                                 selectedItems.addAll(conversation.messageNodes.map { it.id }
                                     .subList(0, conversation.messageNodes.indexOf(node) + 1))
@@ -359,8 +353,6 @@ private fun ChatListNormal(
                             onToggleFavorite = {
                                 onToggleFavorite?.invoke(node)
                             },
-                            onTranslate = onTranslate,
-                            onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
                             lastMessage = index == lastMessageIndex,
@@ -401,7 +393,7 @@ private fun ChatListNormal(
                 }
             }
 
-            // 为了能正确滚动到这
+
             item(ScrollBottomKey) {
                 Spacer(
                     Modifier
@@ -417,7 +409,7 @@ private fun ChatListNormal(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            // 错误消息卡片
+
             ErrorCardsDisplay(
                 errors = errors,
                 onDismissError = onDismissError,
@@ -427,7 +419,7 @@ private fun ChatListNormal(
                     .zIndex(5f)
             )
 
-            // 完成选择
+
             AnimatedVisibility(
                 visible = selecting,
                 modifier = Modifier
@@ -494,7 +486,7 @@ private fun ChatListNormal(
                 }
             }
 
-            // 导出对话框
+
             ChatExportSheet(
                 visible = showExportSheet,
                 onDismissRequest = {
@@ -508,7 +500,7 @@ private fun ChatListNormal(
 
             val captureProgress = LocalScrollCaptureInProgress.current
 
-            // 消息快速跳转
+
             MessageJumper(
                 show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
                 onLeft = settings.displaySetting.messageJumperOnLeft,
@@ -528,9 +520,7 @@ private fun ChatListNormal(
     }
 }
 
-/**
- * 提取包含搜索词的文本片段，确保匹配词在开头可见
- */
+
 private fun extractMatchingSnippet(
     text: String,
     query: String
@@ -544,10 +534,10 @@ private fun extractMatchingSnippet(
         return text
     }
 
-    // 直接从匹配词开始显示，确保匹配词在最前面
+
     val snippet = text.substring(matchIndex)
 
-    // 只在前面有内容时添加省略号
+
     return if (matchIndex > 0) {
         "...$snippet"
     } else {
@@ -569,10 +559,10 @@ private fun buildHighlightedText(
         var index = text.indexOf(query, startIndex, ignoreCase = true)
 
         while (index >= 0) {
-            // 添加高亮前的文本
+
             append(text.substring(startIndex, index))
 
-            // 添加高亮文本
+
             withStyle(
                 style = SpanStyle(
                     background = highlightColor,
@@ -586,7 +576,7 @@ private fun buildHighlightedText(
             index = text.indexOf(query, startIndex, ignoreCase = true)
         }
 
-        // 添加剩余文本
+
         if (startIndex < text.length) {
             append(text.substring(startIndex))
         }
@@ -604,7 +594,7 @@ private fun ChatListPreview(
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
+
     val filteredMessages = remember(conversation.messageNodes, searchQuery) {
         if (searchQuery.isBlank()) {
             conversation.messageNodes.mapIndexed { index, node -> index to node }
@@ -620,7 +610,7 @@ private fun ChatListPreview(
             .fillMaxSize()
             .hazeSource(state = hazeState),
     ) {
-        // 搜索框
+
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -651,7 +641,7 @@ private fun ChatListPreview(
             maxLines = 1,
         )
 
-        // 消息预览
+
         LazyColumn(
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -32,9 +32,7 @@ class SkillManager(
         return dir
     }
 
-    /**
-     * 确保内置技能已从 assets 解压到 [getBuiltinSkillsDir]，每个进程只检查一次。
-     */
+
     fun ensureBuiltinSkillsExtracted() {
         if (builtinExtracted) return
         synchronized(builtinLock) {
@@ -48,9 +46,7 @@ class SkillManager(
         }
     }
 
-    /**
-     * 列出所有可用技能：用户技能 + 内置技能，同名时用户技能覆盖内置技能。
-     */
+
     fun listSkills(): List<SkillMetadata> = mergeWithBuiltinSkills(
         local = listSkillsIn(getSkillsDir(), builtin = false),
         builtin = listBuiltinSkills(),
@@ -65,7 +61,7 @@ class SkillManager(
 
     private fun listSkillsIn(root: File, builtin: Boolean): List<SkillMetadata> {
         return root.listFiles()
-            // 跳过隐藏目录，如原子写入残留的 .<name>.staging.N.tmp
+
             ?.filter { it.isDirectory && !it.name.startsWith(".") }
             ?.mapNotNull { dir ->
                 val skillFile = dir.resolve("SKILL.md")
@@ -88,8 +84,8 @@ class SkillManager(
     }
 
     fun saveSkill(name: String, content: String): SkillMetadata? {
-        // 通过原子写入(staging + rename)落盘，避免直接 mkdirs 失败时
-        // writeText 抛出 FileNotFoundException 导致崩溃
+
+
         if (!saveSkillFileBytesAtomically(name, mapOf("SKILL.md" to content.toByteArray()))) {
             return null
         }
@@ -99,10 +95,10 @@ class SkillManager(
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
         val skillDir = resolveSkillDir(name) ?: return@withContext false
-        // 目录不存在时 deleteRecursively 也返回 true，需提前拦截，避免误清理内置技能的启用状态
+
         if (!skillDir.exists()) return@withContext false
         val deleted = skillDir.deleteRecursively()
-        // 删除的是覆盖内置技能的同名用户技能时，内置技能会重新生效，保留启用状态
+
         if (deleted && listBuiltinSkills().none { it.name == name }) {
             settingsStore.update { settings ->
                 settings.copy(
@@ -119,12 +115,7 @@ class SkillManager(
         deleted
     }
 
-    /**
-     * 清理所有助手 enabledSkills 中已不存在于磁盘的技能名。
-     *
-     * 当用户在 App 外直接删除 /skills/ 目录下的技能时，不会走 [deleteSkill] 的清理逻辑，
-     * 导致 enabledSkills 残留"幽灵"技能名，使扩展入口角标计数偏大。
-     */
+
     suspend fun pruneOrphanedEnabledSkills(): List<SkillMetadata> = withContext(Dispatchers.IO) {
         val skills = listSkills()
         val existing = skills.mapTo(HashSet()) { it.name }
@@ -150,8 +141,8 @@ class SkillManager(
         val skillDir = resolveSkillDir(skillName) ?: return false
         val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
         val parent = target.parentFile ?: return false
-        // 先写同目录临时文件再 rename 覆盖，避免写到一半失败时损坏原文件；
-        // IO 异常（如 mkdirs 失败导致 FileNotFoundException）转为返回 false，不向调用方抛出
+
+
         val tempFile = parent.resolve(".${target.name}.tmp")
         return try {
             if (!parent.exists() && !parent.mkdirs()) return false
@@ -260,7 +251,7 @@ data class SkillMetadata(
     val description: String,
     val compatibility: String? = null,
     val skillDir: File,
-    /** 内置技能，来自 assets 解压，只读 */
+
     val builtin: Boolean = false,
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")

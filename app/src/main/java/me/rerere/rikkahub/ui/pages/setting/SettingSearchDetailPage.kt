@@ -56,7 +56,6 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.plus
-import me.rerere.search.DoubaoSearchMode
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchResult
 import me.rerere.search.SearchService
@@ -177,23 +176,11 @@ private fun SearchServiceOptionsEditor(
         is SearchServiceOptions.ExaOptions -> {
             ExaOptions(options) { onUpdateOptions(it) }
         }
-        is SearchServiceOptions.ZhipuOptions -> {
-            ZhipuOptions(options) { onUpdateOptions(it) }
-        }
-        is SearchServiceOptions.DoubaoOptions -> {
-            DoubaoOptions(options) { onUpdateOptions(it) }
-        }
         is SearchServiceOptions.SearXNGOptions -> {
             SearXNGOptions(options) { onUpdateOptions(it) }
         }
-        is SearchServiceOptions.LinkUpOptions -> {
-            SearchLinkUpOptions(options) { onUpdateOptions(it) }
-        }
         is SearchServiceOptions.BraveOptions -> {
             BraveOptions(options) { onUpdateOptions(it) }
-        }
-        is SearchServiceOptions.MetasoOptions -> {
-            MetasoOptions(options) { onUpdateOptions(it) }
         }
         is SearchServiceOptions.OllamaOptions -> {
             OllamaOptions(options) { onUpdateOptions(it) }
@@ -205,23 +192,8 @@ private fun SearchServiceOptionsEditor(
         is SearchServiceOptions.FirecrawlOptions -> {
             FirecrawlOptions(options) { onUpdateOptions(it) }
         }
-        is SearchServiceOptions.JinaOptions -> {
-            JinaOptions(options) { onUpdateOptions(it) }
-        }
-        is SearchServiceOptions.BochaOptions -> {
-            BochaOptions(options) { onUpdateOptions(it) }
-        }
-        is SearchServiceOptions.RikkaHubOptions -> {
-            RikkaHubOptions(options) { onUpdateOptions(it) }
-        }
         is SearchServiceOptions.GrokOptions -> {
             GrokOptions(options) { onUpdateOptions(it) }
-        }
-        is SearchServiceOptions.TinyfishOptions -> {
-            TinyfishOptions(options) { onUpdateOptions(it) }
-        }
-        is SearchServiceOptions.SerperOptions -> {
-            SerperOptions(options) { onUpdateOptions(it) }
         }
         is SearchServiceOptions.CustomJsOptions -> {
             CustomJsOptions(options) { onUpdateOptions(it) }
@@ -414,55 +386,6 @@ internal fun ExaOptions(
 }
 
 @Composable
-internal fun ZhipuOptions(
-    options: SearchServiceOptions.ZhipuOptions,
-    onUpdateOptions: (SearchServiceOptions.ZhipuOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-internal fun DoubaoOptions(
-    options: SearchServiceOptions.DoubaoOptions,
-    onUpdateOptions: (SearchServiceOptions.DoubaoOptions) -> Unit
-) {
-    FormItem(label = { Text(stringResource(R.string.search_detail_api_key)) }) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = { onUpdateOptions(options.copy(apiKey = it)) },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    FormItem(label = { Text("Mode") }) {
-        val modes = DoubaoSearchMode.entries
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            modes.forEachIndexed { index, mode ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                    onClick = { onUpdateOptions(options.copy(mode = mode)) },
-                    selected = options.mode == mode
-                ) {
-                    Text(mode.name.lowercase().replaceFirstChar(Char::uppercase))
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun SearXNGOptions(
     options: SearchServiceOptions.SearXNGOptions,
     onUpdateOptions: (SearchServiceOptions.SearXNGOptions) -> Unit
@@ -539,92 +462,9 @@ internal fun SearXNGOptions(
 }
 
 @Composable
-internal fun SearchLinkUpOptions(
-    options: SearchServiceOptions.LinkUpOptions,
-    onUpdateOptions: (SearchServiceOptions.LinkUpOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_depth))
-        }
-    ) {
-        val depthOptions = listOf("standard", "deep")
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            depthOptions.forEachIndexed { index, depth ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = depthOptions.size),
-                    onClick = {
-                        onUpdateOptions(options.copy(depth = depth))
-                    },
-                    selected = options.depth == depth
-                ) {
-                    Text(depth.replaceFirstChar { it.uppercase() })
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun BraveOptions(
     options: SearchServiceOptions.BraveOptions,
     onUpdateOptions: (SearchServiceOptions.BraveOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-internal fun SerperOptions(
-    options: SearchServiceOptions.SerperOptions,
-    onUpdateOptions: (SearchServiceOptions.SerperOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-internal fun MetasoOptions(
-    options: SearchServiceOptions.MetasoOptions,
-    onUpdateOptions: (SearchServiceOptions.MetasoOptions) -> Unit
 ) {
     FormItem(
         label = {
@@ -715,160 +555,6 @@ internal fun PerplexityOptions(
 internal fun FirecrawlOptions(
     options: SearchServiceOptions.FirecrawlOptions,
     onUpdateOptions: (SearchServiceOptions.FirecrawlOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-internal fun JinaOptions(
-    options: SearchServiceOptions.JinaOptions,
-    onUpdateOptions: (SearchServiceOptions.JinaOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_search_url))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.searchUrl,
-            onValueChange = {
-                onUpdateOptions(options.copy(searchUrl = it.trim()))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text("https://s.jina.ai/")
-            }
-        )
-    }
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_scrape_url))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.scrapeUrl,
-            onValueChange = {
-                onUpdateOptions(options.copy(scrapeUrl = it.trim()))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text("https://r.jina.ai/")
-            }
-        )
-    }
-}
-
-@Composable
-internal fun BochaOptions(
-    options: SearchServiceOptions.BochaOptions,
-    onUpdateOptions: (SearchServiceOptions.BochaOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_summary))
-        },
-        description = {
-            Text(stringResource(R.string.search_detail_summary_desc))
-        },
-        tail = {
-            Switch(
-                checked = options.summary,
-                onCheckedChange = { checked ->
-                    onUpdateOptions(options.copy(summary = checked))
-                }
-            )
-        }
-    )
-}
-
-@Composable
-internal fun RikkaHubOptions(
-    options: SearchServiceOptions.RikkaHubOptions,
-    onUpdateOptions: (SearchServiceOptions.RikkaHubOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_api_key))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_depth))
-        }
-    ) {
-        val depthOptions = listOf("standard", "deep")
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            depthOptions.forEachIndexed { index, depth ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = depthOptions.size),
-                    onClick = {
-                        onUpdateOptions(options.copy(depth = depth))
-                    },
-                    selected = options.depth == depth
-                ) {
-                    Text(depth.replaceFirstChar { it.uppercase() })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun TinyfishOptions(
-    options: SearchServiceOptions.TinyfishOptions,
-    onUpdateOptions: (SearchServiceOptions.TinyfishOptions) -> Unit
 ) {
     FormItem(
         label = {

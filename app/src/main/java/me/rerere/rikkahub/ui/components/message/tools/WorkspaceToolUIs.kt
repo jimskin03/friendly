@@ -46,9 +46,7 @@ import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 
-/**
- * 工作空间编辑文件: 摘要显示增删统计与精简 diff, 详情为完整 diff view
- */
+
 object EditFileToolUI : ToolUIRenderer {
     private const val SUMMARY_MAX_LINES = 10
 
@@ -62,10 +60,7 @@ object EditFileToolUI : ToolUIRenderer {
         return if (path != null) stringResource(R.string.tool_ui_edit_file, path) else stringResource(R.string.tool_ui_edit_file_default)
     }
 
-    /**
-     * 执行后读取输出部件 metadata 中的全文件 diff;
-     * 未执行 (如等待审批) 时基于入参的 old_text/new_text 片段生成预览 diff
-     */
+
     private fun diffOf(context: ToolUIContext): String? {
         if (context.tool.isExecuted) {
             return context.tool.output.firstOrNull()?.metadataAs<DiffMetadata>()?.diff
@@ -151,9 +146,7 @@ object EditFileToolUI : ToolUIRenderer {
     }
 }
 
-/**
- * 工作空间读取文件: 摘要显示内容首部预览, 详情为带语法高亮的完整内容
- */
+
 object ReadFileToolUI : ToolUIRenderer {
     override val toolName: String = "workspace_read_file"
 
@@ -165,7 +158,7 @@ object ReadFileToolUI : ToolUIRenderer {
         return if (path != null) stringResource(R.string.tool_ui_read_file, path) else stringResource(R.string.tool_ui_read_file_default)
     }
 
-    /** 已执行时从输出 JSON 读取文件内容 */
+
     private fun textOf(context: ToolUIContext): String? =
         context.content.getStringContent("text")
 
@@ -192,9 +185,7 @@ object ReadFileToolUI : ToolUIRenderer {
     }
 }
 
-/**
- * 工作空间写入文件: 内容取自入参 (未执行也可预览), 摘要为内容首部, 详情为完整内容
- */
+
 object WriteFileToolUI : ToolUIRenderer {
     override val toolName: String = "workspace_write_file"
 
@@ -232,7 +223,7 @@ object WriteFileToolUI : ToolUIRenderer {
     }
 }
 
-/** 内联摘要: 按扩展名语法高亮展示文件内容首部若干行 */
+
 @Composable
 private fun FileContentSummary(text: String, path: String?, loading: Boolean) {
     val preview = remember(text) {
@@ -258,7 +249,7 @@ private fun FileContentSummary(text: String, path: String?, loading: Boolean) {
     }
 }
 
-/** BottomSheet 详情: 文件路径 + 按扩展名语法高亮的完整内容 */
+
 @Composable
 private fun FileContentPreview(path: String?, code: String) {
     Column(
@@ -283,9 +274,7 @@ private fun FileContentPreview(path: String?, code: String) {
     }
 }
 
-/**
- * 工作空间执行 Shell: 摘要显示退出状态与输出首部, 详情为命令 + stdout/stderr
- */
+
 object ShellToolUI : ToolUIRenderer {
     private const val TITLE_MAX_CHARS = 40
     private const val SUMMARY_MAX_LINES = 8
@@ -396,7 +385,7 @@ object ShellToolUI : ToolUIRenderer {
     }
 }
 
-/** Shell 退出状态文本: exit code 为 0 显示绿色, 超时或非零显示错误色 */
+
 @Composable
 private fun ShellExitStatus(content: JsonElement, style: androidx.compose.ui.text.TextStyle) {
     val exitCode = content.int("exitCode")
@@ -412,21 +401,21 @@ private fun ShellExitStatus(content: JsonElement, style: androidx.compose.ui.tex
     )
 }
 
-/** 从工具输出 JSON 读取布尔字段 */
+
 private fun JsonElement?.boolean(key: String): Boolean? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.booleanOrNull
 
-/** 从工具输出 JSON 读取整型字段 */
+
 private fun JsonElement?.int(key: String): Int? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.intOrNull
 
-/** 从工具输出 JSON 读取长整型字段 */
+
 private fun JsonElement?.long(key: String): Long? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.longOrNull
 
 private const val FILE_SUMMARY_MAX_LINES = 10
 
-/** 由文件扩展名推断语法高亮语言 */
+
 private fun languageOf(path: String?): String = when (
     path?.substringAfterLast('.', "")?.lowercase().orEmpty()
 ) {

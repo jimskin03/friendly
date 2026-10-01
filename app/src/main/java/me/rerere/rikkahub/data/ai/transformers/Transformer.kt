@@ -20,13 +20,7 @@ class TransformerContext(
 )
 
 interface MessageTransformer {
-    /**
-     * 消息转换器，用于对消息进行转换
-     *
-     * 对于输入消息，消息会转换被提供给API模块
-     *
-     * 对于输出消息，会对消息输出chunk进行转换
-     */
+
     suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
@@ -38,11 +32,7 @@ interface MessageTransformer {
 interface InputMessageTransformer : MessageTransformer
 
 interface OutputMessageTransformer : MessageTransformer {
-    /**
-     * 一个视觉的转换，例如转换think tag为reasoning parts
-     * 但是不实际转换消息，因为流式输出需要处理消息delta chunk
-     * 不能还没结束生成就transform，因此提供一个visualTransform
-     */
+
     suspend fun visualTransform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
@@ -50,9 +40,7 @@ interface OutputMessageTransformer : MessageTransformer {
         return messages
     }
 
-    /**
-     * 消息生成完成后调用
-     */
+
     suspend fun onGenerationFinish(
         ctx: TransformerContext,
         messages: List<UIMessage>,

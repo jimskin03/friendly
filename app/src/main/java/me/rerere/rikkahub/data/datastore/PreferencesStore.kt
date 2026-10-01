@@ -34,7 +34,6 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
@@ -65,13 +64,13 @@ private const val TAG = "PreferencesStore"
 
 private const val SETTINGS_STORE_NAME = "settings"
 
-// 读取失败时的最大重试次数
+
 private const val READ_MAX_RETRIES = 3
 
 @Volatile
 private var settingsDataStore: DataStore<Preferences>? = null
 
-// 进程内单例, 同一文件只能存在一个 DataStore 实例
+
 private val Context.settingsStore: DataStore<Preferences>
     get() = settingsDataStore ?: synchronized(SettingsStore::class) {
         settingsDataStore ?: createSettingsDataStore(applicationContext).also { settingsDataStore = it }
@@ -81,7 +80,7 @@ private fun createSettingsDataStore(context: Context): DataStore<Preferences> {
     val file = context.preferencesDataStoreFile(SETTINGS_STORE_NAME)
     return PreferenceDataStoreFactory.create(
         corruptionHandler = ReplaceFileCorruptionHandler { exception ->
-            // 文件已损坏无法解析, 先留一份原文件用于排查/抢救, 再重建为空
+
             Log.e(TAG, "Settings datastore corrupted, resetting", exception)
             runCatching {
                 file.copyTo(File(file.parentFile, "${file.name}.corrupt-${System.currentTimeMillis()}"))
@@ -104,10 +103,10 @@ class SettingsStore(
     scope: AppScope,
 ) : KoinComponent {
     companion object {
-        // 版本号
+
         val VERSION = intPreferencesKey("data_version")
 
-        // UI设置
+
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_ID = stringPreferencesKey("theme_id")
         val CUSTOM_THEMES = stringPreferencesKey("custom_themes")
@@ -115,7 +114,7 @@ class SettingsStore(
         val NETWORK_SETTING = stringPreferencesKey("network_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
 
-        // 模型选择
+
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
         val SELECT_MODEL = stringPreferencesKey("chat_model")
         val FAST_MODEL = stringPreferencesKey("fast_model")
@@ -132,15 +131,15 @@ class SettingsStore(
         val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
 
-        // 提供商
+
         val PROVIDERS = stringPreferencesKey("providers")
 
-        // 助手
+
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
         val ASSISTANTS = stringPreferencesKey("assistants")
         val ASSISTANT_TAGS = stringPreferencesKey("assistant_tags")
 
-        // 搜索
+
         val SEARCH_SERVICES = stringPreferencesKey("search_services")
         val SEARCH_COMMON = stringPreferencesKey("search_common")
         val SEARCH_SELECTED = intPreferencesKey("search_selected")
@@ -170,18 +169,18 @@ class SettingsStore(
         val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
         val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
 
-        // 提示词注入
+
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
 
-        // 备份提醒
+
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
 
-        // 统计
+
         val LAUNCH_COUNT = intPreferencesKey("launch_count")
 
-        // 赞助提醒
+
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
         // Uses the same DataStore singleton without starting settings flows or requiring Koin.
@@ -254,8 +253,7 @@ class SettingsStore(
 
     private val dataStore = context.settingsStore
 
-    // 读取失败时绝不能回退为空配置, 否则默认值会被当成用户数据写回, 覆盖全部设置
-    // 偶发 IO 错误重试, 仍失败则向上抛出 (文件损坏由 corruptionHandler 处理)
+
     val settingsFlowRaw = dataStore.data
         .retryWhen { cause, attempt ->
             val shouldRetry = cause is IOException && cause !is CorruptionException && attempt < READ_MAX_RETRIES
@@ -281,7 +279,7 @@ class SettingsStore(
                 enableSuggestion = preferences[ENABLE_SUGGESTION] != false,
                 imageGenerationModelId = preferences[IMAGE_GENERATION_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 titlePrompt = preferences[TITLE_PROMPT] ?: DEFAULT_TITLE_PROMPT,
-                translatePrompt = preferences[TRANSLATION_PROMPT] ?: DEFAULT_TRANSLATION_PROMPT,
+                translatePrompt = preferences[TRANSLATION_PROMPT] ?: "",
                 translateThinkingBudget = preferences[TRANSLATE_THINKING_BUDGET] ?: 0,
                 suggestionPrompt = preferences[SUGGESTION_PROMPT] ?: DEFAULT_SUGGESTION_PROMPT,
                 ocrModelId = preferences[OCR_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
@@ -304,8 +302,10 @@ class SettingsStore(
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 networkSetting = JsonInstant.decodeFromString(preferences[NETWORK_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: listOf(SearchServiceOptions.DEFAULT),
+                    runCatching {
+                        JsonInstant.decodeFromString<List<SearchServiceOptions>>(it)
+                    }.getOrNull()
+                }?.ifEmpty { null } ?: listOf(SearchServiceOptions.DEFAULT),
                 searchCommonOptions = preferences[SEARCH_COMMON]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: SearchCommonOptions(),
@@ -351,7 +351,9 @@ class SettingsStore(
             )
         }
         .map {
-            var providers = it.providers.ifEmpty { DEFAULT_PROVIDERS }.toMutableList()
+            var providers = it.providers.ifEmpty { DEFAULT_PROVIDERS }
+                .filter { provider -> !provider.builtIn || DEFAULT_PROVIDERS.any { it.id == provider.id } }
+                .toMutableList()
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
                 if (providers.none { it.id == defaultProvider.id }) {
                     providers.add(defaultProvider.copyProvider())
@@ -386,7 +388,7 @@ class SettingsStore(
             )
         }
         .map { settings ->
-            // 去重并清理无效引用
+
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
             val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
@@ -410,19 +412,19 @@ class SettingsStore(
                 },
                 assistants = settings.assistants.distinctBy { it.id }.map { assistant ->
                     assistant.copy(
-                        // 过滤掉不存在的 MCP 服务器 ID
+
                         mcpServers = assistant.mcpServers.filter { serverId ->
                             serverId in validMcpServerIds
                         }.toSet(),
-                        // 过滤掉不存在的模式注入 ID
+
                         modeInjectionIds = assistant.modeInjectionIds.filter { id ->
                             id in validModeInjectionIds
                         }.toSet(),
-                        // 过滤掉不存在的 Lorebook ID
+
                         lorebookIds = assistant.lorebookIds.filter { id ->
                             id in validLorebookIds
                         }.toSet(),
-                        // 过滤掉不存在的快捷消息 ID
+
                         quickMessageIds = assistant.quickMessageIds.filter { id ->
                             id in validQuickMessageIds
                         }.toSet()
@@ -462,7 +464,7 @@ class SettingsStore(
         update(fn(settingsFlow.value))
     }
 
-    // 只原子地修改单个 key, 不能用 update() 写回整份快照
+
     suspend fun incrementLaunchCount(): Int {
         var count = 0
         dataStore.edit { preferences ->
@@ -575,7 +577,7 @@ data class Settings(
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
-    val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
+    val translatePrompt: String = "",
     val translateThinkingBudget: Int = 0,
     val enableSuggestion: Boolean = true,
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
@@ -611,7 +613,7 @@ data class Settings(
     val sponsorAlertDismissedAt: Int = 0,
 ) {
     companion object {
-        // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
+
         fun dummy() = Settings(init = true)
     }
 }
@@ -816,9 +818,9 @@ private val DEFAULT_TTS_PROVIDERS = listOf(
     ),
     TTSProviderSetting.OpenAI(
         id = Uuid.parse("e36b22ef-ca82-40ab-9e70-60cad861911c"),
-        name = "AiHubMix",
-        baseUrl = "https://aihubmix.com/v1",
-        model = "gpt-4o-mini-tts",
+        name = "OpenAI",
+        baseUrl = "https://api.openai.com/v1",
+        model = "tts-1",
         voice = "alloy",
     )
 )

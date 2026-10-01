@@ -8,10 +8,7 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.theme.PresetTheme
 
-/**
- * Claude 风格：象牙白/米色的暖中性底色，赤陶橙作为强调色，
- * 牛皮棕与马尼拉黄作为点缀色。
- */
+
 val ClaudeThemePreset by lazy {
     PresetTheme(
         id = "claude",

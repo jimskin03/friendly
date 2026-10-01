@@ -21,12 +21,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 
-/**
- * 列表 item 的次要操作（复制、导出、重命名、删除等）。
- *
- * 约定：点击 item 本身执行主操作（进入详情/编辑），其余操作统一放进 [ItemActionMenu]；
- * 破坏性操作（删除）放在最后并标记 [destructive]，由调用方负责二次确认或提供撤销。
- */
+
 @Immutable
 data class ItemAction(
     val text: String,

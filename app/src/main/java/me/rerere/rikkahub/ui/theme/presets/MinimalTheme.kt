@@ -8,10 +8,7 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.theme.PresetTheme
 
-/**
- * 极简中性风格：纯白/近黑底色，中性灰的表面层级，细淡边框，
- * 低饱和蓝作为强调色，少量琥珀作为点缀色。
- */
+
 val MinimalThemePreset by lazy {
     PresetTheme(
         id = "minimal",

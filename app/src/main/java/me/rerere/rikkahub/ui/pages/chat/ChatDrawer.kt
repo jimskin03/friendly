@@ -61,7 +61,6 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.FolderAdd
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.InLove
-import me.rerere.hugeicons.stroke.LanguageCircle
 import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Search01
@@ -135,7 +134,7 @@ fun ChatDrawerContent(
         initialValue = emptyMap(),
     )
 
-    // 昵称编辑状态
+
     val nicknameEditState = useEditState<String> { newNickname ->
         vm.updateSettings(
             settings.copy(
@@ -146,12 +145,12 @@ fun ChatDrawerContent(
         )
     }
 
-    // 移动对话状态
+
     var showMoveToAssistantSheet by remember { mutableStateOf(false) }
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
     val bottomSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
-    // 文件夹相关状态
+
     var showMoveToFolderSheet by remember { mutableStateOf(false) }
     var conversationToMoveFolder by remember { mutableStateOf<Conversation?>(null) }
     val folderSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
@@ -159,7 +158,7 @@ fun ChatDrawerContent(
     var folderToRename by remember { mutableStateOf<Folder?>(null) }
     var folderToDelete by remember { mutableStateOf<Folder?>(null) }
 
-    // Menu popup 状态
+
     var showMenuPopup by remember { mutableStateOf(false) }
 
     val updateCheckDisabledUntil = settings.displaySetting.updateCheckDisabledUntilEpochMillis
@@ -194,7 +193,7 @@ fun ChatDrawerContent(
                 onClick = { navController.navigate(Screen.Backup) },
             )
 
-            // 用户头像和昵称自定义区域
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -298,7 +297,7 @@ fun ChatDrawerContent(
                 }
             )
 
-            // 助手选择器
+
             AssistantPicker(
                 settings = settings,
                 onUpdateSettings = {
@@ -355,20 +354,12 @@ fun ChatDrawerContent(
                         },
                         onClick = {
                             showMenuPopup = true
-                        },
+                        }
                     )
                     DropdownMenu(
                         expanded = showMenuPopup,
                         onDismissRequest = { showMenuPopup = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.chat_page_menu_ai_translator)) },
-                            leadingIcon = { Icon(HugeIcons.LanguageCircle, null) },
-                            onClick = {
-                                showMenuPopup = false
-                                navController.navigate(Screen.Translator)
-                            }
-                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
                             leadingIcon = { Icon(HugeIcons.Image02, null) },
@@ -394,10 +385,10 @@ fun ChatDrawerContent(
 
                 DrawerAction(
                     icon = {
-                        Icon(HugeIcons.ChartColumn, "统计数据")
+                        Icon(HugeIcons.ChartColumn, "Statistics")
                     },
                     label = {
-                        Text("统计数据")
+                        Text("Statistics")
                     },
                     onClick = {
                         navController.navigate(Screen.Stats)
@@ -419,7 +410,7 @@ fun ChatDrawerContent(
         }
     }
 
-    // 昵称编辑对话框
+
     nicknameEditState.EditStateContent { nickname, onUpdate ->
         AlertDialog(
             onDismissRequest = {
@@ -458,7 +449,7 @@ fun ChatDrawerContent(
         )
     }
 
-    // 移动到文件夹 Bottom Sheet
+
     if (showMoveToFolderSheet) {
         val doMove: (Uuid?) -> Unit = { folderId ->
             conversationToMoveFolder?.let { conversation ->
@@ -491,7 +482,7 @@ fun ChatDrawerContent(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                // 移出文件夹（未归类）
+
                 Surface(
                     onClick = { doMove(null) },
                     modifier = Modifier.fillMaxWidth(),
@@ -555,7 +546,7 @@ fun ChatDrawerContent(
         }
     }
 
-    // 新建文件夹对话框
+
     if (showCreateFolderDialog) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
@@ -587,7 +578,7 @@ fun ChatDrawerContent(
         )
     }
 
-    // 重命名文件夹对话框
+
     folderToRename?.let { folder ->
         var name by remember(folder.id) { mutableStateOf(folder.name) }
         AlertDialog(
@@ -618,7 +609,7 @@ fun ChatDrawerContent(
         )
     }
 
-    // 删除文件夹确认
+
     folderToDelete?.let { folder ->
         AlertDialog(
             onDismissRequest = { folderToDelete = null },
@@ -644,7 +635,7 @@ fun ChatDrawerContent(
         )
     }
 
-    // 移动到助手 Bottom Sheet
+
     if (showMoveToAssistantSheet) {
         ModalBottomSheet(
             onDismissRequest = {
@@ -694,7 +685,7 @@ fun ChatDrawerContent(
 @Composable
 private fun DrawerActions(navController: Navigator) {
     Column {
-        // 搜索入口
+
         Surface(
             onClick = { navController.navigate(Screen.MessageSearch) },
             modifier = Modifier
@@ -724,7 +715,7 @@ private fun DrawerActions(navController: Navigator) {
             }
         }
 
-        // 历史记录入口
+
         Surface(
             onClick = { navController.navigate(Screen.History) },
             modifier = Modifier

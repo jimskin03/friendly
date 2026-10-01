@@ -27,14 +27,10 @@ import me.rerere.rikkahub.utils.sendNotification
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
-// Live Update 通知节流间隔：流式输出每个chunk都会触发一次更新，
-// notify() 是 binder IPC 且系统本身会对高频更新限流，必须在应用侧节流
+
 private const val LIVE_UPDATE_NOTIFICATION_THROTTLE_MS = 1000L
 
-/**
- * 订阅 [AppEventBus] 上的聊天生成事件，负责后台生成相关的系统通知
- * （Live Update 进度通知和生成完成通知）。
- */
+
 class ChatNotificationManager(
     private val context: Application,
     appScope: AppScope,
@@ -45,7 +41,7 @@ class ChatNotificationManager(
     private val liveUpdateLastSentAt = ConcurrentHashMap<Uuid, Long>()
 
     init {
-        // ProcessLifecycleOwner 要求在主线程注册观察者
+
         appScope.launch {
             ProcessLifecycleOwner.get().lifecycle.addObserver(
                 LifecycleEventObserver { _, event ->
@@ -114,12 +110,12 @@ class ChatNotificationManager(
         lastMessage: UIMessage,
         senderName: String
     ) {
-        // 确定当前状态
+
         val (chipText, statusText, contentText) = determineNotificationContent(lastMessage.parts)
 
         context.sendNotification(
             channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
-            // 更新前台服务正在使用的同一条通知，避免重复显示生成进度。
+
             notificationId = ChatGenerationForegroundService.NOTIFICATION_ID
         ) {
             title = senderName
@@ -136,13 +132,13 @@ class ChatNotificationManager(
     }
 
     private fun determineNotificationContent(parts: List<UIMessagePart>): Triple<String, String, String> {
-        // 检查最近的 part 来确定状态
+
         val lastReasoning = parts.filterIsInstance<UIMessagePart.Reasoning>().lastOrNull()
         val lastTool = parts.filterIsInstance<UIMessagePart.Tool>().lastOrNull()
         val lastText = parts.filterIsInstance<UIMessagePart.Text>().lastOrNull()
 
         return when {
-            // 正在执行工具
+
             lastTool != null && !lastTool.isExecuted -> {
                 val toolName = lastTool.toolName.substringAfterLast("__")
                 Triple(
@@ -151,7 +147,7 @@ class ChatNotificationManager(
                     lastTool.input.take(100)
                 )
             }
-            // 正在思考（Reasoning 未结束）
+
             lastReasoning != null && lastReasoning.finishedAt == null -> {
                 Triple(
                     context.getString(R.string.notification_live_update_chip_thinking),
@@ -159,7 +155,7 @@ class ChatNotificationManager(
                     lastReasoning.reasoning.takeLast(200)
                 )
             }
-            // 正在写回复
+
             lastText != null -> {
                 Triple(
                     context.getString(R.string.notification_live_update_chip_writing),
@@ -167,7 +163,7 @@ class ChatNotificationManager(
                     lastText.text.takeLast(200)
                 )
             }
-            // 默认状态
+
             else -> {
                 Triple(
                     context.getString(R.string.notification_live_update_chip_writing),
@@ -180,7 +176,7 @@ class ChatNotificationManager(
 
     private fun cancelLiveUpdateNotification(conversationId: Uuid) {
         liveUpdateLastSentAt.remove(conversationId)
-        // 前台服务持有通知时系统会保留它；启动失败时则清理普通 ongoing 通知。
+
         context.cancelNotification(ChatGenerationForegroundService.NOTIFICATION_ID)
     }
 

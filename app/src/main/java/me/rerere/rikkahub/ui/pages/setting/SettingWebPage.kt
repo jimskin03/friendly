@@ -243,7 +243,7 @@ fun SettingWebPage() {
                                         }
                                     }
                                 },
-                                // 运行中不允许切换 需重启服务生效
+
                                 enabled = !serverState.isRunning,
                             )
                         },

@@ -143,7 +143,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 models.mapNotNull {
                     val modelObject = it.jsonObject
 
-                    // 忽略非chat/embedding模型
+
                     val supportedGenerationMethods =
                         modelObject["supportedGenerationMethods"]!!.jsonArray
                             .map { method -> method.jsonPrimitive.content }
@@ -279,7 +279,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 var exception = t
 
                 t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.message}")
+                println("[onFailure] Error: ${t?.message}")
 
                 try {
                     if (t == null && response != null) {
@@ -306,7 +306,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
-                println("[onClosed] 连接已关闭")
+                println("[onClosed] Connection closed")
                 sendChunks(decoder.onClosed())
                 close()
             }
@@ -316,10 +316,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .newEventSource(request, listener)
 
         awaitClose {
-            println("[awaitClose] 关闭eventSource")
+            println("[awaitClose] Closing eventSource")
             eventSource.cancel()
         }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
+
     }.buffer(Channel.UNLIMITED).flowOn(Dispatchers.IO)
 
     private fun buildCompletionRequestBody(
@@ -360,7 +360,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
 
                     when (params.reasoningLevel) {
-                        ReasoningLevel.AUTO -> {} // 自动模式，不设置参数
+                        ReasoningLevel.AUTO -> {}
 
                         ReasoningLevel.OFF -> {
                             if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
@@ -483,7 +483,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             MessageRole.USER -> "user"
             MessageRole.SYSTEM -> "system"
             MessageRole.ASSISTANT -> "model"
-            MessageRole.TOOL -> "user" // google api中, tool结果是用户role发送的
+            MessageRole.TOOL -> "user"
         }
     }
 
@@ -630,7 +630,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 require(mime.startsWith("image/")) {
                     "Only image mime type is supported"
                 }
-                // 如果是思考过程中的草稿图，直接忽略
+
                 if (thought) {
                     return UIMessagePart.Reasoning(
                         reasoning = "[Draft Image]\n",
@@ -675,17 +675,17 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 }
 
                 is PartGroup.Tools -> {
-                    // 添加 functionCall 到 parts 缓冲
+
                     group.tools.forEach { partsBuffer.add(it.toFunctionCallPart()) }
 
-                    // 输出 model 消息
+
                     add(buildJsonObject {
                         put("role", "model")
                         putJsonArray("parts") { partsBuffer.forEach { add(it) } }
                     })
                     partsBuffer.clear()
 
-                    // 紧跟 functionResponse
+
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
@@ -696,7 +696,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        // 输出剩余内容
+
         if (partsBuffer.isNotEmpty()) {
             add(buildJsonObject {
                 put("role", "model")
@@ -792,30 +792,29 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 put("name", toolName)
                 put("id", toolCallId)
 
-                // 1. 拆分出纯文本部分
+
                 val textParts = output.filterIsInstance<UIMessagePart.Text>()
-                
-                // 2. 提取所有的多模态(图片/视频/音频)，并直接转为 Google 要求的格式
-                // 过滤出最终包含 inlineData 的数据块
+
+
                 val mediaGoogleParts = output
                     .filter { it !is UIMessagePart.Text }
                     .mapNotNull { it.toGooglePart() }
-                    .filter { it.containsKey("inlineData") } 
+                    .filter { it.containsKey("inlineData") }
 
-                // 3. 构建给模型看的结构化 response 节点
+
                 put("response", buildJsonObject {
-                    // 处理文本结果
+
                     if (textParts.isNotEmpty()) {
                         put(
-                            "result", 
+                            "result",
                             textParts.joinToString("\n") { it.text }
                         )
                     } else if (mediaGoogleParts.isEmpty()) {
-                        // 如果工具啥都没返回，给个兜底成功状态
+
                         put("result", " ")
                     }
 
-                    // 处理媒体数据（图片、音频、视频），打上 $ref 标签
+
                     mediaGoogleParts.forEachIndexed { index, _ ->
                         val refName = "media_ref_$index"
                         put(refName, buildJsonObject {
@@ -824,7 +823,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     }
                 })
 
-                // 4. 将真实的 Base64 多媒体数据挂载到 parts 中，并建立指针绑定
+
                 if (mediaGoogleParts.isNotEmpty()) {
                     putJsonArray("parts") {
                         mediaGoogleParts.forEachIndexed { index, googlePart ->
@@ -832,15 +831,15 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                             val inlineData = googlePart["inlineData"]!!.jsonObject
 
                             add(buildJsonObject {
-                                // 重新组装 inlineData，并在内部注入 displayName
+
                                 put("inlineData", buildJsonObject {
-                                    // 复制原有的 mimeType 和 data
+
                                     inlineData.forEach { (k, v) -> put(k, v) }
-                                    // 添加能够让 $ref 认出它的唯一名称
+
                                     put("displayName", refName)
                                 })
-                                
-                                // 保留可能存在的其他字段
+
+
                                 googlePart.forEach { (k, v) ->
                                     if (k != "inlineData") put(k, v)
                                 }

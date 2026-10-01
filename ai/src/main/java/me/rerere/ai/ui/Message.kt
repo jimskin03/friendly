@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
-// 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
+
 @Serializable
 data class UIMessage(
     val id: Uuid = Uuid.random(),
@@ -25,7 +25,7 @@ data class UIMessage(
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null,
-    // 请求期间生成的内部消息；该标记仅在内存中使用
+
     @Transient
     val isSynthetic: Boolean = false,
 ) {
@@ -88,11 +88,7 @@ data class UIMessage(
     }
 }
 
-/**
- * 判断这个消息是否有有任何用户**可输入内容**
- *
- * 例如: 文本，图片, 文档
- */
+
 fun List<UIMessagePart>.isEmptyInputMessage(): Boolean {
     if (this.isEmpty()) return true
     return this.all { message ->
@@ -107,9 +103,7 @@ fun List<UIMessagePart>.isEmptyInputMessage(): Boolean {
     }
 }
 
-/**
- * 判断这个消息在UI上是否显示任何内容
- */
+
 fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
     if (this.isEmpty()) return true
     return this.all { message ->
@@ -128,62 +122,41 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
     }
 }
 
-/**
- * 截断后保留的消息条数占上限的比例
- *
- * 越小则截断点前进的步幅越大, 连续命中缓存的轮数越多, 但一次丢弃的上下文也越多
- */
+
 private const val CONTEXT_KEEP_RATIO = 0.5f
 
-/**
- * 按阶梯式(滞回)策略限制上下文消息数量
- *
- * 与每轮平移一条的滑动窗口不同, 截断点只在消息数越过 [limit] 时才前进一大步,
- * 在此之后的连续多轮里保持不动, 使请求前缀保持稳定, 从而命中提示词缓存。
- * 截断点仅由消息条数推导, 不需要额外持久化状态, 且对追加消息天然稳定。
- *
- * 保留的条数始终落在 `[limit * CONTEXT_KEEP_RATIO, limit)` 区间内。
- *
- * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
- */
+
 fun List<UIMessage>.limitContext(limit: Int): List<UIMessage> {
     if (limit <= 0 || this.size <= limit) return this
 
-    // 截断后回落到的目标条数, 以及两次截断之间截断点前进的步幅
-    // limit 为 1 时无法构造滞回(步幅至少为 1), 此时退化为逐条平移的滑动窗口
+
     val target = (limit * CONTEXT_KEEP_RATIO).roundToInt().coerceIn(1, limit)
     val stride = (limit - target).coerceAtLeast(1)
 
-    // 每越过一级台阶, 截断点前进 stride 条; 台阶之内截断点不动
-    // 上界兜底保证至少保留一条消息, 正常路径(limit >= 2)不会触发
+
     val startIndex = (((this.size - limit) / stride + 1) * stride).coerceAtMost(this.size - 1)
 
     return this.subList(alignContextStart(startIndex), this.size)
 }
 
-/**
- * 将截断起点回退到安全边界, 避免把 tool call 与其结果拆散, 或让上下文从半截的工具调用开始
- *
- * 只会向前(下标减小)调整, 因此不会破坏 [limitContext] 保留条数的下界。
- * 调整只依赖 `[0, startIndex]` 区间内的消息, 这部分在追加新消息时不会变化, 结果因此保持稳定。
- */
+
 private fun List<UIMessage>.alignContextStart(startIndex: Int): Int {
     var adjustedStartIndex = startIndex
 
-    // 循环往前查找, 直到满足所有依赖条件
+
     var needsAdjustment = true
     val visitedIndices = mutableSetOf<Int>()
 
     while (needsAdjustment && adjustedStartIndex > 0) {
         needsAdjustment = false
 
-        // 防止无限循环
+
         if (adjustedStartIndex in visitedIndices) break
         visitedIndices.add(adjustedStartIndex)
 
         val currentMessage = this[adjustedStartIndex]
 
-        // 如果当前消息包含已执行的tool（有output），往前查找对应的tool call
+
         if (currentMessage.getTools().any { it.isExecuted }) {
             for (i in adjustedStartIndex - 1 downTo 0) {
                 if (this[i].getTools().any { !it.isExecuted }) {
@@ -194,7 +167,7 @@ private fun List<UIMessage>.alignContextStart(startIndex: Int): Int {
             }
         }
 
-        // 如果当前消息包含未执行的tool call，往前查找对应的用户消息
+
         if (currentMessage.getTools().any { !it.isExecuted }) {
             for (i in adjustedStartIndex - 1 downTo 0) {
                 if (this[i].role == MessageRole.USER) {

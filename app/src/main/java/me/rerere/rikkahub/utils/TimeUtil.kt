@@ -44,9 +44,7 @@ fun LocalDateTime.toLocalString(): String {
     return formatter.format(this)
 }
 
-/**
- * 消息时间显示：当天只显示时间（如 14:30），非当天显示「月日 + 时间」（如 5月20日 14:30）。
- */
+
 fun LocalDateTime.toMessageTimeString(): String {
     val locale = Locale.getDefault()
     return if (this.toLocalDate() == LocalDate.now()) {
@@ -83,10 +81,10 @@ fun LocalDate.toLocalString(includeYear: Boolean): String {
 
 private fun isMonthFirstLocale(locale: Locale): Boolean {
     val monthFirstCountries = setOf(
-        "US", // 美国
-        "PH", // 菲律宾
-        "CA", // 加拿大(虽然魁北克可能使用日-月格式)
-        "CN", // 中国
+        "US",
+        "PH",
+        "CA",
+        "CN",
     )
     return monthFirstCountries.contains(locale.country)
 }

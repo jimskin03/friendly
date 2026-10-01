@@ -126,10 +126,7 @@ class ChatInputState {
         messageContent = newMessage
     }
 
-    /**
-     * 仅删除当前输入组件临时新增的本地文件。
-     * 编辑历史消息时，原有附件不在这里删除，由会话层统一做差异清理。
-     */
+
     fun shouldDeleteFileOnRemove(part: UIMessagePart): Boolean {
         val url = part.attachmentUrlOrNull() ?: return false
         if (!url.startsWith("file:")) return false

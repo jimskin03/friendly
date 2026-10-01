@@ -442,7 +442,7 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    // 兼容不带 kimi 前缀的裸 id "k3"
+
     val KIMI_K3_ALIAS = defineModel {
         exact("k3")
         visionInput()

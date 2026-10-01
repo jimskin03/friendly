@@ -57,7 +57,7 @@ class ConversationRepository(
             .getConversationsOfAssistant(assistantId.toString())
             .map { flow ->
                 flow.map { entity ->
-                    // 列表视图不需要完整的 nodes，使用空列表
+
                     conversationEntityToConversation(entity, emptyList())
                 }
             }
@@ -307,7 +307,7 @@ class ConversationRepository(
             conversationDAO.update(
                 conversationToConversationEntity(conversation)
             )
-            // 删除旧的节点，插入新的节点
+
             messageNodeDAO.deleteByConversation(conversation.id.toString())
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
@@ -315,7 +315,7 @@ class ConversationRepository(
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
-        // 获取完整的 Conversation（包含 messageNodes）以正确清理文件
+
         val fullConversation = if (conversation.messageNodes.isEmpty()) {
             getConversationById(conversation.id) ?: conversation
         } else {
@@ -323,7 +323,7 @@ class ConversationRepository(
         }
         messageFtsManager.deleteConversation(conversation.id.toString())
         database.withTransaction {
-            // message_node 会通过 CASCADE 自动删除
+
             conversationDAO.delete(
                 conversationToConversationEntity(conversation)
             )
@@ -361,7 +361,7 @@ class ConversationRepository(
         return ConversationEntity(
             id = conversation.id.toString(),
             title = conversation.title,
-            nodes = "[]",  // nodes 现在存储在单独的表中
+            nodes = "[]",
             createAt = conversation.createAt.toEpochMilli(),
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
@@ -417,9 +417,7 @@ class ConversationRepository(
         conversationDAO.updateAssistantId(conversationId.toString(), assistantId.toString())
     }
 
-    /**
-     * 单列更新会话的文件夹归属，folderId 为 null 表示移出文件夹（未归类）。
-     */
+
     suspend fun updateConversationFolderId(conversationId: Uuid, folderId: Uuid?) {
         conversationDAO.updateFolderId(
             id = conversationId.toString(),
@@ -495,9 +493,7 @@ class ConversationRepository(
     }
 }
 
-/**
- * 轻量级的会话查询结果，不包含 nodes 和 suggestions 字段
- */
+
 data class LightConversationEntity(
     val id: String,
     val assistantId: String,

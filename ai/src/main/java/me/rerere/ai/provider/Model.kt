@@ -38,7 +38,7 @@ enum class ModelAbility {
     REASONING,
 }
 
-// 模型(提供商)提供的内置工具选项
+
 @Serializable
 sealed class BuiltInTools {
     // https://ai.google.dev/gemini-api/docs/google-search?hl=zh-cn
@@ -55,6 +55,5 @@ sealed class BuiltInTools {
     @SerialName("image_generation")
     data object ImageGeneration : BuiltInTools()
 }
-
 
 

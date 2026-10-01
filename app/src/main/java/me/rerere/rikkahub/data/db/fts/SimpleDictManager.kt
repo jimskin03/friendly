@@ -8,14 +8,10 @@ object SimpleDictManager {
     private const val DICT_ASSET_DIR = "simple_dict"
     private const val VERSION_FILE = "version.txt"
 
-    // 与 assets 中的词典版本对齐，更新词典时递增此值
+
     private const val CURRENT_VERSION = 1
 
-    /**
-     * 将 assets/simple_dict 解压到 files/simple_dict，返回词典目录。
-     * 已是最新版本时直接返回，无需重复拷贝。
-     * 可在任意线程调用。
-     */
+
     fun extractDict(context: Context): File {
         val destDir = File(context.filesDir, DICT_ASSET_DIR)
         val versionFile = File(destDir, VERSION_FILE)

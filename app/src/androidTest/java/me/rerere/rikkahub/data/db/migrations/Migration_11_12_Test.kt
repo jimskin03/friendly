@@ -37,15 +37,15 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_createsMessageNodeTableWithCorrectSchema() {
-        // 创建版本 11 的数据库
+
         helper.createDatabase(TEST_DB, 11).apply {
             close()
         }
 
-        // 运行迁移到版本 12
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证表结构
+
         val cursor = db.query("SELECT * FROM message_node LIMIT 0")
         val columnNames = cursor.columnNames.toList()
         cursor.close()
@@ -62,7 +62,7 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_migratesSimpleConversationCorrectly() {
-        // 准备测试数据
+
         val conversationId = Uuid.random().toString()
         val messageNodes = listOf(
             MessageNode(
@@ -90,7 +90,7 @@ class Migration_11_12_Test {
         )
         val nodesJson = JsonInstant.encodeToString(messageNodes)
 
-        // 创建版本 11 的数据库并插入数据
+
         helper.createDatabase(TEST_DB, 11).apply {
             val values = ContentValues().apply {
                 put("id", conversationId)
@@ -107,10 +107,10 @@ class Migration_11_12_Test {
             close()
         }
 
-        // 运行迁移
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证迁移结果
+
         val cursor = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ? ORDER BY node_index ASC",
             arrayOf(conversationId)
@@ -118,7 +118,7 @@ class Migration_11_12_Test {
 
         assertEquals("Should have migrated 2 message nodes", 2, cursor.count)
 
-        // 验证第一个节点
+
         assertTrue(cursor.moveToFirst())
         val firstNodeId = cursor.getString(cursor.getColumnIndex("id"))
         val firstConversationId = cursor.getString(cursor.getColumnIndex("conversation_id"))
@@ -140,7 +140,7 @@ class Migration_11_12_Test {
             (firstMessages[0].parts[0] as UIMessagePart.Text).text
         )
 
-        // 验证第二个节点
+
         assertTrue(cursor.moveToNext())
         val secondNodeIndex = cursor.getInt(cursor.getColumnIndex("node_index"))
         val secondMessagesJson = cursor.getString(cursor.getColumnIndex("messages"))
@@ -162,7 +162,7 @@ class Migration_11_12_Test {
 
         cursor.close()
 
-        // 验证原 conversationentity 表中的 nodes 字段已被清空
+
         val conversationCursor = db.query(
             "SELECT nodes FROM conversationentity WHERE id = ?",
             arrayOf(conversationId)
@@ -177,7 +177,7 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_handlesBranchedMessages() {
-        // 准备有分支的测试数据（一个节点有多个备选消息）
+
         val conversationId = Uuid.random().toString()
         val messageNodes = listOf(
             MessageNode(
@@ -199,12 +199,12 @@ class Migration_11_12_Test {
                         modelId = Uuid.random()
                     )
                 ),
-                selectIndex = 1 // 选择第二个消息
+                selectIndex = 1
             )
         )
         val nodesJson = JsonInstant.encodeToString(messageNodes)
 
-        // 创建版本 11 的数据库并插入数据
+
         helper.createDatabase(TEST_DB, 11).apply {
             val values = ContentValues().apply {
                 put("id", conversationId)
@@ -221,10 +221,10 @@ class Migration_11_12_Test {
             close()
         }
 
-        // 运行迁移
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证结果
+
         val cursor = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ?",
             arrayOf(conversationId)
@@ -251,11 +251,11 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_handlesEmptyConversations() {
-        // 准备空节点列表的测试数据
+
         val conversationId = Uuid.random().toString()
         val nodesJson = "[]"
 
-        // 创建版本 11 的数据库并插入数据
+
         helper.createDatabase(TEST_DB, 11).apply {
             val values = ContentValues().apply {
                 put("id", conversationId)
@@ -272,10 +272,10 @@ class Migration_11_12_Test {
             close()
         }
 
-        // 运行迁移
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证结果
+
         val cursor = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ?",
             arrayOf(conversationId)
@@ -284,7 +284,7 @@ class Migration_11_12_Test {
         assertEquals("Empty conversation should have no message nodes", 0, cursor.count)
         cursor.close()
 
-        // 验证 conversation 仍然存在
+
         val conversationCursor = db.query(
             "SELECT id FROM conversationentity WHERE id = ?",
             arrayOf(conversationId)
@@ -297,7 +297,7 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_handlesMultipleConversations() {
-        // 准备多个对话的测试数据
+
         val conversationId1 = Uuid.random().toString()
         val conversationId2 = Uuid.random().toString()
 
@@ -337,7 +337,7 @@ class Migration_11_12_Test {
             )
         )
 
-        // 创建版本 11 的数据库并插入数据
+
         helper.createDatabase(TEST_DB, 11).apply {
             val values1 = ContentValues().apply {
                 put("id", conversationId1)
@@ -367,10 +367,10 @@ class Migration_11_12_Test {
             close()
         }
 
-        // 运行迁移
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证第一个对话的节点数
+
         val cursor1 = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ?",
             arrayOf(conversationId1)
@@ -378,7 +378,7 @@ class Migration_11_12_Test {
         assertEquals("Conversation 1 should have 1 message node", 1, cursor1.count)
         cursor1.close()
 
-        // 验证第二个对话的节点数
+
         val cursor2 = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ?",
             arrayOf(conversationId2)
@@ -386,7 +386,7 @@ class Migration_11_12_Test {
         assertEquals("Conversation 2 should have 2 message nodes", 2, cursor2.count)
         cursor2.close()
 
-        // 验证总节点数
+
         val cursorAll = db.query("SELECT * FROM message_node")
         assertEquals("Total should have 3 message nodes", 3, cursorAll.count)
         cursorAll.close()
@@ -396,15 +396,15 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_createsIndexOnConversationId() {
-        // 创建版本 11 的数据库
+
         helper.createDatabase(TEST_DB, 11).apply {
             close()
         }
 
-        // 运行迁移
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证索引是否创建
+
         val cursor = db.query(
             "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='message_node' AND name='index_message_node_conversation_id'"
         )
@@ -416,11 +416,11 @@ class Migration_11_12_Test {
 
     @Test
     fun migrate11To12_handlesVeryLargeConversations() {
-        // 准备一个超大对话和一个普通对话
+
         val largeConversationId = Uuid.random().toString()
         val normalConversationId = Uuid.random().toString()
 
-        // 创建一个包含大量消息节点的超大对话（模拟 SQLiteBlobTooBigException 场景）
+
         val largeNodes = buildList {
             repeat(5000) { i ->
                 add(
@@ -468,9 +468,9 @@ class Migration_11_12_Test {
             )
         )
 
-        // 创建版本 11 的数据库并插入数据
+
         helper.createDatabase(TEST_DB, 11).apply {
-            // 插入超大对话
+
             val largeValues = ContentValues().apply {
                 put("id", largeConversationId)
                 put("assistant_id", Uuid.random().toString())
@@ -484,7 +484,7 @@ class Migration_11_12_Test {
             }
             insert("conversationentity", SQLiteDatabase.CONFLICT_NONE, largeValues)
 
-            // 插入普通对话
+
             val normalValues = ContentValues().apply {
                 put("id", normalConversationId)
                 put("assistant_id", Uuid.random().toString())
@@ -500,10 +500,10 @@ class Migration_11_12_Test {
             close()
         }
 
-        // 运行迁移 - 应该不会失败，即使超大对话无法处理
+
         val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
 
-        // 验证超大对话的消息节点（可能被跳过或成功迁移，取决于实际 blob 大小）
+
         val largeCursor = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ?",
             arrayOf(largeConversationId)
@@ -511,7 +511,7 @@ class Migration_11_12_Test {
         val largeNodesMigrated = largeCursor.count
         largeCursor.close()
 
-        // 验证普通对话应该成功迁移
+
         val normalCursor = db.query(
             "SELECT * FROM message_node WHERE conversation_id = ?",
             arrayOf(normalConversationId)
@@ -519,13 +519,12 @@ class Migration_11_12_Test {
         assertEquals("Normal conversation should be migrated successfully", 1, normalCursor.count)
         normalCursor.close()
 
-        // 验证两个对话记录都还存在
+
         val conversationsCursor = db.query("SELECT id FROM conversationentity")
         assertEquals("Both conversations should still exist", 2, conversationsCursor.count)
         conversationsCursor.close()
 
-        // 如果超大对话被跳过，其 nodes 字段应该仍然保留原始数据
-        // 如果成功迁移，nodes 字段应该被清空为 "[]"
+
         val largeConvCursor = db.query(
             "SELECT nodes FROM conversationentity WHERE id = ?",
             arrayOf(largeConversationId)
@@ -534,7 +533,7 @@ class Migration_11_12_Test {
         val largeConvNodes = largeConvCursor.getString(0)
         largeConvCursor.close()
 
-        // 验证普通对话的 nodes 应该被清空
+
         val normalConvCursor = db.query(
             "SELECT nodes FROM conversationentity WHERE id = ?",
             arrayOf(normalConversationId)

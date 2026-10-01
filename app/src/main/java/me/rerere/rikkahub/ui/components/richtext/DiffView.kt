@@ -24,7 +24,7 @@ import androidx.compose.ui.util.fastForEach
 internal val DiffAddedColor = Color(0xFF4CAF50)
 internal val DiffRemovedColor = Color(0xFFEF5350)
 
-/** unified diff 的增删行数统计 */
+
 internal data class DiffStats(val additions: Int, val deletions: Int)
 
 internal fun parseDiffStats(diff: String): DiffStats {
@@ -40,12 +40,7 @@ internal fun parseDiffStats(diff: String): DiffStats {
     return DiffStats(additions, deletions)
 }
 
-/**
- * 渲染 unified diff 文本, 按行前缀着色, 支持横向滚动; 纵向滚动由调用方容器提供
- *
- * @param maxLines 最多渲染的行数, 超出部分折叠为一行提示
- * @param showFileHeader 是否渲染开头的 `---`/`+++` 文件头
- */
+
 @Composable
 fun DiffView(
     diff: String,

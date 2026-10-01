@@ -136,123 +136,7 @@ import kotlin.uuid.Uuid
 
 @Composable
 fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
-    val settings by vm.settings.collectAsStateWithLifecycle()
-    val navController = LocalNavController.current
-    val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 2 }
-    val scope = rememberCoroutineScope()
-    val toaster = LocalToaster.current
-    val context = LocalContext.current
-
-    val onEdit = { newProvider: ProviderSetting ->
-        val newSettings = settings.copy(
-            providers = settings.providers.map {
-                if (newProvider.id == it.id) {
-                    newProvider
-                } else {
-                    it
-                }
-            }
-        )
-        vm.updateSettings(newSettings)
-    }
-    val onDelete = {
-        val newSettings = settings.copy(
-            providers = settings.providers - provider
-        )
-        vm.updateSettings(newSettings)
-        navController.popBackStack()
-    }
-
-    Scaffold(
-        containerColor = CustomColors.topBarColors.containerColor,
-        topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    BackButton()
-                },
-                colors = CustomColors.topBarColors,
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AutoAIIcon(provider.name, modifier = Modifier.size(22.dp))
-                        Text(text = provider.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                },
-                actions = {
-                    val shareSheetState = rememberShareSheetState()
-                    ShareSheet(shareSheetState)
-                    IconButton(
-                        onClick = {
-                            shareSheetState.show(provider)
-                        }
-                    ) {
-                        Icon(HugeIcons.Share01, null)
-                    }
-                }
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor
-            ) {
-                NavigationBarItem(
-                    selected = pager.currentPage == 0,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_configuration)) },
-                    icon = { Icon(HugeIcons.Tools, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(0)
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pager.currentPage == 1,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
-                    icon = { Icon(HugeIcons.Package01, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(1)
-                        }
-                    }
-                )
-            }
-        }
-    ) {
-        HorizontalPager(
-            state = pager,
-            modifier = Modifier
-                .padding(it)
-                .consumeWindowInsets(it)
-        ) { page ->
-            when (page) {
-                0 -> {
-                    SettingProviderConfigPage(
-                        provider = provider,
-                        onEdit = {
-                            onEdit(it)
-                            toaster.show(
-                                context.getString(R.string.setting_provider_page_save_success),
-                                type = ToastType.Success
-                            )
-                        },
-                        onDelete = {
-                            onDelete()
-                        }
-                    )
-                }
-
-                1 -> {
-                    SettingProviderModelPage(
-                        provider = provider,
-                        onEdit = onEdit
-                    )
-                }
-            }
-        }
-    }
+    SettingProviderPage(initialProviderId = id, vm = vm)
 }
 
 @Composable
@@ -331,7 +215,7 @@ private fun SettingProviderConfigPage(
             }
         }
 
-        // 硅基流动图标
+
         if (provider is ProviderSetting.OpenAI && provider.baseUrl.contains("siliconflow.cn")) {
             SiliconFlowPowerByIcon(
                 modifier = Modifier
@@ -418,7 +302,7 @@ private fun ModelList(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             state = lazyListState
         ) {
-            // 模型列表
+
             if (providerSetting.models.isEmpty()) {
                 item {
                     Column(
@@ -485,7 +369,7 @@ private fun ModelList(
 }
 
 @Composable
-private fun ModelSettingsForm(
+internal fun ModelSettingsForm(
     model: Model,
     onModelChange: (Model) -> Unit,
     isEdit: Boolean,
@@ -549,7 +433,7 @@ private fun ModelSettingsForm(
         ) { page ->
             when (page) {
                 0 -> {
-                    // 基本设置页面
+
                     Column(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier
@@ -619,7 +503,7 @@ private fun ModelSettingsForm(
                 }
 
                 1 -> {
-                    // 高级设置页面
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -652,7 +536,7 @@ private fun ModelSettingsForm(
                 }
 
                 2 -> {
-                    // 内置工具页面
+
                     BuiltInToolsSettings(
                         tools = model.tools,
                         onUpdateTools = { tools ->
@@ -829,7 +713,7 @@ private fun AddModelButton(
 }
 
 @Composable
-private fun ModelPicker(
+internal fun ModelPicker(
     models: List<Model>,
     selectedModels: List<Model>,
     onModelSelected: (Model) -> Unit,
@@ -863,7 +747,7 @@ private fun ModelPicker(
                     .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // 标题栏和添加所有按钮
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -953,7 +837,7 @@ private fun ModelPicker(
                                 IconButton(
                                     onClick = {
                                         if (selectedModels.any { model -> model.modelId == it.modelId }) {
-                                            // 从selectedModels中计算出要删除的model，因为删除需要id匹配，而不是ModelId
+
                                             onModelDeselected(selectedModels.firstOrNull { model -> model.modelId == it.modelId }
                                                 ?: it)
                                         } else {
@@ -1005,7 +889,7 @@ private fun ModelPicker(
 }
 
 @Composable
-private fun ModelTypeSelector(
+internal fun ModelTypeSelector(
     selectedType: ModelType,
     onTypeSelected: (ModelType) -> Unit
 ) {
@@ -1038,7 +922,7 @@ private fun ModelTypeSelector(
 }
 
 @Composable
-private fun ModelModalitySelector(
+internal fun ModelModalitySelector(
     model: Model,
     inputModalities: List<Modality>,
     onUpdateInputModalities: (List<Modality>) -> Unit,
@@ -1149,7 +1033,7 @@ fun ModalAbilitySelector(
 }
 
 @Composable
-private fun ModelCard(
+internal fun ModelCard(
     model: Model,
     modifier: Modifier = Modifier,
     onDelete: () -> Unit,
@@ -1319,7 +1203,7 @@ private fun ModelCard(
 }
 
 @Composable
-private fun BuiltInToolsSettings(
+internal fun BuiltInToolsSettings(
     tools: Set<BuiltInTools>,
     onUpdateTools: (Set<BuiltInTools>) -> Unit
 ) {
@@ -1399,7 +1283,7 @@ private fun BuiltInToolsSettings(
 }
 
 @Composable
-private fun ProviderOverrideSettings(
+internal fun ProviderOverrideSettings(
     providerOverride: ProviderSetting?,
     onUpdateProviderOverride: (ProviderSetting?) -> Unit,
     parentProvider: ProviderSetting?
@@ -1468,7 +1352,7 @@ private fun ProviderOverrideSettings(
                     editingProvider = parentProvider?.copyProvider(
                         id = Uuid.random(),
                         builtIn = false,
-                        models = emptyList(), // 这里必须设置为空，不然会导致循环依赖JSON
+                        models = emptyList(),
                         description = {},
                     )
                     showProviderConfig = true

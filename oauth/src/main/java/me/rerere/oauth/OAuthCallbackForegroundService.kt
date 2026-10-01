@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "OAuthCallbackFgs"
 
-/** 在浏览器授权期间保持应用进程和 loopback callback server 活跃。 */
+
 class OAuthCallbackForegroundService : Service() {
     private var isForeground = false
 

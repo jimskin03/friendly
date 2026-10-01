@@ -689,11 +689,7 @@ private fun HtmlProgress(element: Element) {
 
 // ---- Inline group rendering (for list items with mixed inline nodes) ----
 
-/**
- * Renders a list of inline Jsoup nodes as a single Text composable with AnnotatedString.
- * This prevents inline siblings (e.g. <strong>A</strong>和<strong>B</strong>) from being
- * rendered on separate lines.
- */
+
 @Composable
 private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit) {
     val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering

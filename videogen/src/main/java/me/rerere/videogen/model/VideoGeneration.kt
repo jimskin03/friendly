@@ -4,12 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
-/**
- * 与供应商无关的视频生成请求。
- *
- * [extraParameters] 用于尚未进入公共抽象的供应商参数。适配器会先写入这些参数，再用公共字段
- * 覆盖同名项，避免调用方绕过公共字段的统一语义。
- */
+
 @Serializable
 data class VideoGenerationRequest(
     val prompt: String? = null,
@@ -61,7 +56,7 @@ sealed class VideoGenerationInput {
         override val extra: JsonObject = JsonObject(emptyMap()),
     ) : VideoGenerationInput()
 
-    /** 阿里百炼万相 3.0 支持的文件输入。 */
+
     @Serializable
     @SerialName("document")
     data class Document(
@@ -69,7 +64,7 @@ sealed class VideoGenerationInput {
         override val extra: JsonObject = JsonObject(emptyMap()),
     ) : VideoGenerationInput()
 
-    /** 阿里百炼万相 3.0 支持的公开网页输入。 */
+
     @Serializable
     @SerialName("web_page")
     data class WebPage(
@@ -77,10 +72,7 @@ sealed class VideoGenerationInput {
         override val extra: JsonObject = JsonObject(emptyMap()),
     ) : VideoGenerationInput()
 
-    /**
-     * 尚未进入公共抽象的供应商输入项，例如模型特有的样片任务引用。
-     * 该对象会作为一个 content/media 元素原样交给适配器。
-     */
+
     @Serializable
     @SerialName("raw")
     data class Raw(

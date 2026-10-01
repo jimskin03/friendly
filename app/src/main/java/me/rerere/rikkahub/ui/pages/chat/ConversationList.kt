@@ -273,7 +273,7 @@ private fun ConversationItem(
             )
             Spacer(Modifier.weight(1f))
 
-            // 置顶图标
+
             AnimatedVisibility(conversation.isPinned) {
                 Icon(
                     imageVector = HugeIcons.Pin,

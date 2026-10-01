@@ -25,7 +25,7 @@ class PreferenceStoreV3Migration : DataMigration<Preferences> {
 
         prefs[SettingsStore.ASSISTANTS] = migratedAssistants
 
-        // 合并已有的全局快捷消息（防止重复）
+
         val existingQuickMessages = prefs[SettingsStore.QUICK_MESSAGES]?.let { json ->
             runCatching<JsonArray> {
                 JsonInstant.parseToJsonElement(json).jsonArray
@@ -52,11 +52,7 @@ class PreferenceStoreV3Migration : DataMigration<Preferences> {
     override suspend fun cleanUp() {}
 }
 
-/**
- * 从旧格式 assistants JSON 中提取 quickMessages 字段（完整对象，无 id 字段），
- * 为每条消息生成新 UUID，将其替换为 quickMessageIds（仅 ID 列表），
- * 并返回补充了 id 的全局消息列表。
- */
+
 internal fun migrateAssistantsQuickMessages(
     assistantsJson: String
 ): Pair<String, JsonArray> {
@@ -71,11 +67,11 @@ internal fun migrateAssistantsQuickMessages(
                 val assistantObj = assistant as? JsonObject
                     ?: return@map assistant
 
-                // 如果不存在旧的 quickMessages 字段则无需迁移
+
                 val oldQuickMessages = assistantObj["quickMessages"] as? JsonArray
                     ?: return@map assistant
 
-                // 为每条旧消息注入新生成的 id
+
                 val messagesWithIds = oldQuickMessages.map { element ->
                     val obj = element as? JsonObject ?: return@map element
                     val newId = Uuid.random().toString()
@@ -84,10 +80,10 @@ internal fun migrateAssistantsQuickMessages(
                     })
                 }
 
-                // 收集到全局列表
+
                 allQuickMessages.addAll(messagesWithIds)
 
-                // 提取 ID 列表构建 quickMessageIds
+
                 val ids = JsonArray(
                     messagesWithIds.mapNotNull { element ->
                         (element as? JsonObject)?.get("id")

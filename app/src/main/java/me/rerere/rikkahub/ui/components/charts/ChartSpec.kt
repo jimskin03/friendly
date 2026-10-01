@@ -42,16 +42,14 @@ data class ChartSpec(
     val yAxis: ChartAxis = ChartAxis(),
     val series: List<ChartSeries>,
 ) {
-    /** 类目数量（折线图/柱状图），取 x_axis.data 与最长系列的较大值 */
+
     val categoryCount: Int
         get() = maxOf(xAxis.data.size, series.maxOfOrNull { it.values.size } ?: 0)
 
     fun categoryLabel(index: Int): String = xAxis.data.getOrNull(index) ?: (index + 1).toString()
 
     companion object {
-        /**
-         * 从 chart_display 工具参数解析图表, 尽量宽松; 无法构成有效图表时返回 null
-         */
+
         fun fromJson(element: JsonElement): ChartSpec? {
             val obj = element as? JsonObject ?: return null
             val style = when (obj.string("style")) {

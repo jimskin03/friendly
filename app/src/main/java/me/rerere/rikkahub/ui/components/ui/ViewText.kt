@@ -90,17 +90,16 @@ private fun TextViewPreview() {
 
             HorizontalDivider()
 
-            // AndroidView TextView 复刻版本
-            // 创建 SpannableString 来复刻 AnnotatedString 的效果
+
             val fullText =
                 "How many roads must a man walk down How many roads must a man walk downHow many roads must a man walk downBIG TEXTahah"
             val spannableString = SpannableString(fullText)
 
-            // 找到 "BIG TEXT" 的位置并应用大字体样式
+
             val bigTextStart = fullText.indexOf("BIG TEXT")
             val bigTextEnd = bigTextStart + "BIG TEXT".length
 
-            // 将 39.sp 转换为像素
+
             val density = LocalDensity.current
             val bigTextSizePx = with(density) { 39.sp.toPx().toInt() }
             spannableString.setSpan(
@@ -163,11 +162,11 @@ private fun TextView.setComposeTextStyle(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                         justificationMode = LineBreaker.JUSTIFICATION_MODE_INTER_CHARACTER
                     }
-                    // 两端对齐也需要一个基础的 gravity，通常是 START
+
                     Gravity.START
                 }
 
-                else -> gravity // 保持当前 gravity
+                else -> gravity
             }
         }
 
@@ -176,14 +175,14 @@ private fun TextView.setComposeTextStyle(
             val lineHeightPx = when (textStyle.lineHeight.type) {
                 TextUnitType.Em -> textStyle.lineHeight.value * textStyle.fontSize.toPx()
                 TextUnitType.Sp -> textStyle.lineHeight.toPx()
-                else -> textStyle.lineHeight.value // 默认使用 px
+                else -> textStyle.lineHeight.value
             }
-            // Android P (API 28) 及以上版本可以直接设置行高
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 lineHeight = lineHeightPx.roundToInt()
             } else {
-                // 对于旧版本，通过 setLineSpacing 实现
-                // 第一个参数是额外间距，第二个是行高倍数
+
+
                 // extra = desired_line_height - font_metrics_height
                 val fontMetrics = paint.fontMetricsInt
                 val extraSpacing = lineHeightPx - (fontMetrics.descent - fontMetrics.ascent)
@@ -201,7 +200,7 @@ private fun TextView.setComposeTextStyle(
             )
         }
 
-        // 这是最复杂的部分，因为它需要将 Compose 的字体概念映射到 Android 的 Typeface
+
         val typefaceStyle = getAndroidTypefaceStyle(
             fontWeight = textStyle.fontWeight,
             fontStyle = textStyle.fontStyle
@@ -213,9 +212,9 @@ private fun TextView.setComposeTextStyle(
             FontFamily.Cursive -> Typeface.create(
                 Typeface.SANS_SERIF,
                 typefaceStyle
-            ) // Cursive 没有直接映射，回退到 SansSerif
-            // 注意：这里没有处理自定义字体 (FontFamily(Font(...)))
-            // 要处理自定义字体，需要更复杂的逻辑来加载字体资源
+            )
+
+
             else -> Typeface.create(typeface, typefaceStyle)
         }
         setTypeface(finalTypeface)

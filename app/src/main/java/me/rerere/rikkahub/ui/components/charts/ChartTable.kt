@@ -74,9 +74,7 @@ private fun ChartSpec.buildTableData(
     )
 }
 
-/**
- * 图表的表格视图, 基于 [DataTable]; 行数较多时在限定高度内纵向滚动
- */
+
 @Composable
 internal fun ChartTable(
     spec: ChartSpec,
@@ -133,7 +131,7 @@ internal fun ChartTable(
             },
             cellPadding = 6.dp,
             columnMinWidths = table.columns.map { if (it.numeric) 64.dp else 48.dp },
-            // 数值列不设上限: 首轮测量为无界约束, fillMaxWidth 不会把列撑大, 次轮固定列宽后才右对齐
+
             columnMaxWidths = table.columns.map { if (it.numeric) Dp.Infinity else 200.dp },
             modifier = Modifier.fillMaxWidth(),
         )

@@ -29,7 +29,7 @@ data class Conversation(
     val lorebookIds: Set<Uuid> = emptySet(),
     // Absolute path inside the workspace rootfs
     val workspaceCwd: String? = null,
-    // 所属文件夹（助手内分组），null 表示未归入任何文件夹
+
     val folderId: Uuid? = null,
     @Transient
     val newConversation: Boolean = false
@@ -40,9 +40,7 @@ data class Conversation(
             .localFileUrls()
             .map { it.toUri() }
 
-    /**
-     *  当前选中的 message
-     */
+
     val currentMessages
         get(): List<UIMessage> {
             return messageNodes.map { node -> node.messages[node.selectIndex] }
@@ -77,7 +75,7 @@ data class Conversation(
                 selectIndex = newMessageIndex
             )
 
-            // 更新newNodes
+
             if (index > newNodes.lastIndex) {
                 newNodes.add(newNode)
             } else {
@@ -136,7 +134,7 @@ fun UIMessage.toMessageNode(): MessageNode {
     )
 }
 
-/** 本地附件引用，包含工具结果中的嵌套附件。 */
+
 internal fun List<UIMessagePart>.localFileUrls(): Set<String> = buildSet {
     this@localFileUrls.forEach { part ->
         val url = when (part) {

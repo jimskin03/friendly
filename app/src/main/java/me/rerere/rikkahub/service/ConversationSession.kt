@@ -27,7 +27,7 @@ class ConversationSession(
     private val onIdle: (Uuid) -> Unit,
     private val onGenerationFinished: (Uuid, Throwable?) -> Unit = { _, _ -> },
 ) {
-    // 会话状态
+
     private val _state = MutableStateFlow(initial)
     val state: StateFlow<Conversation> = _state.asStateFlow()
     private val initializationMutex = Mutex()
@@ -36,13 +36,13 @@ class ConversationSession(
     private var initialized = false
     val messageQueue = MessageQueue()
 
-    // 页面切换和 SSE 重连只加载一次；活跃 session 的内存状态始终优先。
+
     suspend fun initialize(load: suspend () -> Conversation) {
         initializationMutex.withLock {
             if (initialized) return
             val conversation = load()
             synchronized(this) {
-                // 加载挂起期间可能已经通过保存或编辑写入了更新的状态。
+
                 if (!initialized) updateConversation(conversation)
             }
         }
@@ -55,7 +55,7 @@ class ConversationSession(
         initialized = true
     }
 
-    // 元数据先应用到最新内存状态；落库只更新对应列，不能用旧消息快照覆盖流式输出。
+
     internal suspend fun updateMetadata(
         update: (Conversation) -> Conversation,
         persist: suspend (Conversation) -> Unit,
@@ -68,7 +68,7 @@ class ConversationSession(
         }
     }
 
-    // 失败和取消也必须保存已收到的内容，且保存完成前不能释放生成任务。
+
     suspend fun finishGeneration(save: suspend (Conversation) -> Unit): Conversation =
         withContext(NonCancellable) {
             val current = state.value
@@ -83,18 +83,18 @@ class ConversationSession(
             conversation
         }
 
-    // 从队列取出到写入会话历史之间，附件仍需作为有效引用保留。
+
     @Volatile
     var submittingMessage: QueuedMessage? = null
         internal set
 
-    // 原子引用计数
+
     private val refCount = AtomicInteger(0)
 
-    // 处理状态（如 OCR 识别中）
+
     val processingStatus = MutableStateFlow<String?>(null)
 
-    // 生成任务（内聚在 session 中）
+
     private val _generationJob = MutableStateFlow<Job?>(null)
     private val activeJobs = mutableSetOf<Job>()
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
@@ -103,7 +103,7 @@ class ConversationSession(
         get() = refCount.get() > 0 || _generationJob.value != null ||
                 messageQueue.state.value.messages.isNotEmpty()
 
-    // 空闲检查任务
+
     private var idleCheckJob: Job? = null
 
     internal fun acquire(): Int = refCount.incrementAndGet().also {

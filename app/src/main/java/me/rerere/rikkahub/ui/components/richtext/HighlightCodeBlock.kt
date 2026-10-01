@@ -186,7 +186,7 @@ fun HighlightCodeBlock(
                     val displayCode = if (isExpanded) code else collapsedCode
                     val displayLines = remember(displayCode) { displayCode.lines() }
 
-                    // 如果显示行号且自动换行，需要逐行渲染以保持对齐
+
                     when {
                         showLineNumbers && autoWrap -> {
                             CodeBlockWithLineNumbersWrapped(
@@ -211,7 +211,7 @@ fun HighlightCodeBlock(
                     }
 
                     Spacer(Modifier.height(4.dp))
-                    // 代码折叠按钮
+
                     if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
                         Box(
                             modifier = Modifier
@@ -315,7 +315,7 @@ private fun CodeBlockDefault(
             }
         )
     ) {
-        // 行号列
+
         if (showLineNumbers) {
             val lineNumberWidth = remember(displayLines.size) {
                 displayLines.size.toString().length
@@ -336,7 +336,7 @@ private fun CodeBlockDefault(
             }
         }
 
-        // 代码列
+
         SelectionContainer {
             CodeHighlightText(
                 code = displayCode,
@@ -482,7 +482,7 @@ private fun CodeBlockPreview(
 ) {
     val state = rememberWebViewState(
         data = buildCodePreviewHtml(code = code, language = language),
-        baseUrl = "https://rikkahub.local",
+        baseUrl = "https://friendly.local",
         mimeType = "text/html",
         settings = {
             builtInZoomControls = true

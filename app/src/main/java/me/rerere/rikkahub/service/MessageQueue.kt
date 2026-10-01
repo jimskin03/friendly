@@ -95,7 +95,7 @@ class MessageQueue {
                 ) else it
             },
         )
-        // 取消编辑只释放占位，不能清理原附件。
+
         return previous.takeIf { parts != null }
     }
 

@@ -125,7 +125,7 @@ class AssistantDetailVM(
             val settings = settings.value
             val validTagIds = settings.assistantTags.map { it.id }.toSet()
 
-            // 清理 assistant 中的无效 tag id
+
             val cleanedAssistants = settings.assistants.map { assistant ->
                 val validTags = assistant.tags.filter { tagId ->
                     validTagIds.contains(tagId)
@@ -137,15 +137,15 @@ class AssistantDetailVM(
                 }
             }
 
-            // 获取清理后的 assistant 中使用的 tag id
+
             val usedTagIds = cleanedAssistants.flatMap { it.tags }.toSet()
 
-            // 清理未使用的 tags
+
             val cleanedTags = settings.assistantTags.filter { tag ->
                 usedTagIds.contains(tag.id)
             }
 
-            // 检查是否需要更新
+
             val needUpdateAssistants = cleanedAssistants != settings.assistants
             val needUpdateTags = cleanedTags.size != settings.assistantTags.size
 
@@ -167,8 +167,8 @@ class AssistantDetailVM(
                 settings = settings.copy(
                     assistants = settings.assistants.map {
                         if (it.id == assistant.id) {
-                            checkAvatarDelete(old = it, new = assistant) // 删除旧头像
-                            checkBackgroundDelete(old = it, new = assistant) // 删除旧背景
+                            checkAvatarDelete(old = it, new = assistant)
+                            checkBackgroundDelete(old = it, new = assistant)
                             assistant
                         } else {
                             it

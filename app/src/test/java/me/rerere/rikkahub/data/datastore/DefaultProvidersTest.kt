@@ -8,19 +8,16 @@ import org.junit.Test
 
 class DefaultProvidersTest {
     @Test
-    fun `default providers should include vercel ai gateway with expected balance config`() {
-        val vercelProviders = DEFAULT_PROVIDERS
-            .filterIsInstance<ProviderSetting.OpenAI>()
-            .filter { it.name == "Vercel AI Gateway" }
+    fun `default providers should strictly contain 6 providers`() {
+        val names = DEFAULT_PROVIDERS.map { it.name }
+        assertEquals(listOf("OpenAI", "Gemini", "DeepSeek", "OpenRouter", "Vercel", "xAI"), names)
+        assertEquals(6, DEFAULT_PROVIDERS.size)
 
-        assertEquals(1, vercelProviders.size)
-
-        val provider = vercelProviders.single()
-        assertEquals("https://ai-gateway.vercel.sh/v1", provider.baseUrl)
-        assertFalse(provider.enabled)
-        assertTrue(provider.builtIn)
-        assertTrue(provider.balanceOption.enabled)
-        assertEquals("/credits", provider.balanceOption.apiPath)
-        assertEquals("balance", provider.balanceOption.resultPath)
+        val vercel = DEFAULT_PROVIDERS.filterIsInstance<ProviderSetting.OpenAI>().first { it.name == "Vercel" }
+        assertEquals("https://ai-gateway.vercel.sh/v1", vercel.baseUrl)
+        assertTrue(vercel.builtIn)
+        assertTrue(vercel.balanceOption.enabled)
+        assertEquals("/credits", vercel.balanceOption.apiPath)
+        assertEquals("balance", vercel.balanceOption.resultPath)
     }
 }

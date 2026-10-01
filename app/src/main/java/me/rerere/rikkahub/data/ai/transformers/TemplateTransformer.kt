@@ -27,7 +27,7 @@ class TemplateTransformer(
         return messages.map { message ->
             if (message.isSynthetic) return@map message
 
-            // 使用消息本身的发送时间而不是当前时间, 保证多次请求时渲染结果稳定, 不破坏 prompt 缓存
+
             val createdAt = message.createdAt.toInstant(timeZone).toJavaInstant()
             message.copy(
                 parts = message.parts.map { part ->

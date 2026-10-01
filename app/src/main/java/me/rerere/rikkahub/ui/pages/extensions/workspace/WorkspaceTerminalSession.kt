@@ -204,11 +204,7 @@ internal class WorkspaceTerminalViewClient(
         focusAndShowKeyboard()
     }
 
-    /**
-     * 检测点击位置是否落在一个 URL 上, 是则用浏览器打开并返回 true.
-     * TerminalView 0.118.0 没有内置链接点击, 这里基于 getColumnAndRow() + 屏幕缓冲文本自行实现,
-     * 并通过 getLineWrap() 还原被软换行拆开的长 URL.
-     */
+
     private fun openUrlAtTap(e: MotionEvent): Boolean {
         val view = terminalView ?: return false
         if (view.isSelectingText) return false
@@ -224,9 +220,7 @@ internal class WorkspaceTerminalViewClient(
         if (column < 0 || column >= columns) return false
         if (row < minAccessibleRow || row > maxAccessibleRow) return false
 
-        // 向上/向下扩展到完整逻辑行(被软换行拆开的行 mLineWrap 为 true).
-        // 限制最多扩展 URL_MAX_WRAP_ROWS 行: 真实 URL 跨不了这么多行, 同时避免连续无换行的
-        // 长输出导致单次点击遍历整个 transcript.
+
         val minRow = (row - URL_MAX_WRAP_ROWS).coerceAtLeast(minAccessibleRow)
         val maxRow = (row + URL_MAX_WRAP_ROWS).coerceAtMost(maxAccessibleRow)
         var startRow = row
@@ -238,7 +232,7 @@ internal class WorkspaceTerminalViewClient(
         var tapIndex = -1
         for (r in startRow..endRow) {
             if (r == row) {
-                // 用 [0, column] 这段文本的长度精确换算点击字符在本行内的下标, 避免宽字符错位
+
                 tapIndex = line.length + (screen.getSelectedText(0, r, column, r).length - 1).coerceAtLeast(0)
             }
             line.append(screen.getSelectedText(0, r, columns - 1, r))
@@ -328,13 +322,13 @@ private const val WORKSPACE_DIR = "/workspace"
 private const val SKILLS_DIR = "/skills"
 private const val BUILTIN_SKILLS_DIR = "/builtin_skills"
 
-// 一个 URL 最多还原跨越的软换行行数(向上/向下各算), 足够覆盖任意真实 URL
+
 private const val URL_MAX_WRAP_ROWS = 50
 
 private val URL_REGEX =
     Regex("""(https?|ftp)://[\w\-._~:/?#\[\]@!$&'()*+,;=%]+""", RegexOption.IGNORE_CASE)
 
-// 终端里 URL 后面常跟标点(行尾句号、被括号包裹等), 打开前去掉这些结尾字符
+
 private val URL_TRAILING_TRIM = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '}', '\'', '"')
 
 private fun Context.activeDnsServers(): List<String> {

@@ -27,11 +27,7 @@ internal const val MCP_OAUTH_REDIRECT_URI =
     "http://127.0.0.1:$MCP_OAUTH_CALLBACK_PORT$MCP_OAUTH_CALLBACK_PATH"
 private val OAUTH_CALLBACK_TIMEOUT = 5.minutes
 
-/**
- * 负责 MCP OAuth 的授权、令牌刷新与持久化。
- *
- * 连接生命周期由配置流的消费者管理；令牌持久化后，配置变化会自然触发连接替换。
- */
+
 internal class McpOAuthCoordinator(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
@@ -77,9 +73,7 @@ internal class McpOAuthCoordinator(
             ?: config.clone(commonOptions = config.commonOptions.copy(oauth = null))
     }
 
-    /**
-     * 按 serverId 串行刷新。获得锁后重新读取配置，避免并发工具调用重复使用同一个 refresh token。
-     */
+
     suspend fun ensureFreshToken(configInput: McpServerConfig): McpServerConfig {
         val lock = refreshLocks.computeIfAbsent(configInput.id) { Mutex() }
         return lock.withLock {
@@ -134,16 +128,16 @@ internal class McpOAuthCoordinator(
 
     private suspend fun authorize(config: McpServerConfig, context: Context) = withContext(Dispatchers.IO) {
         val serverUrl = config.serverUrl
-        require(serverUrl.isNotBlank()) { "Server URL 为空，无法授权" }
+        require(serverUrl.isNotBlank()) { "Server URL is empty, unable to authorize" }
 
         val protectedResource = discoveryClient.discoverProtectedResource(serverUrl)
         val issuer = protectedResource.authorizationServers.firstOrNull()
-            ?: error("受保护资源未声明授权服务器")
+            ?: error("Protected resource does not declare an authorization server")
         val metadata = discoveryClient.discoverAuthorizationServer(issuer)
         val authorizationEndpoint = metadata.authorizationEndpoint
-            ?: error("授权服务器缺少 authorization_endpoint")
+            ?: error("Authorization server missing authorization_endpoint")
         val tokenEndpoint = metadata.tokenEndpoint
-            ?: error("授权服务器缺少 token_endpoint")
+            ?: error("Authorization server missing token_endpoint")
         val scope = config.commonOptions.oauth?.scope
             ?: protectedResource.scopesSupported?.joinToString(" ")
             ?: metadata.scopesSupported?.joinToString(" ")
@@ -155,7 +149,7 @@ internal class McpOAuthCoordinator(
         try {
             val redirectUri = callbackSession.redirectUri
             check(redirectUri == MCP_OAUTH_REDIRECT_URI) {
-                "OAuth 回调服务器地址不一致: $redirectUri"
+                "OAuth callback server address mismatch: $redirectUri"
             }
             val existing = config.commonOptions.oauth
             val canReuseClient = existing?.redirectUri == redirectUri && !existing.clientId.isNullOrBlank()
@@ -163,11 +157,11 @@ internal class McpOAuthCoordinator(
             var clientSecret = existing?.clientSecret.takeIf { canReuseClient }
             if (clientId.isNullOrBlank()) {
                 val registrationEndpoint = metadata.registrationEndpoint
-                    ?: error("授权服务器不支持动态注册，且未预配置 client_id")
+                    ?: error("Authorization server does not support dynamic registration, and client_id is not preconfigured")
                 val registration = oauthClient.registerClient(
                     registrationEndpoint = registrationEndpoint,
                     request = OAuthHttpClient.ClientRegistrationRequest(
-                        clientName = config.commonOptions.name.ifBlank { "RikkaHub" },
+                        clientName = config.commonOptions.name.ifBlank { "Friendly" },
                         redirectUris = listOf(redirectUri),
                         scope = scope,
                     ),
@@ -206,9 +200,9 @@ internal class McpOAuthCoordinator(
             }
 
             val callback = callbackSession.awaitCallback(OAUTH_CALLBACK_TIMEOUT)
-                ?: error("OAuth 授权超时")
+                ?: error("OAuth authorization timeout")
             callback.error?.let { error(buildAuthorizationError(it, callback.errorDescription)) }
-            val code = callback.code ?: error("授权失败: 未返回授权码")
+            val code = callback.code ?: error("Authorization failed: No authorization code returned")
 
             val token = oauthClient.exchangeAuthorizationCode(
                 OAuthHttpClient.AuthorizationCodeTokenRequest(
@@ -245,7 +239,7 @@ internal class McpOAuthCoordinator(
     }
 
     private fun buildAuthorizationError(error: String, description: String?): String =
-        if (description.isNullOrBlank()) "授权失败: $error" else "授权失败: $error ($description)"
+        if (description.isNullOrBlank()) "Authorization failed: $error" else "Authorization failed: $error ($description)"
 
     private suspend fun persistOAuthState(configId: Uuid, oauth: McpOAuthState?) {
         settingsStore.update { old ->

@@ -23,7 +23,7 @@ class BuiltinSkillsTest {
 
     @Test
     fun `builtin skills in assets are valid`() {
-        // Android 单元测试的工作目录是模块根目录
+
         val root = File("src/main/assets/builtin_skills")
         val skillDirs = root.listFiles()?.filter { it.isDirectory }.orEmpty()
         assertTrue("No builtin skills found in ${root.absolutePath}", skillDirs.isNotEmpty())
@@ -38,7 +38,7 @@ class BuiltinSkillsTest {
             assertTrue("${dir.name}: description is blank", !description.isNullOrBlank())
             assertTrue("${dir.name}: description exceeds 1024 chars", description!!.length <= 1024)
 
-            // 正文中的相对链接必须指向技能目录内存在的文件（忽略代码块和行内代码中的示例）
+
             val body = SkillFrontmatterParser.extractBody(content)
                 .replace(Regex("(?s)```.*?```"), "")
                 .replace(Regex("`[^`]*`"), "")

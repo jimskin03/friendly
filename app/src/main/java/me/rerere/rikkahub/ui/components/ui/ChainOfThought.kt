@@ -46,21 +46,7 @@ import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
 
-/**
- * 以时间线/步骤卡片的形式展示一组思考过程。
- *
- * 适用于承载推理步骤、工具调用步骤，或两者混合的链式内容。组件支持：
- * - 在步骤较多时自动折叠，仅展示最后若干步
- * - 点击顶部控制条展开/收起全部步骤
- * - 通过 [collapsedAdaptiveWidth] 控制折叠态是否保持自适应宽度
- *
- * @param modifier 外层卡片的修饰符
- * @param cardColors 卡片配色
- * @param steps 需要渲染的步骤数据列表
- * @param collapsedVisibleCount 折叠时保留可见的尾部步骤数
- * @param collapsedAdaptiveWidth 是否在折叠态下使用内容自适应宽度
- * @param content 每个步骤的具体 UI，由 [ChainOfThoughtScope] 提供步骤构建能力
- */
+
 @Composable
 fun <T> ChainOfThought(
     modifier: Modifier = Modifier,
@@ -94,7 +80,7 @@ fun <T> ChainOfThought(
                 steps.takeLast(collapsedVisibleCount)
             }
 
-            // 显示展开/折叠按钮（统一在顶部）
+
             if (canCollapse) {
                 Row(
                     modifier = Modifier
@@ -110,7 +96,7 @@ fun <T> ChainOfThought(
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 左侧：图标区域（24.dp，和步骤图标对齐）
+
                     Box(
                         modifier = Modifier.width(24.dp),
                         contentAlignment = Alignment.Center,
@@ -123,7 +109,7 @@ fun <T> ChainOfThought(
                         )
                     }
 
-                    // 右侧：文字区域（8.dp 间距后开始，和步骤 label 对齐）
+
                     Text(
                         modifier = Modifier.padding(start = 8.dp),
                         text = if (expanded) {
@@ -141,8 +127,8 @@ fun <T> ChainOfThought(
             }
 
             val lineColor = MaterialTheme.colorScheme.outlineVariant
-            // 每个步骤只绘制自己的连线分段并在节点处留空，
-            // 避免使用离屏合成 + BlendMode.Clear（离屏层过大时部分设备会退化，节点区域被清成黑块）。
+
+
             Column {
                 visibleSteps.fastForEachIndexed { index, step ->
                     val isFirst = index == 0
@@ -161,23 +147,9 @@ fun <T> ChainOfThought(
     }
 }
 
-/**
- * [ChainOfThought] 内部使用的步骤渲染作用域。
- *
- * 通过该作用域可以声明单个步骤的图标、标题、附加信息以及可展开内容，
- * 并复用统一的时间线布局与交互行为。
- */
+
 interface ChainOfThoughtScope {
-    /**
-     * 声明一个非受控步骤，由组件内部管理展开/折叠状态。
-     *
-     * @param icon 步骤图标
-     * @param label 步骤标题区域
-     * @param extra 标题右侧的附加信息
-     * @param onClick 自定义点击行为；设置后优先于展开/折叠逻辑
-     * @param collapsedAdaptiveWidth 是否在折叠且内容隐藏时使用自适应宽度
-     * @param content 步骤展开后显示的内容；为 `null` 时步骤不可展开
-     */
+
     @Composable
     fun ChainOfThoughtStep(
         icon: (@Composable () -> Unit)? = null,
@@ -188,21 +160,7 @@ interface ChainOfThoughtScope {
         content: (@Composable () -> Unit)? = null,
     )
 
-    /**
-     * 声明一个受控步骤，由外部传入展开状态。
-     *
-     * 适合需要与外部状态联动的场景，例如“推理中预览 / 完成后收起”。
-     *
-     * @param expanded 当前是否处于展开状态
-     * @param onExpandedChange 展开状态变化回调
-     * @param icon 步骤图标
-     * @param label 步骤标题区域
-     * @param extra 标题右侧的附加信息
-     * @param onClick 自定义点击行为；设置后优先于展开/折叠逻辑
-     * @param collapsedAdaptiveWidth 是否在折叠且内容隐藏时使用自适应宽度
-     * @param contentVisible 是否展示内容区域，可与 [expanded] 解耦
-     * @param content 步骤内容；为 `null` 时步骤不可展开
-     */
+
     @Composable
     fun ControlledChainOfThoughtStep(
         expanded: Boolean,
@@ -294,11 +252,11 @@ private class ChainOfThoughtScopeImpl(
                 }
             ),
         ) {
-            // Label 行：Icon + Label + Extra + 指示器
+
             Row(
                 modifier = Modifier
                     .drawBehind {
-                        // 节点上下的连线分段，节点（20.dp）区域留空
+
                         val x = 12.dp.toPx()
                         val centerY = size.height / 2
                         val gap = 10.dp.toPx()
@@ -388,7 +346,7 @@ private class ChainOfThoughtScopeImpl(
                     extra()
                 }
 
-                // 指示器：onClick 显示向右箭头，content 显示展开/折叠箭头
+
                 if (onClick != null) {
                     Icon(
                         imageVector = HugeIcons.ArrowRight01,
@@ -406,7 +364,7 @@ private class ChainOfThoughtScopeImpl(
                 }
             }
 
-            // 展开内容（缩进对齐 label）
+
             if (contentVisible && hasContent) {
                 Box(
                     modifier = Modifier
@@ -440,7 +398,7 @@ private class ChainOfThoughtScopeImpl(
 @Preview(showBackground = true)
 @Composable
 private fun ChainOfThoughtPreview() {
-    // 定义步骤数据类
+
     data class StepData(
         val label: String,
         val icon: ImageVector?,
@@ -463,7 +421,7 @@ private fun ChainOfThoughtPreview() {
             Column(
                 modifier = Modifier.padding(innerPadding),
             ) {
-                // 受控状态示例
+
                 var controlledExpanded by remember { mutableStateOf(false) }
 
                 ChainOfThought(
@@ -540,7 +498,7 @@ private fun ChainOfThoughtPreview() {
                     } else null
 
                     if (step.controlled) {
-                        // 受控版本
+
                         ControlledChainOfThoughtStep(
                             expanded = controlledExpanded,
                             onExpandedChange = { controlledExpanded = it },
@@ -551,7 +509,7 @@ private fun ChainOfThoughtPreview() {
                             content = contentComposable,
                         )
                     } else {
-                        // 非受控版本
+
                         ChainOfThoughtStep(
                             icon = iconComposable,
                             label = labelComposable,

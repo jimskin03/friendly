@@ -61,7 +61,7 @@ class WebServerManager(
         }
 
         appScope.launch {
-            // 仅本机模式绑定回环地址
+
             val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
             val baseState = WebServerState(
                 port = port,
@@ -81,7 +81,7 @@ class WebServerManager(
                 }.start(wait = false)
 
                 _state.value = baseState.copy(isRunning = true)
-                // 仅局域网模式注册 mDNS
+
                 if (!localhostOnly) {
                     runCatching {
                         nsdRegistrar.register(

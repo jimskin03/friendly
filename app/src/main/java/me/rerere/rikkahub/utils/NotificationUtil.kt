@@ -12,9 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import me.rerere.rikkahub.R
 
-/**
- * 通知构建器的配置 DSL
- */
+
 class NotificationConfig {
     var title: String = ""
     var content: String = ""
@@ -28,19 +26,17 @@ class NotificationConfig {
     var contentIntent: PendingIntent? = null
     var useBigTextStyle: Boolean = false
 
-    // Live Update 相关
+
     var requestPromotedOngoing: Boolean = false
     var shortCriticalText: String? = null
 
-    // 默认通知效果
+
     var useDefaults: Boolean = false
 }
 
 object NotificationUtil {
 
-    /**
-     * 检查是否有通知权限
-     */
+
     fun hasNotificationPermission(context: Context): Boolean {
         return ActivityCompat.checkSelfPermission(
             context,
@@ -48,15 +44,7 @@ object NotificationUtil {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    /**
-     * 使用 DSL 风格创建并发送通知
-     *
-     * @param context 上下文
-     * @param channelId 通知渠道 ID
-     * @param notificationId 通知 ID
-     * @param config 通知配置 lambda
-     * @return 是否成功发送
-     */
+
     @SuppressLint("MissingPermission")
     fun notify(
         context: Context,
@@ -75,9 +63,7 @@ object NotificationUtil {
         return true
     }
 
-    /**
-     * 构建通知
-     */
+
     fun buildNotification(
         context: Context,
         channelId: String,
@@ -104,45 +90,37 @@ object NotificationUtil {
                 setDefaults(NotificationCompat.DEFAULT_ALL)
             }
 
-            // Android 15+ Live Update 支持
+
             if (config.requestPromotedOngoing && Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 setRequestPromotedOngoing(true)
             }
 
-            // Android 16+ 状态栏 chip 文本
+
             if (config.shortCriticalText != null && Build.VERSION.SDK_INT >= 36) {
                 setShortCriticalText(config.shortCriticalText!!)
             }
         }
     }
 
-    /**
-     * 取消通知
-     */
+
     fun cancel(context: Context, notificationId: Int) {
         NotificationManagerCompat.from(context).cancel(notificationId)
     }
 
-    /**
-     * 取消所有通知
-     */
+
     fun cancelAll(context: Context) {
         NotificationManagerCompat.from(context).cancelAll()
     }
 }
 
-/**
- * Context 扩展函数，简化通知发送
- */
+
 fun Context.sendNotification(
     channelId: String,
     notificationId: Int,
     config: NotificationConfig.() -> Unit
 ): Boolean = NotificationUtil.notify(this, channelId, notificationId, config)
 
-/**
- * Context 扩展函数，取消通知
- */
+
 fun Context.cancelNotification(notificationId: Int) {
     NotificationUtil.cancel(this, notificationId)
 }

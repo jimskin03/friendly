@@ -36,9 +36,7 @@ class FolderRepository(
         folderDAO.rename(id.toString(), name)
     }
 
-    /**
-     * 删除文件夹，先把归属该文件夹的会话 folder_id 清空，再删除文件夹本身（不影响会话）。
-     */
+
     suspend fun deleteFolder(id: Uuid) {
         conversationDAO.clearFolder(id.toString())
         folderDAO.deleteById(id.toString())

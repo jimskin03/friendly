@@ -28,9 +28,7 @@ import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.toFixed
 import java.time.Duration
 
-/**
- * 显示消息的技术统计信息（如 token 使用量）
- */
+
 @Composable
 fun ChatMessageNerdLine(
     message: UIMessage,

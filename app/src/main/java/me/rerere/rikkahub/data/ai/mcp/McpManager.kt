@@ -33,12 +33,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.io.encoding.Base64
 import kotlin.uuid.Uuid
 
-/**
- * MCP 子系统的公共入口。
- *
- * 这里仅协调配置、OAuth、连接注册表与 UI 内容转换；单个服务器的连接状态机由
- * [McpSessionRegistry] 管理，OAuth 协议细节由 [McpOAuthCoordinator] 管理。
- */
+
 class McpManager(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,

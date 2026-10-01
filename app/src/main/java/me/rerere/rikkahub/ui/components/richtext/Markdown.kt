@@ -127,32 +127,32 @@ private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.D
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
 private val LATEX_BLOCK_LINE_BREAK_REGEX = Regex("""[ \t]*\r?\n[ \t]*""")
 
-// 预处理markdown内容
+
 private fun preProcess(content: String): String {
-    // 先找出所有代码块的位置
+
     val codeBlocks = mutableListOf<IntRange>()
     CODE_BLOCK_REGEX.findAll(content).forEach { match ->
         codeBlocks.add(match.range)
     }
 
-    // 检查位置是否在代码块内
+
     fun isInCodeBlock(position: Int): Boolean {
         return codeBlocks.any { range -> position in range }
     }
 
-    // 替换行内公式 \( ... \) 到 $ ... $，但跳过代码块内的内容
+
     var result = INLINE_LATEX_REGEX.replace(content) { matchResult ->
         if (isInCodeBlock(matchResult.range.first)) {
-            matchResult.value // 保持原样
+            matchResult.value
         } else {
             "$" + matchResult.groupValues[1] + "$"
         }
     }
 
-    // 替换块级公式 \[ ... \] 到 $$ ... $$，但跳过代码块内的内容
+
     result = BLOCK_LATEX_REGEX.replace(result) { matchResult ->
         if (isInCodeBlock(matchResult.range.first)) {
-            matchResult.value // 保持原样
+            matchResult.value
         } else {
             val formula = matchResult.groupValues[1]
                 .trim()
@@ -239,8 +239,7 @@ fun MarkdownBlock(
 ) {
     var (data, setData) = remember { mutableStateOf(parseMarkdown(content)) }
 
-    // 监听内容变化，重新解析AST树
-    // 这里在后台线程解析AST树, 防止频繁更新的时候掉帧
+
     val updatedContent by rememberUpdatedState(content)
     LaunchedEffect(Unit) {
         snapshotFlow { updatedContent }
@@ -345,7 +344,7 @@ private fun MarkdownNode(
     listLevel: Int = 0
 ) {
     when (node.type) {
-        // 文件根节点
+
         MarkdownElementTypes.MARKDOWN_FILE -> {
             node.children.fastForEach { child ->
                 MarkdownNode(
@@ -354,14 +353,14 @@ private fun MarkdownNode(
             }
         }
 
-        // 段落
+
         MarkdownElementTypes.PARAGRAPH -> {
             Paragraph(
                 node = node, content = content, modifier = modifier, onClickCitation = onClickCitation
             )
         }
 
-        // 标题
+
         MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
             val style = HeaderStyle.fromMarkdownType(
                 type = node.type,
@@ -385,7 +384,7 @@ private fun MarkdownNode(
             }
         }
 
-        // 列表
+
         MarkdownElementTypes.UNORDERED_LIST -> {
             UnorderedListNode(
                 node = node,
@@ -431,7 +430,7 @@ private fun MarkdownNode(
             }
         }
 
-        // 引用块
+
         MarkdownElementTypes.BLOCK_QUOTE -> {
             ProvideTextStyle(LocalTextStyle.current.copy(fontStyle = FontStyle.Italic)) {
                 val borderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
@@ -457,7 +456,7 @@ private fun MarkdownNode(
             }
         }
 
-        // 链接
+
         MarkdownElementTypes.INLINE_LINK -> {
             val linkText = node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)
                 ?.findChildOfTypeRecursive(GFMTokenTypes.GFM_AUTOLINK, MarkdownTokenTypes.TEXT)?.getTextInNode(content)
@@ -475,7 +474,7 @@ private fun MarkdownNode(
                 })
         }
 
-        // 加粗和斜体
+
         MarkdownElementTypes.EMPH -> {
             ProvideTextStyle(TextStyle(fontStyle = FontStyle.Italic)) {
                 node.children.fastForEach { child ->
@@ -496,7 +495,7 @@ private fun MarkdownNode(
             }
         }
 
-        // GFM 特殊元素
+
         GFMElementTypes.STRIKETHROUGH -> {
             Text(
                 text = node.getTextInNode(content), textDecoration = TextDecoration.LineThrough, modifier = modifier
@@ -515,7 +514,7 @@ private fun MarkdownNode(
             )
         }
 
-        // 图片
+
         MarkdownElementTypes.IMAGE -> {
             val altText = node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)?.getTextInNode(content) ?: ""
             val imageUrl =
@@ -523,7 +522,7 @@ private fun MarkdownNode(
             Column(
                 modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 这里可以使用Coil等图片加载库加载图片
+
                 ZoomableAsyncImage(
                     model = imageUrl,
                     contentDescription = altText,
@@ -591,10 +590,10 @@ private fun MarkdownNode(
             )
         }
 
-        // 代码块
+
         MarkdownElementTypes.CODE_FENCE -> {
-            // 这里不能直接取CODE_FENCE_CONTENT的内容，因为首行indent没有包含在内
-            // 因此，需要往上找到最后一个EOL元素，用它来作为代码块的起始offset
+
+
             val contentStartIndex = node.children.indexOfFirst { it.type == MarkdownTokenTypes.CODE_FENCE_CONTENT }
             if (contentStartIndex == -1) return
             val eolElement =
@@ -635,9 +634,9 @@ private fun MarkdownNode(
             )
         }
 
-        // 其他类型的节点，递归处理子节点
+
         else -> {
-            // 递归处理其他节点的子节点
+
             node.children.fastForEach { child ->
                 MarkdownNode(
                     node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
@@ -710,9 +709,9 @@ private fun ListItemNode(
     node: ASTNode, content: String, bulletText: String, onClickCitation: (String) -> Unit = {}, level: Int
 ) {
     Column {
-        // 分离列表项的直接内容和嵌套列表
+
         val (directContent, nestedLists) = separateContentAndLists(node)
-        // directContent 渲染处理
+
         if (directContent.isNotEmpty()) {
             Row {
                 Text(
@@ -735,16 +734,16 @@ private fun ListItemNode(
                 }
             }
         }
-        // nestedLists 渲染处理
+
         nestedLists.fastForEach { nestedList ->
             MarkdownNode(
-                node = nestedList, content = content, onClickCitation = onClickCitation, listLevel = level + 1 // 增加层级
+                node = nestedList, content = content, onClickCitation = onClickCitation, listLevel = level + 1
             )
         }
     }
 }
 
-// 分离列表项的直接内容和嵌套列表
+
 private fun separateContentAndLists(listItemNode: ASTNode): Pair<List<ASTNode>, List<ASTNode>> {
     val directContent = mutableListOf<ASTNode>()
     val nestedLists = mutableListOf<ASTNode>()
@@ -833,27 +832,27 @@ private fun Paragraph(
 
 @Composable
 private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modifier) {
-    // 提取表格的标题行和数据行
+
     val headerNode = node.children.find { it.type == GFMElementTypes.HEADER }
     val rowNodes = node.children.filter { it.type == GFMElementTypes.ROW }
 
-    // 计算列数（从标题行获取）
+
     val columnCount = headerNode?.children?.count { it.type == GFMTokenTypes.CELL } ?: 0
 
-    // 检查是否有足够的列来显示表格
+
     if (columnCount == 0) return
 
-    // 提取表头单元格文本
+
     val headerCells =
         headerNode?.children?.filter { it.type == GFMTokenTypes.CELL }?.map { it.getTextInNode(content).trim() }
             ?: emptyList()
 
-    // 提取所有行的数据
+
     val rows = rowNodes.map { rowNode ->
         rowNode.children.filter { it.type == GFMTokenTypes.CELL }.map { it.getTextInNode(content).trim() }
     }
 
-    // 创建表头composable列表
+
     val headers = List(columnCount) { columnIndex ->
         @Composable {
             MarkdownBlock(
@@ -862,7 +861,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         }
     }
 
-    // 创建行数据composable列表
+
     val rowComposables = rows.map { rowData ->
         List(columnCount) { columnIndex ->
             @Composable {
@@ -877,7 +876,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // 表格原始markdown文本（用于复制）和CSV内容（用于下载）
+
     val tableMarkdown = remember(node, content) { node.getTextInNode(content).trim() }
     val tableCsv = remember(headerCells, rows) { buildTableCsv(headerCells, rows) }
 
@@ -897,7 +896,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         }
     }
 
-    // 渲染表格卡片（工具栏 + 表格）
+
     Column(
         modifier = modifier
             .padding(vertical = 8.dp)
@@ -913,7 +912,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "表格",
+                text = "Table",
                 fontSize = 12.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -971,7 +970,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
     }
 }
 
-// 构建CSV内容，对包含逗号/引号/换行的字段进行转义
+
 private fun buildTableCsv(headerCells: List<String>, rows: List<List<String>>): String {
     fun escape(field: String): String {
         return if (field.any { it == ',' || it == '"' || it == '\n' }) {
@@ -1085,7 +1084,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             val linkText = node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)?.getTextInNode(content)
                 ?.trim { it == '[' || it == ']' } ?: linkDest
             if (linkText.startsWith("citation,")) {
-                // 如果是引用，则特殊处理
+
                 val domain = linkText.substringAfter("citation,")
                 val id = linkDest
                 if (id.length == 6) {
@@ -1165,8 +1164,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             val formula = node.getTextInNode(content)
             if (enableLatexRendering) {
                 val fontSizePx = with(density) { style.fontSize.toPx() }
-                // 将过长的行内公式按顶层运算符水平拆分为多段，每段最大宽度限制为字号的两倍，
-                // 使其能在文本流中换行，避免单体公式超出可用宽度被挤出屏幕
+
+
                 val drawables = splitLatex(
                     latex = formula,
                     maxWidthPx = fontSizePx * 2,
@@ -1174,7 +1173,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     color = latexColorArgb,
                 )
                 if (drawables.isEmpty()) {
-                    // 拆分失败时回退为单体内联渲染
+
                     appendInlineContent(formula, "[Latex]")
                     val (width, height) = with(density) {
                         assumeLatexSize(
@@ -1196,7 +1195,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     )
                 } else {
                     drawables.forEachIndexed { index, drawable ->
-                        // 段间插入零宽空格，提供换行点
+
                         if (index > 0) append('\u200B')
                         val key = "latex:${formula.hashCode()}:$index"
                         appendInlineContent(key, "[Latex]")
@@ -1216,7 +1215,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     }
                 }
             } else {
-                // 禁用 LaTeX 渲染时，以等宽字体显示原始公式
+
                 withStyle(
                     SpanStyle(
                         fontFamily = FontFamily.Monospace,
@@ -1228,7 +1227,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             }
         }
 
-        // 其他类型继续递归处理
+
         else -> {
             node.children.fastForEach {
                 appendMarkdownNodeContent(
@@ -1302,13 +1301,13 @@ private fun List<ASTNode>.trim(type: IElementType, size: Int): List<ASTNode> {
     if (this.isEmpty() || size <= 0) return this
     var start = 0
     var end = this.size
-    // 从头裁剪
+
     var trimmed = 0
     while (start < end && trimmed < size && this[start].type == type) {
         start++
         trimmed++
     }
-    // 从尾裁剪
+
     trimmed = 0
     while (end > start && trimmed < size && this[end - 1].type == type) {
         end--

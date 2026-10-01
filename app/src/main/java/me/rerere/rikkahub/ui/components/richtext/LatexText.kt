@@ -96,11 +96,7 @@ fun getLatexDrawable(
     }.getOrNull()
 }
 
-/**
- * 将一条行内公式按顶层运算符水平拆分为多段 Drawable，
- * 以便在文本流中换行，避免单体公式过长被挤出屏幕。
- * 拆分失败时返回空列表，调用方需自行回退。
- */
+
 fun splitLatex(
     latex: String,
     maxWidthPx: Float,

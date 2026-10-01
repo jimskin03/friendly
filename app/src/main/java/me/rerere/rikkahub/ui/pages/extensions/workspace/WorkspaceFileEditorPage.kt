@@ -40,11 +40,7 @@ import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.compose.koinInject
 
-/**
- * 工作区文本文件编辑/预览页.
- *
- * FILES 区文件可编辑并保存; LINUX (rootfs) 区文件仅只读预览 (readOnly), 避免误改系统文件.
- */
+
 @Composable
 fun WorkspaceFileEditorPage(
     id: String,
@@ -60,8 +56,7 @@ fun WorkspaceFileEditorPage(
     val supportsPreview = extension in setOf("html", "htm", "svg")
     var showPreview by rememberSaveable(id, area, path) { mutableStateOf(supportsPreview) }
 
-    // 不能用 rememberTextFieldState: 它会把全文存进 saved state Bundle, 大文件切后台时触发 TransactionTooLargeException (#1953).
-    // 内容本就由下方 LaunchedEffect 从磁盘加载, 无需 saveable.
+
     val textState = remember(id, area, path) { TextFieldState() }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
@@ -76,7 +71,7 @@ fun WorkspaceFileEditorPage(
             textState.setTextAndPlaceCursorAtEnd(content)
             loading = false
         }.onFailure {
-            loadError = it.message ?: "读取文件失败"
+            loadError = it.message ?: "Failed to read file"
             loading = false
         }
     }
@@ -95,7 +90,7 @@ fun WorkspaceFileEditorPage(
                 actions = {
                     if (supportsPreview && !loading && loadError == null) {
                         TextButton(onClick = { showPreview = !showPreview }) {
-                            Text(if (showPreview) "源码" else "预览")
+                            Text(if (showPreview) "Source" else "Preview")
                         }
                     }
                     if (editable && !loading && loadError == null) {
@@ -112,9 +107,9 @@ fun WorkspaceFileEditorPage(
                                             overwrite = true,
                                         )
                                     }.onSuccess {
-                                        toaster.show("已保存", type = ToastType.Success)
+                                        toaster.show("Saved", type = ToastType.Success)
                                     }.onFailure {
-                                        toaster.show(it.message ?: "保存失败", type = ToastType.Error)
+                                        toaster.show(it.message ?: "Failed to save", type = ToastType.Error)
                                     }
                                     saving = false
                                 }

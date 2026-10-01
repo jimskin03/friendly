@@ -2,6 +2,7 @@ package me.rerere.workspace
 
 import com.sun.net.httpserver.HttpServer
 import org.junit.Assert.*
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -10,6 +11,9 @@ import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
 class ExampleUnitTest {
+    private fun assumeNonWindows() {
+        assumeFalse(System.getProperty("os.name")?.lowercase()?.contains("win") == true)
+    }
     @Test
     fun fileOperationsWorkInsideWorkspaceRoot() {
         val root = Files.createTempDirectory("workspace-test").toFile()
@@ -88,6 +92,7 @@ class ExampleUnitTest {
 
     @Test
     fun commandRunsInsideWorkspaceFilesDirectory() {
+        assumeNonWindows()
         val baseDir = Files.createTempDirectory("workspace-command-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"
@@ -102,6 +107,7 @@ class ExampleUnitTest {
 
     @Test
     fun commandReceivesStdin() {
+        assumeNonWindows()
         val baseDir = Files.createTempDirectory("workspace-stdin-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"
@@ -119,12 +125,13 @@ class ExampleUnitTest {
 
     @Test
     fun commandWithoutStdinGetsImmediateEof() {
+        assumeNonWindows()
         val baseDir = Files.createTempDirectory("workspace-stdin-eof-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"
         manager.ensureWorkspace(root)
 
-        // 不传 stdin 时子进程的 stdin 应立即 EOF; cat 会直接退出而不是等管道输入
+
         val result = manager.executeCommand(
             root = root,
             command = "cat",
@@ -154,6 +161,7 @@ class ExampleUnitTest {
 
     @Test
     fun commandOutputIsTruncatedAtLimit() {
+        assumeNonWindows()
         val baseDir = Files.createTempDirectory("workspace-truncate-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"

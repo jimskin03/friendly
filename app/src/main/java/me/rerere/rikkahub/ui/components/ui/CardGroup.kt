@@ -196,15 +196,15 @@ private fun CardGroupPreview() {
                 title = { Text("About") },
             ) {
                 item(
-                    headlineContent = { Text("第一项") },
+                    headlineContent = { Text("Item 1") },
                 )
                 item(
-                    headlineContent = { Text("第二项") },
-                    supportingContent = { Text("支持文本") },
+                    headlineContent = { Text("Item 2") },
+                    supportingContent = { Text("Supporting text") },
                 )
                 item(
                     onClick = {},
-                    headlineContent = { Text("第三项") },
+                    headlineContent = { Text("Item 3") },
                     trailingContent = { Text("→") },
                 )
             }

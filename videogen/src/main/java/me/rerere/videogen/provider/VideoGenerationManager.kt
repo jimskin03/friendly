@@ -29,9 +29,7 @@ class VideoGenerationManager(
         taskId: String,
     ): Result<VideoGenerationTask> = provider(setting).queryUnsafe(setting, taskId)
 
-    /**
-     * 轮询并依次发出服务端状态。Flow 被取消时，轮询也会立即停止。
-     */
+
     fun watch(
         setting: VideoGenerationProviderSetting,
         taskId: String,

@@ -57,7 +57,7 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
 
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
-            // 构建查询URL
+
             val baseUrl = serviceOptions.url.trimEnd('/')
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val url = "$baseUrl/search?q=$encodedQuery&format=json"
@@ -73,12 +73,12 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
                 }
                 .build()
 
-            // 发送请求
+
             val request = Request.Builder()
                 .url(url)
                 .get()
                 .apply {
-                    // 添加HTTP Basic Auth支持
+
                     if (serviceOptions.username.isNotBlank() && serviceOptions.password.isNotBlank()) {
                         header("Authorization", Credentials.basic(serviceOptions.username, serviceOptions.password))
                     }
@@ -98,7 +98,7 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
                     error("Failed to decode SearXNG response: ${it.message}")
                 }.getOrThrow()
 
-                // 转换为标准格式，取前 N 个结果
+
                 val items = searchResponse.results
                     .take(commonOptions.resultSize)
                     .map { result ->

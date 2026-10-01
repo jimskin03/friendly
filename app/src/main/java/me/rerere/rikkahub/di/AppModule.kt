@@ -66,8 +66,7 @@ val appModule = module {
         WorkspaceTerminalSessionManager(get(), get())
     }
 
-    // 生成通知与业务解耦：ChatService 只发事件，通知由这里消费；
-    // createdAtStart 保证进程启动即订阅，否则后台生成的事件会因无订阅者而丢失
+
     single(createdAtStart = true) {
         ChatNotificationManager(
             context = get(),
@@ -98,7 +97,6 @@ val appModule = module {
             conversationRepo = get(),
             memoryRepository = get(),
             generationLoop = get(),
-            translationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
             chatToolFactory = get(),

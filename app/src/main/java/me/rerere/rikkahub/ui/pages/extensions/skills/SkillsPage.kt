@@ -334,7 +334,7 @@ private fun SkillCard(
                     )
                 }
             }
-            // 内置技能只读，不提供删除
+
             if (!skill.builtin) {
                 ItemActionMenu(
                     actions = listOf(
@@ -429,7 +429,7 @@ private fun AddSkillDialog(
                 label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
                 placeholder = {
                     Text(
-                        "---\nname: my-skill\ndescription: \"...\"\n---\n\n指令内容...",
+                        "---\nname: my-skill\ndescription: \"...\"\n---\n\nSkill prompt instructions...",
                         fontFamily = FontFamily.Monospace,
                     )
                 },

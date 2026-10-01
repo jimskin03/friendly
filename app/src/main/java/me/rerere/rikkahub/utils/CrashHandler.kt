@@ -45,6 +45,6 @@ object CrashHandler {
             .edit(commit = true) {
                 putBoolean(KEY_CRASHED, true)
                 putString(KEY_STACKTRACE, stackTrace)
-            } // commit() 同步写入，确保崩溃前写完
+            }
     }
 }

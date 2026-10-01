@@ -19,10 +19,10 @@ class PreferenceStoreV1Migration : DataMigration<Preferences> {
     override suspend fun migrate(currentData: Preferences): Preferences {
         val prefs = currentData.toMutablePreferences()
 
-        // 清理老的没有设置@SerialName的字段
+
         prefs[SettingsStore.MCP_SERVERS] = migrateMcpServersJson(prefs[SettingsStore.MCP_SERVERS] ?: "[]")
 
-        // 更新版本
+
         prefs[SettingsStore.VERSION] = 1
 
         return prefs.toPreferences()

@@ -34,7 +34,7 @@ class DebugVM(
     private val _conversationCount = MutableStateFlow<Int?>(null)
     val conversationCount: StateFlow<Int?> = _conversationCount.asStateFlow()
 
-    // 聊天记录中引用的助手 ID -> 对话数
+
     private val _conversationAssistants = MutableStateFlow<Map<Uuid, Int>?>(null)
     val conversationAssistants: StateFlow<Map<Uuid, Int>?> = _conversationAssistants.asStateFlow()
 
@@ -55,10 +55,7 @@ class DebugVM(
         }
     }
 
-    /**
-     * 为聊天记录中引用、但设置里已不存在的助手 ID 创建占位助手，使这些聊天记录重新可见
-     * @return 恢复的助手数量, settings 未加载时返回 null
-     */
+
     suspend fun recoverAssistantsFromConversations(): Int? {
         val settings = settingsStore.settingsFlow.value
         if (settings.init) return null
@@ -71,7 +68,7 @@ class DebugVM(
             .sortedByDescending { it.value }
         if (missing.isEmpty()) return 0
         val recovered = missing.mapIndexed { index, (id, _) ->
-            Assistant(id = id, name = "恢复的助手 ${index + 1}")
+            Assistant(id = id, name = "Restored Assistant ${index + 1}")
         }
         settingsStore.update(settings.copy(assistants = settings.assistants + recovered))
         return recovered.size
@@ -83,24 +80,21 @@ class DebugVM(
         }
     }
 
-    /**
-     * 创建一个超大的对话用于测试 CursorWindow 限制
-     * @param sizeMB 目标大小（MB）
-     */
+
     fun createOversizedConversation(sizeMB: Int = 3) {
         viewModelScope.launch {
             val targetSize = sizeMB * 1024 * 1024
             val messageNodes = mutableListOf<MessageNode>()
             var currentSize = 0
 
-            // 生成大量消息直到达到目标大小
+
             var index = 0
             while (currentSize < targetSize) {
-                // 生成一个包含大量文本的消息（约 100KB 每条）
+
                 val largeText = buildString {
                     repeat(100) {
-                        append("这是一段很长的测试文本，用于测试 CursorWindow 的大小限制。")
-                        append("Row too big to fit into CursorWindow 错误通常发生在单行数据超过 2MB 时。")
+                        append("This is a long test text used to test CursorWindow size limits.")
+                        append("Row too big to fit into CursorWindow error usually occurs when single row exceeds 2MB.")
                         append("Lorem ipsum dolor sit amet, consectetur adipiscing elit. ")
                         append("Index: $index, Block: $it. ")
                     }
@@ -115,21 +109,21 @@ class DebugVM(
                 val assistantMessage = UIMessage(
                     id = Uuid.random(),
                     role = MessageRole.ASSISTANT,
-                    parts = listOf(UIMessagePart.Text("回复: $largeText")),
+                    parts = listOf(UIMessagePart.Text("Reply: $largeText")),
                     createdAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()),
                 )
 
                 messageNodes.add(MessageNode.of(userMessage))
                 messageNodes.add(MessageNode.of(assistantMessage))
 
-                currentSize += largeText.length * 2 * 2 // 大约估算
+                currentSize += largeText.length * 2 * 2
                 index++
             }
 
             val conversation = Conversation(
                 id = Uuid.random(),
                 assistantId = DEFAULT_ASSISTANT_ID,
-                title = "超大对话测试 (${sizeMB}MB)",
+                title = "Large conversation test (${sizeMB}MB)",
                 messageNodes = messageNodes,
             )
 
@@ -155,7 +149,7 @@ class DebugVM(
             val conversation = Conversation(
                 id = Uuid.random(),
                 assistantId = DEFAULT_ASSISTANT_ID,
-                title = "${messageCount}条消息测试",
+                title = "${messageCount} messages test",
                 messageNodes = messageNodes,
             )
 
@@ -165,11 +159,11 @@ class DebugVM(
 
     private fun randomMessageText(index: Int, role: MessageRole): String {
         val fragments = listOf(
-            "快速", "随机", "消息", "样例", "用于", "测试", "列表", "渲染", "滚动", "性能",
-            "聊天", "对话", "内容", "结构", "验证", "分页", "顺序", "稳定", "系统",
+            "quick", "random", "message", "sample", "for", "test", "list", "render", "scroll", "performance",
+            "chat", "conversation", "content", "structure", "verify", "pagination", "order", "stable", "system",
         )
         val wordCount = Random.nextInt(6, 14)
-        val prefix = if (role == MessageRole.USER) "用户" else "助手"
+        val prefix = if (role == MessageRole.USER) "User" else "Assistant"
         val body = List(wordCount) { fragments.random() }.joinToString(" ")
         return "$prefix#${index + 1}: $body"
     }

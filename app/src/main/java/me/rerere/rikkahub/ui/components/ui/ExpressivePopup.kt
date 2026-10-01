@@ -32,20 +32,13 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 
-/** Popup 相对锚点优先出现的一侧, 空间不足时自动翻转 */
+
 enum class ExpressivePopupPlacement { Above, Below }
 
-/** Popup 与锚点在水平方向上的对齐方式, Start/End 跟随布局方向 */
+
 enum class ExpressivePopupAlignment { Start, Center, End }
 
-/**
- * MD3 Expressive 风格的锚定 Popup
- *
- * 默认外观对齐 Expressive 分组菜单 (standalone group) 的 tokens。
- * 放在锚点组件的同一父布局中 (通常用 Box 包裹锚点), 以父布局边界作为锚点定位。
- * 进入时从锚点方向以空间弹簧缩放展开, 退出时使用无回弹的效果弹簧收起,
- * 退出动画结束前 Popup 会一直保持存活。
- */
+
 @Composable
 fun ExpressivePopup(
     expanded: Boolean,
@@ -99,9 +92,7 @@ fun ExpressivePopup(
             label = "alpha",
         ) { if (it) 1f else 0f }
 
-        // 结构同官方 DropdownMenuContent, 额外设置 outsets:
-        // alpha < 1 时本层会走离屏合成, 离屏缓冲默认只有本层大小, 会把 Surface 投在边界外的阴影裁掉,
-        // 导致动画结束 (alpha 回到 1) 的瞬间阴影突然出现
+
         Surface(
             modifier = modifier.graphicsLayer {
                 scaleX = scale
@@ -160,7 +151,7 @@ private class ExpressivePopupPositionProvider(
         val maxY = (windowSize.height - height - windowMargin).coerceAtLeast(windowMargin)
         val y = (if (showAbove) aboveY else belowY).coerceIn(windowMargin, maxY)
 
-        // 从锚点中心所在的一侧展开
+
         val pivotX = if (width > 0) {
             ((anchorBounds.center.x - x).toFloat() / width).coerceIn(0f, 1f)
         } else {

@@ -1,9 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
-/**
- * workspace_edit_file 使用的文本替换器, 按 [WorkspaceEditReplacers] 顺序逐级尝试,
- * 前一级找不到任何匹配时才会降级到下一级更宽松的匹配策略。
- */
+
 interface TextReplacer {
     val name: String
 
@@ -29,10 +26,7 @@ val WorkspaceEditReplacers: List<TextReplacer> = listOf(
     BlockAnchorReplacer,
 )
 
-/**
- * 逐级尝试 [replacers], 使用第一个产生匹配的替换器。
- * 匹配多处且 [replaceAll] 为 false 时抛出 [IllegalArgumentException], 而不是猜测替换哪一处。
- */
+
 fun replaceText(
     content: String,
     oldText: String,
@@ -72,9 +66,7 @@ fun replaceText(
     )
 }
 
-/**
- * 第一级: 精确匹配, 非重叠计数, 与 String.replace 语义一致。
- */
+
 object ExactReplacer : TextReplacer {
     override val name: String = "exact"
 
@@ -89,21 +81,18 @@ object ExactReplacer : TextReplacer {
     }
 }
 
-/**
- * 行级窗口匹配的公共骨架: 把 content 与 old_text 拆成行, 滑动比较窗口,
- * 命中后以匹配处首行的真实缩进重排 new_text。
- */
+
 abstract class LineWindowReplacer : TextReplacer {
 
     protected abstract fun windowMatches(windowTrimmed: List<String>, oldTrimmed: List<String>): Boolean
 
-    /** old_text 全为空白行时禁用宽松匹配, 避免命中任意空白区域 */
+
     protected open fun isApplicable(oldTrimmed: List<String>): Boolean =
         oldTrimmed.any { it.isNotEmpty() }
 
     override fun findMatches(content: String, oldText: String, newText: String): List<TextReplacer.Match> {
         val rawOldLines = oldText.lines()
-        // "foo\n" 语义上是一行, 去掉行尾换行产生的空尾行, new_text 同步处理保持对称
+
         val dropTrailingEmpty = rawOldLines.size > 1 && rawOldLines.last().isEmpty()
         val oldLines = if (dropTrailingEmpty) rawOldLines.dropLast(1) else rawOldLines
         val oldTrimmed = oldLines.map { it.trim() }
@@ -131,9 +120,7 @@ abstract class LineWindowReplacer : TextReplacer {
     }
 }
 
-/**
- * 第二级: 逐行 trim 后比较, 容忍缩进/行尾空白/CRLF 差异。
- */
+
 object LineTrimmedReplacer : LineWindowReplacer() {
     override val name: String = "line_trimmed"
 
@@ -141,9 +128,7 @@ object LineTrimmedReplacer : LineWindowReplacer() {
         windowTrimmed == oldTrimmed
 }
 
-/**
- * 第三级: old_text 至少 3 行时, 仅用首尾行做锚点匹配, 容忍中间行的细微差异。
- */
+
 object BlockAnchorReplacer : LineWindowReplacer() {
     override val name: String = "block_anchor"
 

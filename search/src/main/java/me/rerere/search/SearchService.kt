@@ -45,24 +45,15 @@ interface SearchService<T : SearchServiceOptions> {
         @Suppress("UNCHECKED_CAST")
         fun <T : SearchServiceOptions> getService(options: T): SearchService<T> {
             return when (options) {
+                is SearchServiceOptions.BingLocalOptions -> BingSearchService
                 is SearchServiceOptions.TavilyOptions -> TavilySearchService
                 is SearchServiceOptions.ExaOptions -> ExaSearchService
-                is SearchServiceOptions.ZhipuOptions -> ZhipuSearchService
-                is SearchServiceOptions.DoubaoOptions -> DoubaoSearchService
-                is SearchServiceOptions.BingLocalOptions -> BingSearchService
                 is SearchServiceOptions.SearXNGOptions -> SearXNGService
-                is SearchServiceOptions.LinkUpOptions -> LinkUpService
                 is SearchServiceOptions.BraveOptions -> BraveSearchService
-                is SearchServiceOptions.MetasoOptions -> MetasoSearchService
                 is SearchServiceOptions.OllamaOptions -> OllamaSearchService
                 is SearchServiceOptions.PerplexityOptions -> PerplexitySearchService
                 is SearchServiceOptions.FirecrawlOptions -> FirecrawlSearchService
-                is SearchServiceOptions.JinaOptions -> JinaSearchService
-                is SearchServiceOptions.BochaOptions -> BochaSearchService
-                is SearchServiceOptions.RikkaHubOptions -> RikkaHubSearchService
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
-                is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
-                is SearchServiceOptions.SerperOptions -> SerperSearchService
                 is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
             } as SearchService<T>
         }
@@ -151,23 +142,14 @@ sealed class SearchServiceOptions {
 
         val TYPES = mapOf(
             BingLocalOptions::class to "Bing",
-            RikkaHubOptions::class to "RikkaHub",
-            ZhipuOptions::class to "智谱",
-            DoubaoOptions::class to "豆包",
             TavilyOptions::class to "Tavily",
             ExaOptions::class to "Exa",
             SearXNGOptions::class to "SearXNG",
-            LinkUpOptions::class to "LinkUp",
             BraveOptions::class to "Brave",
-            MetasoOptions::class to "秘塔",
             OllamaOptions::class to "Ollama",
             PerplexityOptions::class to "Perplexity",
             FirecrawlOptions::class to "Firecrawl",
-            JinaOptions::class to "Jina",
-            BochaOptions::class to "博查",
             GrokOptions::class to "Grok",
-            TinyfishOptions::class to "Tinyfish",
-            SerperOptions::class to "Serper",
             CustomJsOptions::class to "Custom JS",
         )
     }
@@ -176,21 +158,6 @@ sealed class SearchServiceOptions {
     @SerialName("bing_local")
     class BingLocalOptions(
         override val id: Uuid = Uuid.random()
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("zhipu")
-    data class ZhipuOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("doubao")
-    data class DoubaoOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-        val mode: DoubaoSearchMode = DoubaoSearchMode.CUSTOM,
     ) : SearchServiceOptions()
 
     @Serializable
@@ -220,23 +187,8 @@ sealed class SearchServiceOptions {
     ) : SearchServiceOptions()
 
     @Serializable
-    @SerialName("linkup")
-    data class LinkUpOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-        val depth: String = "standard",
-    ) : SearchServiceOptions()
-
-    @Serializable
     @SerialName("brave")
     data class BraveOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("metaso")
-    data class MetasoOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()
@@ -265,31 +217,6 @@ sealed class SearchServiceOptions {
     ) : SearchServiceOptions()
 
     @Serializable
-    @SerialName("jina")
-    data class JinaOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-        val searchUrl: String = "https://s.jina.ai/",
-        val scrapeUrl: String = "https://r.jina.ai/",
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("bocha")
-    data class BochaOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-        val summary: Boolean = true,
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("rikkahub")
-    data class RikkaHubOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-        val depth: String = "standard",
-    ) : SearchServiceOptions()
-
-    @Serializable
     @SerialName("grok")
     data class GrokOptions(
         override val id: Uuid = Uuid.random(),
@@ -297,20 +224,6 @@ sealed class SearchServiceOptions {
         val model: String = "grok-4-1-fast-non-reasoning",
         val customUrl: String = "https://api.x.ai/v1/responses",
         val systemPrompt: String = "You are a helpful search assistant. Search the web to find accurate and up-to-date information for the user's query. Provide a comprehensive answer with citations.",
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("tinyfish")
-    data class TinyfishOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
-    ) : SearchServiceOptions()
-
-    @Serializable
-    @SerialName("serper")
-    data class SerperOptions(
-        override val id: Uuid = Uuid.random(),
-        val apiKey: String = "",
     ) : SearchServiceOptions()
 
     @Serializable
@@ -357,15 +270,6 @@ function search(query, resultSize) {
 }"""
         }
     }
-}
-
-@Serializable
-enum class DoubaoSearchMode {
-    @SerialName("global")
-    GLOBAL,
-
-    @SerialName("custom")
-    CUSTOM,
 }
 
 internal suspend fun Call.await(): Response {

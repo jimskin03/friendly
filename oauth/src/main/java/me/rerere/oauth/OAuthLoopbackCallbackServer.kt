@@ -30,12 +30,7 @@ data class OAuthCallback(
     val errorDescription: String?,
 )
 
-/**
- * 临时 OAuth loopback 回调服务器。
- *
- * 服务器只绑定 IPv4 回环地址；首个授权会话打开时启动，最后一个会话关闭时停止。
- * 同一实例可以承载多个并发授权，并通过 state 将回调路由到对应会话。
- */
+
 class OAuthLoopbackCallbackServer(
     private val port: Int = 0,
     callbackPath: String = "/oauth/callback",
@@ -55,18 +50,14 @@ class OAuthLoopbackCallbackServer(
     private var localizedContext: Context? = null
 
     init {
-        require(port in 0..65535) { "非法的 OAuth 回调端口: $port" }
+        require(port in 0..65535) { "Invalid OAuth callback port: $port" }
     }
 
     suspend fun openSession(expectedState: String): OAuthLoopbackCallbackSession {
         return openSession(expectedState, foregroundServiceContext = null)
     }
 
-    /**
-     * 打开由前台服务保活的授权会话。
-     *
-     * 应在应用仍处于用户可见状态时调用；返回时前台服务已经成功启动，可以安全打开浏览器。
-     */
+
     suspend fun openSession(
         context: Context,
         expectedState: String,
@@ -78,12 +69,12 @@ class OAuthLoopbackCallbackServer(
         expectedState: String,
         foregroundServiceContext: Context?,
     ): OAuthLoopbackCallbackSession {
-        require(expectedState.isNotBlank()) { "OAuth state 不能为空" }
+        require(expectedState.isNotBlank()) { "OAuth state cannot be empty" }
         val registration = CallbackRegistration()
         return lifecycleMutex.withLock {
             foregroundServiceContext?.let { localizedContext = it }
             check(callbacks.putIfAbsent(expectedState, registration) == null) {
-                "OAuth state 已存在待处理的授权会话"
+                "OAuth state already has a pending authorization session"
             }
             try {
                 val uri = ensureStarted()
@@ -93,7 +84,7 @@ class OAuthLoopbackCallbackServer(
                             context = foregroundServiceContext,
                             sessionId = expectedState,
                         )
-                    ) { "无法启动 OAuth 回调前台服务" }
+                    ) { "Failed to start OAuth callback foreground service" }
                 }
                 OAuthLoopbackCallbackSession(
                     redirectUri = uri,
@@ -215,10 +206,10 @@ class OAuthLoopbackCallbackServer(
 
     private fun String.requireValidCallbackPath(): String {
         require(startsWith('/') && !startsWith("//")) {
-            "OAuth callbackPath 必须是以单个 / 开头的绝对路径"
+            "OAuth callbackPath must be an absolute path starting with a single /"
         }
         require('?' !in this && '#' !in this) {
-            "OAuth callbackPath 不能包含 query 或 fragment"
+            "OAuth callbackPath cannot contain query or fragment"
         }
         return this
     }
