@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.di
 
+import android.content.Context
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.analytics
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.crashlytics.crashlytics
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
@@ -11,6 +14,7 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
+import me.rerere.rikkahub.utils.AppAnalytics
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
@@ -50,12 +54,22 @@ val appModule = module {
         TTSManager(get())
     }
 
-    single {
+    single<FirebaseCrashlytics> {
+        val context: Context = get()
+        check(FirebaseApp.initializeApp(context) != null) {
+            "Firebase is not configured. Add app/google-services.json."
+        }
         Firebase.crashlytics
     }
 
-    single {
-        Firebase.analytics
+    single<AppAnalytics> {
+        val context: Context = get()
+        if (FirebaseApp.initializeApp(context) == null) {
+            AppAnalytics { }
+        } else {
+            val analytics = Firebase.analytics
+            AppAnalytics { name -> analytics.logEvent(name, null) }
+        }
     }
 
     single {

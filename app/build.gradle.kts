@@ -9,9 +9,22 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.google.services) apply false
+    alias(libs.plugins.firebase.crashlytics) apply false
     alias(libs.plugins.baselineprofile)
+}
+
+// google-services.json is gitignored. Apply Firebase plugins only when a developer adds one.
+val hasGoogleServices = listOf(
+    "google-services.json",
+    "src/google-services.json",
+    "src/debug/google-services.json",
+    "src/release/google-services.json",
+).any { file(it).exists() }
+
+if (hasGoogleServices) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 android {
