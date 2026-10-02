@@ -26,14 +26,14 @@
   <string name="assistant_page_local_tools_phone_automation_title">Phone Automation</string>
   <string name="assistant_page_local_tools_phone_automation_desc">Allow AI to interact with phone UI: tap, swipe, type, launch apps, inspect screen</string>
   <string name="phone_mini_indicator_title">Phone Automation mini indicator</string>
-  <string name="phone_mini_indicator_desc">Show a floating status bubble over other apps when Phone Automation is active and Friendly is in the background. Requires display-over-other-apps permission. Default: on.</string>
+  <string name="phone_mini_indicator_desc">When Phone Automation is active and Friendly is in the background, show an ongoing notification (tap to reopen) and, if overlay permission is granted, a floating status bubble. Default: on.</string>
   <string name="phone_mini_indicator_running">Running</string>
   <string name="phone_mini_indicator_idle">Idle</string>
   <string name="phone_mini_indicator_error">Error</string>
-  <string name="phone_mini_indicator_overlay_title">Allow display over other apps</string>
-  <string name="phone_mini_indicator_overlay_message">Friendly needs permission to show a small Phone Automation status bubble while you use other apps. Tap Continue to open system settings, then enable Friendly.</string>
+  <string name="phone_mini_indicator_overlay_title">Optional: display over other apps</string>
+  <string name="phone_mini_indicator_overlay_message">Optional: allow display over other apps to show a floating Phone Automation status bubble. An ongoing notification still works without this. Tap Continue to open system settings.</string>
   <string name="phone_mini_indicator_overlay_continue">Continue</string>
-  <string name="phone_mini_indicator_overlay_denied">Overlay permission is required for the mini indicator. You can enable it later in system settings.</string>
+  <string name="phone_mini_indicator_overlay_denied">Overlay permission was not granted. The ongoing notification will still show Phone Automation status. You can enable the bubble later in system settings.</string>
     <string name="desktop_action_snap">Snap to Chat</string>
     <string name="desktop_action_stop">Stop Stream</string>
   <string name="desktop_action_reconnect">Reconnect</string>
@@ -457,6 +457,8 @@
   <string name="notification_channel_chat_completed">Chat Completed</string>
   <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
   <string name="notification_channel_web_server">Web Server</string>
+  <string name="notification_channel_phone_automation">Phone Automation</string>
+  <string name="phone_automation_notification_content">Status: %1$s - tap to open Friendly</string>
   <string name="notification_live_update_chip_thinking">Thinking</string>
   <string name="notification_live_update_chip_tool">Tool</string>
   <string name="notification_live_update_chip_writing">Writing</string>
