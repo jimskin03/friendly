@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     novnc_web_root: str = "/usr/share/novnc"
     # localhost | auto | tailscale | cloudflare | cloudflare_quick
     tunnel_mode: str = "auto"
+    # Keep the viewer separate from any Funnel-backed HTTPS listener (usually :443).
+    tailscale_serve_port: int = 8443
     cloudflared_token: str = ""
     cloudflared_config: str = ""
 

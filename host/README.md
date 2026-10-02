@@ -56,6 +56,7 @@ Copy `.env.example` → `.env` if bootstrap did not already. Set a strong `API_T
 | `STREAM_TTL_SECONDS` | `900` | Viewer session TTL (~15 min) |
 | `VNC_PORT` / `NOVNC_PORT` | `5999` / `6099` | Localhost x11vnc / websockify+noVNC |
 | `TUNNEL_MODE` | `auto` | `localhost` / `tailscale` / `cloudflare` / `cloudflare_quick` |
+| `TAILSCALE_SERVE_PORT` | `8443` | Private viewer HTTPS port (`8443` or `10000`; never Funnel-backed `443`) |
 | `STREAM_JWT_SECRET` | (from API_TOKEN) | Viewer JWT signing secret |
 | `MCP_ALLOWED_HOSTS` | (empty) | Extra Host allowlist for MCP DNS-rebinding (Tailscale IP/hostname) |
 
@@ -149,7 +150,7 @@ In Friendly chat, tools appear as `mcp__friendly_desktop__screenshot` etc. (sani
 
 **Idle:** Xvfb + Openbox + Control API/MCP — no viewer URL, no public tunnel.  
 **Open desktop:** `POST /v1/stream/start` → starts **x11vnc** (localhost) + **websockify/noVNC** → returns `viewer_url` + JWT `token` (TTL ~15 min, one session).  
-**Stop:** `POST /v1/stream/stop` → kills our VNC/noVNC processes and resets Tailscale Serve if we provisioned it.
+**Stop:** `POST /v1/stream/stop` → kills our VNC/noVNC processes and removes only the app-owned route on its dedicated Tailscale port; other Serve/Funnel config is preserved.
 
 ### Localhost smoke (this box)
 
@@ -166,11 +167,11 @@ Default ports **5999** (VNC) / **6099** (noVNC) avoid clashing with other lab di
 |---|---|
 | `auto` (default) | Try Tailscale if binary present, else Cloudflare if `cloudflared` present, else **localhost** |
 | `localhost` | Always return `http://127.0.0.1:NOVNC_PORT/vnc.html?...` |
-| `tailscale` | `tailscale serve --bg` when logged in; else localhost + `tunnel.provisioned=false` |
+| `tailscale` | Serve on `TAILSCALE_SERVE_PORT` (default `8443`) using HTTPS, tailnet-only; refuse Funnel or conflicting listeners and leave them untouched |
 | `cloudflare` | Named tunnel via `CLOUDFLARED_TOKEN` / config; else localhost |
 | `cloudflare_quick` | Ephemeral `cloudflared tunnel --url` (parses trycloudflare.com when possible) |
 
-This environment currently has **no** `tailscale` / `cloudflared` — smoke uses localhost.
+The Tailscale viewer uses a dedicated port so it does not replace a Funnel or another service on `:443`. Cleanup removes only the app-owned root route on that port; it never runs `tailscale serve reset`.
 
 ### Friendly Android client notes
 

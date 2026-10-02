@@ -12,6 +12,8 @@ Single concurrent session; TTL defaults to STREAM_TTL_SECONDS (15 min).
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import logging
 import os
 import secrets
@@ -25,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import jwt
 
@@ -120,7 +122,9 @@ def _which_or_raise(name: str) -> str:
 
 
 def _novnc_web_root(settings: Settings) -> Path:
-    configured = Path(getattr(settings, "novnc_web_root", "/usr/share/novnc") or "/usr/share/novnc")
+    configured = Path(
+        getattr(settings, "novnc_web_root", "/usr/share/novnc") or "/usr/share/novnc"
+    )
     if (configured / "vnc.html").is_file():
         return configured
     # Project vendor fallback
@@ -187,7 +191,9 @@ def _build_local_viewer_url(
     settings: Settings,
     token: str,
 ) -> str:
-    host = settings.vnc_bind if settings.vnc_bind not in ("0.0.0.0", "::") else "127.0.0.1"
+    host = (
+        settings.vnc_bind if settings.vnc_bind not in ("0.0.0.0", "::") else "127.0.0.1"
+    )
     if host in ("0.0.0.0", "::"):
         host = "127.0.0.1"
     # Prefer loopback for local URLs
@@ -204,98 +210,441 @@ def _build_local_viewer_url(
     return f"http://{host}:{settings.novnc_port}/vnc.html?{qs}"
 
 
+_TAILSCALE_ROOT_PATH = "/"
+_TAILSCALE_HTTPS_PORTS = {8443, 10000}
+
+
+def _is_canonical_service_id(service_id: Any) -> bool:
+    return (
+        isinstance(service_id, str)
+        and service_id.startswith("svc:")
+        and len(service_id) <= 257
+        and _is_canonical_dns_name(service_id[4:])
+    )
+
+
+def _is_canonical_dns_name(host: str) -> bool:
+    if (
+        not host
+        or len(host) > 253
+        or not host.isascii()
+        or host != host.lower()
+        or host.endswith(".")
+    ):
+        return False
+    if all(char.isdigit() or char == "." for char in host):
+        return False
+    return all(
+        1 <= len(label) <= 63
+        and label[0].isalnum()
+        and label[-1].isalnum()
+        and all(char.isalnum() or char == "-" for char in label)
+        for label in host.split(".")
+    )
+
+
+def _is_canonical_host(host: str) -> bool:
+    if (
+        not host
+        or len(host) > 253
+        or not host.isascii()
+        or host != host.lower()
+        or "%" in host
+    ):
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return _is_canonical_dns_name(host)
+    return str(address) == host
+
+
+def _tailscale_hostport_port(hostport: Any) -> int:
+    if not isinstance(hostport, str) or not hostport:
+        raise TypeError("Tailscale Serve status has an invalid Web hostport")
+    try:
+        parsed = urlsplit(f"//{hostport}")
+        port = parsed.port
+    except ValueError as e:
+        raise TypeError("Tailscale Serve status has a malformed Web hostport") from e
+    port_text = hostport.rsplit(":", 1)[-1]
+    if hostport.startswith("["):
+        closing = hostport.find("]")
+        if closing < 2 or hostport[closing + 1 : closing + 2] != ":":
+            raise TypeError("Tailscale Serve status has a malformed Web hostport")
+        raw_host = hostport[1:closing]
+        bracketed_ipv6 = ":" in raw_host
+    else:
+        raw_host = hostport.rsplit(":", 1)[0]
+        bracketed_ipv6 = False
+        if ":" in raw_host:
+            raise TypeError("Tailscale Serve status has an unbracketed IPv6 host")
+    if hostport.startswith("[") and not bracketed_ipv6:
+        raise TypeError("Tailscale Serve status has a malformed IPv6 hostport")
+    if (
+        not parsed.hostname
+        or raw_host != parsed.hostname
+        or not _is_canonical_host(raw_host)
+        or (hostport.startswith("[") and not bracketed_ipv6)
+        or port is None
+        or port < 1
+        or port_text != str(port)
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise TypeError("Tailscale Serve status has a malformed Web hostport")
+    return port
+
+
+def _tailscale_tcp_port(port_key: Any) -> int:
+    if (
+        not isinstance(port_key, str)
+        or not port_key.isascii()
+        or not port_key.isdigit()
+        or len(port_key) > 5
+    ):
+        raise TypeError("Tailscale Serve status has a malformed TCP port")
+    port = int(port_key)
+    if not 1 <= port <= 65535 or str(port) != port_key:
+        raise TypeError("Tailscale Serve status has a noncanonical TCP port")
+    return port
+
+
+def _tailscale_serve_status() -> dict[str, Any]:
+    result = subprocess.run(
+        ["tailscale", "serve", "status", "--json"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"tailscale serve status exited {result.returncode}")
+    raw_status = result.stdout or ""
+    if not raw_status.strip():
+        raise RuntimeError("tailscale serve status returned empty output")
+    try:
+        status = json.loads(raw_status)
+    except (json.JSONDecodeError, RecursionError) as e:
+        raise RuntimeError(
+            "tailscale serve status returned invalid or deeply nested JSON"
+        ) from e
+    if not isinstance(status, dict):
+        raise TypeError("tailscale serve status returned an invalid document")
+    recognized_fields = {"Services", "TCP", "Web", "AllowFunnel"}
+    if not recognized_fields.intersection(status):
+        raise TypeError("tailscale serve status has no recognized fields")
+    services = status.get("Services", {})
+    if not isinstance(services, dict):
+        raise TypeError("tailscale serve status has invalid Services")
+    service_fields = {"TCP", "Web", "AllowFunnel"}
+    for service_id, service in services.items():
+        if not _is_canonical_service_id(service_id):
+            raise TypeError(
+                f"tailscale serve status has invalid service ID {service_id}"
+            )
+        if not isinstance(service, dict):
+            raise TypeError(f"tailscale serve status has invalid service {service_id}")
+        if service and not service_fields.intersection(service):
+            raise TypeError(
+                f"tailscale serve status has unknown fields for service {service_id}"
+            )
+    scopes = [status, *services.values()]
+    if any(not isinstance(scope, dict) for scope in scopes):
+        raise TypeError("tailscale serve status has an invalid service scope")
+    for scope in scopes:
+        for key in ("Web", "TCP", "AllowFunnel"):
+            if key in scope and not isinstance(scope[key], dict):
+                raise TypeError(f"tailscale serve status has invalid {key}")
+        for hostport in scope.get("Web") or {}:
+            _tailscale_hostport_port(hostport)
+        for port_key in scope.get("TCP") or {}:
+            _tailscale_tcp_port(port_key)
+        for hostport, enabled in (scope.get("AllowFunnel") or {}).items():
+            _tailscale_hostport_port(hostport)
+            if not isinstance(enabled, bool):
+                raise TypeError(
+                    f"tailscale serve status has invalid Funnel flag for {hostport}"
+                )
+    return status
+
+
+def _tailscale_scopes(
+    status: dict[str, Any],
+) -> list[tuple[str | None, dict[str, Any]]]:
+    scopes: list[tuple[str | None, dict[str, Any]]] = [(None, status)]
+    services = status.get("Services") or {}
+    if isinstance(services, dict):
+        for service_id, service in services.items():
+            if isinstance(service, dict):
+                scopes.append((str(service_id), service))
+    return scopes
+
+
+def _tailscale_funnel_enabled(status: dict[str, Any], port: int) -> bool:
+    for _service_id, scope in _tailscale_scopes(status):
+        allowed = scope.get("AllowFunnel") or {}
+        if isinstance(allowed, dict) and any(
+            str(hostport).endswith(f":{port}") and enabled is True
+            for hostport, enabled in allowed.items()
+        ):
+            return True
+    return False
+
+
+def _tailscale_web_handlers(
+    status: dict[str, Any], port: int
+) -> list[tuple[str | None, str, str, str | None]]:
+    handlers = []
+    for service_id, scope in _tailscale_scopes(status):
+        web = scope.get("Web") or {}
+        if not isinstance(web, dict):
+            continue
+        for hostport, service in web.items():
+            if not str(hostport).endswith(f":{port}"):
+                continue
+            if not isinstance(service, dict):
+                handlers.append((service_id, str(hostport), None, None))
+                continue
+            routes = service.get("Handlers")
+            if not isinstance(routes, dict) or not routes:
+                handlers.append((service_id, str(hostport), None, None))
+                continue
+            for path, handler in routes.items():
+                proxy = handler.get("Proxy") if isinstance(handler, dict) else None
+                handlers.append((service_id, str(hostport), str(path), proxy))
+    return handlers
+
+
+def _tailscale_root_routes(
+    status: dict[str, Any], port: int
+) -> list[tuple[str | None, str, str | None]]:
+    return [
+        (service_id, hostport, proxy)
+        for service_id, hostport, path, proxy in _tailscale_web_handlers(status, port)
+        if path == _TAILSCALE_ROOT_PATH
+    ]
+
+
+def _tailscale_tcp_scopes(status: dict[str, Any], port: int) -> list[str | None]:
+    return [
+        service_id
+        for service_id, scope in _tailscale_scopes(status)
+        if isinstance(scope.get("TCP"), dict) and str(port) in scope["TCP"]
+    ]
+
+
 def _try_tailscale_serve(local_http: str, settings: Settings) -> dict[str, Any]:
-    """Attempt Tailscale Serve. Never invents a URL if serve fails."""
+    """Serve noVNC privately on a dedicated Tailscale HTTPS port."""
     if not shutil.which("tailscale"):
         return {
             "mode": "tailscale",
             "provisioned": False,
             "detail": "tailscale binary not found — using localhost viewer URL",
         }
-    # Example: tailscale serve --bg http://127.0.0.1:6099
-    # We only run when explicitly requested; parse status for HTTPS URL.
-    try:
-        # Prefer non-destructive status first
-        st = subprocess.run(
-            ["tailscale", "status", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if st.returncode != 0:
-            return {
-                "mode": "tailscale",
-                "provisioned": False,
-                "detail": f"tailscale not ready (status exit {st.returncode})",
-            }
-    except (OSError, subprocess.TimeoutExpired) as e:
+
+    port = settings.tailscale_serve_port
+    local_target = f"http://127.0.0.1:{settings.novnc_port}"
+    if port not in _TAILSCALE_HTTPS_PORTS:
         return {
             "mode": "tailscale",
             "provisioned": False,
-            "detail": f"tailscale status failed: {e}",
+            "detail": "Tailscale viewer port must be 8443 or 10000 (never the Funnel port 443)",
+            "local_http": local_http,
         }
 
     try:
-        # Serve background on the noVNC port path
-        cmd = [
-            "tailscale",
-            "serve",
-            "--bg",
-            f"http://127.0.0.1:{settings.novnc_port}",
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=False)
-        out = (r.stdout or "") + (r.stderr or "")
-        if r.returncode != 0:
-            return {
-                "mode": "tailscale",
-                "provisioned": False,
-                "detail": f"tailscale serve failed: {out.strip() or r.returncode}",
-                "local_http": local_http,
-            }
-        # Discover serve URL
-        status = subprocess.run(
-            ["tailscale", "serve", "status"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        serve_text = (status.stdout or "").strip()
-        public = None
-        for line in serve_text.splitlines():
-            line = line.strip()
-            if line.startswith("https://") or line.startswith("http://"):
-                public = line.split()[0].rstrip("/")
-                break
-        if not public:
-            # Fallback: MagicDNS name from status JSON would need parsing; keep honest
-            return {
-                "mode": "tailscale",
-                "provisioned": True,
-                "detail": "tailscale serve started; could not parse public URL — use `tailscale serve status`",
-                "serve_status": serve_text[:500],
-                "local_http": local_http,
-            }
-        # Append vnc.html + token query from local
-        token_q = ""
-        if "?" in local_http:
-            token_q = "?" + local_http.split("?", 1)[1]
-        viewer = f"{public}/vnc.html{token_q}"
-        return {
-            "mode": "tailscale",
-            "provisioned": True,
-            "public_base": public,
-            "viewer_url": viewer,
-            "detail": "Tailscale Serve active",
-        }
-    except (OSError, subprocess.TimeoutExpired) as e:
+        before = _tailscale_serve_status()
+    except (OSError, RuntimeError, TypeError, subprocess.TimeoutExpired) as e:
         return {
             "mode": "tailscale",
             "provisioned": False,
-            "detail": f"tailscale serve error: {e}",
+            "detail": f"tailscale serve status failed: {e}",
             "local_http": local_http,
         }
+
+    if _tailscale_funnel_enabled(before, port):
+        return {
+            "mode": "tailscale",
+            "provisioned": False,
+            "detail": f"Funnel is enabled on :{port}; refusing to expose the viewer",
+            "local_http": local_http,
+        }
+
+    web_handlers = _tailscale_web_handlers(before, port)
+    routes = _tailscale_root_routes(before, port)
+    matching_routes = [route for route in routes if route[2] == local_target]
+    existing = matching_routes[0] if len(matching_routes) == 1 else None
+    tcp_scopes = _tailscale_tcp_scopes(before, port)
+    if web_handlers and (
+        existing is None
+        or len(matching_routes) != 1
+        or len(web_handlers) != 1
+        or web_handlers[0]
+        != (existing[0], existing[1], _TAILSCALE_ROOT_PATH, local_target)
+        or any(scope != existing[0] for scope in tcp_scopes)
+    ):
+        return {
+            "mode": "tailscale",
+            "provisioned": False,
+            "detail": f"Tailscale Serve :{port} is already configured for another service",
+            "local_http": local_http,
+        }
+    if not web_handlers and tcp_scopes:
+        return {
+            "mode": "tailscale",
+            "provisioned": False,
+            "detail": f"Tailscale Serve :{port} is already occupied",
+            "local_http": local_http,
+        }
+
+    created = existing is None
+    if created:
+        route = {
+            "mode": "tailscale",
+            "provisioned": True,
+            "serve_port": port,
+            "serve_path": _TAILSCALE_ROOT_PATH,
+            "local_target": local_target,
+        }
+
+        def failed_serve_attempt(detail: str) -> dict[str, Any]:
+            cleanup_ok = _teardown_tunnel(route, settings)
+            cleanup_detail = (
+                "partial route cleanup verified"
+                if cleanup_ok
+                else "route cleanup pending"
+            )
+            return {
+                **route,
+                "provisioned": not cleanup_ok,
+                "detail": f"{detail}; {cleanup_detail}",
+                "local_http": local_http,
+            }
+
+        command = [
+            "tailscale",
+            "serve",
+            f"--https={port}",
+            f"--set-path={_TAILSCALE_ROOT_PATH}",
+            "--bg",
+            local_target,
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return failed_serve_attempt(f"tailscale serve failed: {e}")
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode != 0:
+            return failed_serve_attempt(
+                f"tailscale serve failed: {output.strip() or result.returncode}"
+            )
+        try:
+            after = _tailscale_serve_status()
+        except (OSError, RuntimeError, TypeError, subprocess.TimeoutExpired) as e:
+            return {
+                "mode": "tailscale",
+                "provisioned": True,
+                "serve_port": port,
+                "serve_path": _TAILSCALE_ROOT_PATH,
+                "local_target": local_target,
+                "detail": f"Tailscale Serve started but status verification failed: {e}",
+                "local_http": local_http,
+            }
+        if _tailscale_funnel_enabled(after, port):
+            route = {
+                "mode": "tailscale",
+                "provisioned": True,
+                "serve_port": port,
+                "serve_path": _TAILSCALE_ROOT_PATH,
+                "local_target": local_target,
+            }
+            matches = [
+                item
+                for item in _tailscale_root_routes(after, port)
+                if item[2] == local_target
+            ]
+            if len(matches) == 1:
+                route["serve_service"] = matches[0][0]
+                route["serve_hostport"] = matches[0][1]
+            removed = _teardown_tunnel(route, settings)
+            return {
+                **route,
+                "provisioned": not removed,
+                "detail": (
+                    f"Funnel became enabled on :{port}; viewer route removed"
+                    if removed
+                    else f"Funnel became enabled on :{port}; viewer route cleanup failed"
+                ),
+                "local_http": local_http,
+            }
+        routes = _tailscale_root_routes(after, port)
+        matches = [item for item in routes if item[2] == local_target]
+        if len(matches) != 1:
+            return {
+                "mode": "tailscale",
+                "provisioned": True,
+                "serve_port": port,
+                "serve_path": _TAILSCALE_ROOT_PATH,
+                "local_target": local_target,
+                "detail": f"Tailscale Serve :{port}/ did not verify against {local_target}",
+                "local_http": local_http,
+            }
+        existing = matches[0]
+        handlers = _tailscale_web_handlers(after, port)
+        if handlers != [(existing[0], existing[1], _TAILSCALE_ROOT_PATH, local_target)]:
+            route = {
+                "mode": "tailscale",
+                "provisioned": True,
+                "serve_port": port,
+                "serve_path": _TAILSCALE_ROOT_PATH,
+                "serve_service": existing[0],
+                "serve_hostport": existing[1],
+                "local_target": local_target,
+            }
+            removed = _teardown_tunnel(route, settings)
+            return {
+                **route,
+                "provisioned": not removed,
+                "detail": f"Unexpected Tailscale Serve handlers on :{port}; owned route cleanup "
+                f"{'verified' if removed else 'pending'}",
+                "local_http": local_http,
+            }
+
+    if existing is None:
+        return {
+            "mode": "tailscale",
+            "provisioned": True,
+            "serve_port": port,
+            "serve_path": _TAILSCALE_ROOT_PATH,
+            "local_target": local_target,
+            "detail": f"Tailscale Serve :{port}/ route could not be identified",
+            "local_http": local_http,
+        }
+    service_id, hostport, _proxy = existing
+    token_q = "?" + local_http.split("?", 1)[1] if "?" in local_http else ""
+    public = f"https://{hostport}"
+    return {
+        "mode": "tailscale",
+        "provisioned": created,
+        "serve_port": port,
+        "serve_path": _TAILSCALE_ROOT_PATH,
+        "serve_service": service_id,
+        "serve_hostport": hostport,
+        "local_target": local_target,
+        "public_base": public,
+        "viewer_url": f"{public}/vnc.html{token_q}",
+        "detail": "Tailscale Serve active on a tailnet-only HTTPS port",
+    }
 
 
 def _try_cloudflare_tunnel(local_http: str, settings: Settings) -> dict[str, Any]:
@@ -306,7 +655,9 @@ def _try_cloudflare_tunnel(local_http: str, settings: Settings) -> dict[str, Any
             "detail": "cloudflared binary not found — using localhost viewer URL",
         }
     # Named tunnel / quick tunnel needs credentials; do not invent URLs.
-    creds = getattr(settings, "cloudflared_token", "") or os.environ.get("CLOUDFLARED_TOKEN", "")
+    creds = getattr(settings, "cloudflared_token", "") or os.environ.get(
+        "CLOUDFLARED_TOKEN", ""
+    )
     config = getattr(settings, "cloudflared_config", "") or ""
     if not creds and not (config and Path(config).is_file()):
         return {
@@ -358,7 +709,10 @@ def _try_cloudflare_tunnel(local_http: str, settings: Settings) -> dict[str, Any
                 for line in text.splitlines()[::-1]:
                     if "trycloudflare.com" in line and "https://" in line:
                         for part in line.split():
-                            if part.startswith("https://") and "trycloudflare.com" in part:
+                            if (
+                                part.startswith("https://")
+                                and "trycloudflare.com" in part
+                            ):
                                 public = part.strip().rstrip("/")
                                 break
                     if public:
@@ -394,21 +748,86 @@ def _try_cloudflare_tunnel(local_http: str, settings: Settings) -> dict[str, Any
         }
 
 
-def _teardown_tunnel(tunnel: dict[str, Any], settings: Settings) -> None:
+def _teardown_tunnel(tunnel: dict[str, Any], settings: Settings) -> bool:
     mode = (tunnel or {}).get("mode")
-    if mode == "tailscale" and tunnel.get("provisioned") and shutil.which("tailscale"):
+    if mode == "tailscale" and tunnel.get("provisioned"):
+        if not shutil.which("tailscale"):
+            return False
         try:
-            subprocess.run(
-                ["tailscale", "serve", "reset"],
+            port = int(tunnel.get("serve_port", settings.tailscale_serve_port))
+        except (TypeError, ValueError):
+            logger.warning("skipping Tailscale Serve cleanup with invalid port")
+            return False
+        path = tunnel.get("serve_path", _TAILSCALE_ROOT_PATH)
+        target = tunnel.get("local_target", f"http://127.0.0.1:{settings.novnc_port}")
+        expected_target = f"http://127.0.0.1:{settings.novnc_port}"
+        service_hint = tunnel.get("serve_service")
+        hostport_hint = tunnel.get("serve_hostport")
+        if service_hint is not None and not _is_canonical_service_id(service_hint):
+            logger.warning("skipping Tailscale Serve cleanup with invalid service id")
+            return False
+        if hostport_hint is not None:
+            try:
+                if _tailscale_hostport_port(hostport_hint) != port:
+                    raise TypeError("hostport does not match listener port")
+            except TypeError:
+                logger.warning("skipping Tailscale Serve cleanup with invalid hostport")
+                return False
+        if (
+            port not in _TAILSCALE_HTTPS_PORTS
+            or path != _TAILSCALE_ROOT_PATH
+            or target != expected_target
+        ):
+            logger.warning(
+                "skipping unsafe Tailscale Serve cleanup for :%s%s", port, path
+            )
+            return False
+        try:
+            status = _tailscale_serve_status()
+            routes = [
+                route
+                for route in _tailscale_root_routes(status, port)
+                if route[2] == target
+            ]
+            if "serve_service" in tunnel:
+                routes = [
+                    route for route in routes if route[0] == tunnel["serve_service"]
+                ]
+            if "serve_hostport" in tunnel:
+                routes = [
+                    route for route in routes if route[1] == tunnel["serve_hostport"]
+                ]
+            if not routes:
+                logger.info("Tailscale Serve route changed; leaving it untouched")
+                return True
+            if len(routes) != 1:
+                logger.warning(
+                    "multiple Tailscale Serve routes match; leaving them untouched"
+                )
+                return False
+            service_id, _hostport, _proxy = routes[0]
+            command = ["tailscale", "serve"]
+            if service_id is not None:
+                command.append(f"--service={service_id}")
+            command.extend([f"--https={port}", f"--set-path={path}", "off"])
+            result = subprocess.run(
+                command,
                 capture_output=True,
                 text=True,
                 timeout=10,
                 check=False,
             )
-        except (OSError, subprocess.TimeoutExpired):
-            logger.warning("tailscale serve reset failed", exc_info=True)
+            if result.returncode != 0:
+                logger.warning(
+                    "scoped Tailscale Serve cleanup failed: %s", result.stderr
+                )
+            return result.returncode == 0
+        except (OSError, RuntimeError, TypeError, subprocess.TimeoutExpired):
+            logger.warning("scoped Tailscale Serve cleanup failed", exc_info=True)
+            return False
     if mode == "cloudflare" and tunnel.get("pid"):
         _terminate(int(tunnel["pid"]), "cloudflared")
+    return True
 
 
 def _start_x11vnc(settings: Settings, mode: str) -> int:
@@ -590,7 +1009,9 @@ class StreamManager:
                 "detail": "stream active",
             }
 
-    def start(self, settings: Settings | None = None, mode: str = "view") -> dict[str, Any]:
+    def start(
+        self, settings: Settings | None = None, mode: str = "view"
+    ) -> dict[str, Any]:
         s = settings or get_settings()
         if mode not in ("view", "interactive"):
             raise StreamError(f"Invalid mode: {mode}", code="bad_mode")
@@ -673,7 +1094,7 @@ class StreamManager:
                 "Stream started session=%s mode=%s viewer=%s tunnel=%s",
                 session_id,
                 mode,
-                viewer_url,
+                viewer_url.split("?", 1)[0],
                 tunnel.get("mode"),
             )
             return {
@@ -724,7 +1145,9 @@ class StreamManager:
             "implemented": True,
         }
 
-    def stop(self, session_id: str | None = None, settings: Settings | None = None) -> dict[str, Any]:
+    def stop(
+        self, session_id: str | None = None, settings: Settings | None = None
+    ) -> dict[str, Any]:
         _ = settings or get_settings()
         with self._lock:
             sess = self._session
