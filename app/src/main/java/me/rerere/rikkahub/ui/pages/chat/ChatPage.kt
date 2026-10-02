@@ -534,19 +534,10 @@ private fun ChatPageContent(
                     )
                     if (conversation.messageNodes.isEmpty() && !isFolderChat) {
                         HomeBottomBar(
-                            onNewFolder = {
-                                showCreateFolderDialog = true
-                            },
-                            onAssistant = {
-                                navController.navigate(Screen.Assistant)
-                            },
                             onAnalyze = {
                                 navController.navigate(Screen.Stats)
                             },
-                            onFavorite = {
-                                navController.navigate(Screen.Favorite)
-                            },
-                            onMore = {
+                            onSettings = {
                                 navController.navigate(Screen.Setting)
                             },
                         )
@@ -587,8 +578,17 @@ private fun ChatPageContent(
                 onOpenActivity = {
                     navController.navigate(Screen.History)
                 },
+                onOpenAssistant = {
+                    navController.navigate(Screen.Assistant)
+                },
                 onOpenSettings = {
                     navController.navigate(Screen.Setting)
+                },
+                onNewFolder = {
+                    showCreateFolderDialog = true
+                },
+                onOpenFavorite = {
+                    navController.navigate(Screen.Favorite)
                 },
                 onQuickCreateFolder = { name, labelId ->
                     drawerVm.createFolder(name, labelId)

@@ -10,12 +10,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,20 +32,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ChartColumn
-import me.rerere.hugeicons.stroke.Favourite
-import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MoreHorizontal
-import me.rerere.hugeicons.stroke.Smile
+import me.rerere.hugeicons.stroke.Settings03
 
+/**
+ * Minimal home bottom bar. Former New folder / Assistant / Favorite / Analyze
+ * entry points were relocated; only More remains here, which opens a sheet
+ * that includes Analyze (same destination as before) plus Settings.
+ */
 @Composable
 fun HomeBottomBar(
-    onNewFolder: () -> Unit,
-    onAssistant: () -> Unit,
     onAnalyze: () -> Unit,
-    onFavorite: () -> Unit,
-    onMore: () -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showMoreSheet by remember { mutableStateOf(false) }
+
     Surface(
         color = Color.Transparent,
         modifier = modifier
@@ -49,33 +58,83 @@ fun HomeBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             HomeBottomNavItem(
-                icon = HugeIcons.Folder01,
-                label = "New folder",
-                onClick = onNewFolder,
-            )
-            HomeBottomNavItem(
-                icon = HugeIcons.Smile,
-                label = "Assistant",
-                onClick = onAssistant,
-            )
-            HomeBottomNavItem(
-                icon = HugeIcons.ChartColumn,
-                label = "Analyze",
-                onClick = onAnalyze,
-            )
-            HomeBottomNavItem(
-                icon = HugeIcons.Favourite,
-                label = "Favorite",
-                onClick = onFavorite,
-            )
-            HomeBottomNavItem(
                 icon = HugeIcons.MoreHorizontal,
                 label = "More",
-                onClick = onMore,
+                onClick = { showMoreSheet = true },
+            )
+        }
+    }
+
+    if (showMoreSheet) {
+        HomeMoreSheet(
+            onDismissRequest = { showMoreSheet = false },
+            onAnalyze = {
+                showMoreSheet = false
+                onAnalyze()
+            },
+            onSettings = {
+                showMoreSheet = false
+                onSettings()
+            },
+        )
+    }
+}
+
+@Composable
+private fun HomeMoreSheet(
+    onDismissRequest: () -> Unit,
+    onAnalyze: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+        ) {
+            Text(
+                text = "More",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            ListItem(
+                headlineContent = { Text("Analyze") },
+                supportingContent = { Text("Usage and activity stats") },
+                leadingContent = {
+                    Icon(
+                        imageVector = HugeIcons.ChartColumn,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onAnalyze)
+                    .padding(horizontal = 8.dp),
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            ListItem(
+                headlineContent = { Text("Settings") },
+                supportingContent = { Text("App preferences and account") },
+                leadingContent = {
+                    Icon(
+                        imageVector = HugeIcons.Settings03,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onSettings)
+                    .padding(horizontal = 8.dp),
             )
         }
     }

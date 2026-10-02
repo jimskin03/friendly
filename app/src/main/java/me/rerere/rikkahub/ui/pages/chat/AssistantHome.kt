@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.FolderAdd
 import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
@@ -85,7 +87,10 @@ fun AssistantHome(
     onStarterClick: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenActivity: () -> Unit,
+    onOpenAssistant: () -> Unit,
     onOpenSettings: () -> Unit,
+    onNewFolder: () -> Unit,
+    onOpenFavorite: () -> Unit,
     onQuickCreateFolder: (name: String, labelId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -95,11 +100,12 @@ fun AssistantHome(
             .padding(bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Top Header
+        // Top Header — profile opens assistant settings menu
         DashboardHeader(
             nickname = userNickname,
             userAvatar = userAvatar,
             assistantName = assistantName,
+            onOpenAssistant = onOpenAssistant,
             onOpenSettings = onOpenSettings,
         )
 
@@ -109,11 +115,13 @@ fun AssistantHome(
             onOpenActivity = onOpenActivity,
         )
 
-        // Folders Section
+        // Folders Section (new-folder + favorite controls live near header)
         FoldersSection(
             folders = folders,
             onSelectFolder = onSelectFolder,
             onSeeAllFolders = onSeeAllFolders,
+            onNewFolder = onNewFolder,
+            onOpenFavorite = onOpenFavorite,
             onQuickCreateFolder = onQuickCreateFolder,
         )
 
@@ -129,6 +137,7 @@ private fun DashboardHeader(
     nickname: String,
     userAvatar: Avatar = Avatar.Dummy,
     assistantName: String = "",
+    onOpenAssistant: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
@@ -157,11 +166,11 @@ private fun DashboardHeader(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.weight(1f),
             ) {
-                // User avatar with online indicator (tappable to open settings/profile)
+                // User avatar with online indicator (tappable → assistant settings menu)
                 Box(
                     modifier = Modifier
                         .size(54.dp)
-                        .clickable(onClick = onOpenSettings)
+                        .clickable(onClick = onOpenAssistant)
                 ) {
                     if (userAvatar != Avatar.Dummy) {
                         UIAvatar(
@@ -389,6 +398,8 @@ private fun FoldersSection(
     folders: List<Folder>,
     onSelectFolder: (Folder) -> Unit,
     onSeeAllFolders: () -> Unit,
+    onNewFolder: () -> Unit,
+    onOpenFavorite: () -> Unit,
     onQuickCreateFolder: (name: String, labelId: String) -> Unit,
 ) {
     Surface(
@@ -403,7 +414,7 @@ private fun FoldersSection(
             modifier = Modifier.padding(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Folders Header
+            // Folders Header — new-folder + favorite sit near See all
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -418,20 +429,48 @@ private fun FoldersSection(
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.clickable { onSeeAllFolders() },
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        text = "See all",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFF94A3B8),
+                    Icon(
+                        imageVector = HugeIcons.FolderAdd,
+                        contentDescription = "New folder",
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onNewFolder)
+                            .padding(2.dp),
                     )
                     Icon(
-                        imageVector = HugeIcons.ArrowRight01,
-                        contentDescription = null,
+                        imageVector = HugeIcons.Favourite,
+                        contentDescription = "Favorite",
                         tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onOpenFavorite)
+                            .padding(2.dp),
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onSeeAllFolders() }
+                            .padding(start = 4.dp),
+                    ) {
+                        Text(
+                            text = "See all",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFF94A3B8),
+                        )
+                        Icon(
+                            imageVector = HugeIcons.ArrowRight01,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
                 }
             }
 
