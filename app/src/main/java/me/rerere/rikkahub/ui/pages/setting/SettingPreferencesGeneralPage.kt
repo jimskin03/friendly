@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,11 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -393,6 +399,60 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                                 checked = displaySetting.replyWithVoice,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(replyWithVoice = it))
+                                }
+                            )
+                        },
+                    )
+                }
+            }
+
+            item {
+                val context = LocalContext.current
+                var showOverlayPermissionDialog by remember { mutableStateOf(false) }
+
+                if (showOverlayPermissionDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showOverlayPermissionDialog = false },
+                        title = { Text(stringResource(R.string.phone_mini_indicator_overlay_title)) },
+                        text = { Text(stringResource(R.string.phone_mini_indicator_overlay_message)) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showOverlayPermissionDialog = false
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    runCatching { context.startActivity(intent) }
+                                }
+                            ) {
+                                Text(stringResource(R.string.phone_mini_indicator_overlay_continue))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showOverlayPermissionDialog = false }) {
+                                Text(stringResource(R.string.cancel))
+                            }
+                        },
+                    )
+                }
+
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    item(
+                        headlineContent = { Text(stringResource(R.string.phone_mini_indicator_title)) },
+                        supportingContent = { Text(stringResource(R.string.phone_mini_indicator_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enablePhoneAutomationMiniIndicator,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && !Settings.canDrawOverlays(context)) {
+                                        showOverlayPermissionDialog = true
+                                    }
+                                    updateDisplaySetting(
+                                        displaySetting.copy(enablePhoneAutomationMiniIndicator = enabled)
+                                    )
                                 }
                             )
                         },

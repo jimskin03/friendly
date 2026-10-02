@@ -403,3 +403,24 @@ internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
         )
     }
 )
+
+
+internal fun Tool.withPhoneAutomationTracking(): Tool {
+    val originalExecute = execute
+    return copy(
+        execute = { args ->
+            PhoneAutomationService.reportWorkStarted()
+            try {
+                val result = originalExecute(args)
+                val text = result.filterIsInstance<UIMessagePart.Text>().joinToString(separator = "") { it.text }
+                val failed = Regex("\"success\"\\s*:\\s*false").containsMatchIn(text) ||
+                    Regex("\"error\"\\s*:").containsMatchIn(text)
+                PhoneAutomationService.reportWorkFinished(success = !failed)
+                result
+            } catch (e: Exception) {
+                PhoneAutomationService.reportWorkFinished(success = false)
+                throw e
+            }
+        }
+    )
+}

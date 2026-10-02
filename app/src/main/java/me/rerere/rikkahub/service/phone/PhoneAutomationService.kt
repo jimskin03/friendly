@@ -18,6 +18,9 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -47,11 +50,20 @@ data class ScreenInspectionResult(
     val textElements: List<ScreenNodeInfo>,
 )
 
+
+enum class PhoneAutomationWorkStatus {
+    Idle,
+    Running,
+    Error,
+}
+
 class PhoneAutomationService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        _isConnected.value = true
+        _workStatus.value = PhoneAutomationWorkStatus.Idle
         Log.i(TAG, "PhoneAutomationService connected and active")
     }
 
@@ -68,6 +80,8 @@ class PhoneAutomationService : AccessibilityService() {
         if (instance == this) {
             instance = null
         }
+        _isConnected.value = false
+        _workStatus.value = PhoneAutomationWorkStatus.Idle
         Log.i(TAG, "PhoneAutomationService destroyed")
     }
 
@@ -288,7 +302,44 @@ class PhoneAutomationService : AccessibilityService() {
         var instance: PhoneAutomationService? = null
             private set
 
+        private val _isConnected = MutableStateFlow(false)
+        val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+        private val _workStatus = MutableStateFlow(PhoneAutomationWorkStatus.Idle)
+        val workStatus: StateFlow<PhoneAutomationWorkStatus> = _workStatus.asStateFlow()
+
+        /** Conversation to reopen when the mini indicator is tapped (best-effort). */
+        @Volatile
+        var lastConversationId: String? = null
+
         fun isRunning(): Boolean = instance != null
+
+        fun reportWorkStarted(conversationId: String? = null) {
+            if (conversationId != null) {
+                lastConversationId = conversationId
+            }
+            _workStatus.value = PhoneAutomationWorkStatus.Running
+        }
+
+        fun reportWorkFinished(success: Boolean) {
+            _workStatus.value = if (success) {
+                PhoneAutomationWorkStatus.Idle
+            } else {
+                PhoneAutomationWorkStatus.Error
+            }
+        }
+
+        suspend fun <T> trackWork(conversationId: String? = null, block: suspend () -> T): T {
+            reportWorkStarted(conversationId)
+            return try {
+                val result = block()
+                reportWorkFinished(success = true)
+                result
+            } catch (e: Exception) {
+                reportWorkFinished(success = false)
+                throw e
+            }
+        }
 
         /**
          * Checks whether PhoneAutomationService is enabled in Android Accessibility settings.

@@ -831,6 +831,8 @@ data class DisplaySetting(
     val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
+    /** Show a system overlay mini indicator while Phone Automation is active and Friendly is backgrounded. Default ON. */
+    val enablePhoneAutomationMiniIndicator: Boolean = true,
 )
 
 @Serializable

@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatNotificationManager
+import me.rerere.rikkahub.service.phone.PhoneAutomationMiniIndicatorManager
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
 import me.rerere.rikkahub.utils.AppAnalytics
@@ -86,6 +87,14 @@ val appModule = module {
             context = get(),
             appScope = get(),
             eventBus = get(),
+            settingsStore = get(),
+        )
+    }
+
+    single(createdAtStart = true) {
+        PhoneAutomationMiniIndicatorManager(
+            app = get(),
+            appScope = get(),
             settingsStore = get(),
         )
     }

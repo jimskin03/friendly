@@ -90,13 +90,13 @@ class LocalTools(
             tools.add(chartDisplayTool)
         }
         if (options.contains(LocalToolOption.PhoneAutomation)) {
-            tools.add(phoneInspectScreenTool)
-            tools.add(phoneClickTool)
-            tools.add(phoneSwipeTool)
-            tools.add(phoneTypeTextTool)
-            tools.add(phonePressKeyTool)
-            tools.add(phoneLaunchAppTool)
-            tools.add(phoneScreenshotTool)
+            tools.add(phoneInspectScreenTool.withPhoneAutomationTracking())
+            tools.add(phoneClickTool.withPhoneAutomationTracking())
+            tools.add(phoneSwipeTool.withPhoneAutomationTracking())
+            tools.add(phoneTypeTextTool.withPhoneAutomationTracking())
+            tools.add(phonePressKeyTool.withPhoneAutomationTracking())
+            tools.add(phoneLaunchAppTool.withPhoneAutomationTracking())
+            tools.add(phoneScreenshotTool.withPhoneAutomationTracking())
         }
         if (options.contains(LocalToolOption.DesktopControl)) {
             tools.add(desktopScreenshotTool)

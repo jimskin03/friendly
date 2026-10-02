@@ -44,6 +44,7 @@ import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.GenerationDone
+import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.AppAnalytics
@@ -105,6 +106,7 @@ class ChatVM(
         }
 
         context.writeStringPreference("lastConversationId", _conversationId.toString())
+        PhoneAutomationService.lastConversationId = _conversationId.toString()
     }
 
     override fun onCleared() {
