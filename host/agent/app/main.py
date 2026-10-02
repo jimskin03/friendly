@@ -73,6 +73,10 @@ class LaunchAppBody(BaseModel):
     app: str = "menu"
 
 
+class KillAppBody(BaseModel):
+    target: str = "focused"
+
+
 class StreamStartBody(BaseModel):
     mode: Literal["view", "interactive"] = "view"
 
@@ -239,8 +243,44 @@ def desktop_prepare(
     return {"ok": True, **result}
 
 
+@app.post("/v1/desktop/close")
+def desktop_close(
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Close the focused window via the window manager (Alt+F4 / windowclose)."""
+    try:
+        result = desktop.close_focused_window(settings)
+    except DesktopError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            if e.code in ("no_display", "missing_tool")
+            else status.HTTP_400_BAD_REQUEST,
+            detail={"error": e.code, "message": e.message},
+        ) from e
+    return result
 
-# --- stream (Phase 3 stubs) ---
+
+@app.post("/v1/desktop/kill")
+def desktop_kill(
+    body: KillAppBody,
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Force-kill chrome, terminal, or the focused window."""
+    try:
+        result = desktop.kill_app(body.target, settings)
+    except DesktopError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            if e.code in ("no_display", "missing_tool")
+            else status.HTTP_400_BAD_REQUEST,
+            detail={"error": e.code, "message": e.message},
+        ) from e
+    return result
+
+
+# --- stream ---
 
 
 @app.post("/v1/stream/start")

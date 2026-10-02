@@ -95,6 +95,11 @@ data class LaunchAppRequest(
 )
 
 @Serializable
+data class KillAppRequest(
+    val target: String = "focused",
+)
+
+@Serializable
 data class BrowserOpenResponse(
     val ok: Boolean = true,
     val url: String = "",
@@ -320,6 +325,70 @@ class DesktopControlClient(
                 hotkey(listOf("Control", "Alt", "t"))
             }
             else -> false
+        }
+    }
+
+    suspend fun closeWindow(): Boolean {
+        return try {
+            val response = http.post("${normalizedBaseUrl()}/v1/desktop/close") {
+                auth()
+            }
+            if (response.status.isSuccess()) {
+                true
+            } else if (response.status.value == 404) {
+                // Older hosts: emulate WM close with Alt+F4
+                hotkey(listOf("Alt", "F4"))
+            } else {
+                val textBody = response.bodyAsText()
+                throw DesktopControlException(
+                    message = "desktop/close failed: ${response.status} $textBody",
+                    statusCode = response.status.value,
+                )
+            }
+        } catch (e: DesktopControlException) {
+            if (e.statusCode == 404) {
+                hotkey(listOf("Alt", "F4"))
+            } else {
+                throw e
+            }
+        } catch (_: Exception) {
+            hotkey(listOf("Alt", "F4"))
+        }
+    }
+
+    suspend fun killApp(target: String): Boolean {
+        val clean = target.trim().lowercase().ifBlank { "focused" }
+        return try {
+            val response = http.post("${normalizedBaseUrl()}/v1/desktop/kill") {
+                auth()
+                setBody(JsonInstant.encodeToString(KillAppRequest(target = clean)))
+            }
+            if (response.status.isSuccess()) {
+                true
+            } else if (response.status.value == 404) {
+                fallbackKillApp(clean)
+            } else {
+                val textBody = response.bodyAsText()
+                throw DesktopControlException(
+                    message = "desktop/kill failed: ${response.status} $textBody",
+                    statusCode = response.status.value,
+                )
+            }
+        } catch (e: DesktopControlException) {
+            if (e.statusCode == 404) {
+                fallbackKillApp(clean)
+            } else {
+                throw e
+            }
+        } catch (_: Exception) {
+            fallbackKillApp(clean)
+        }
+    }
+
+    private suspend fun fallbackKillApp(target: String): Boolean {
+        return when (target) {
+            "focused", "focus", "active", "window" -> hotkey(listOf("Alt", "F4"))
+            else -> hotkey(listOf("Alt", "F4"))
         }
     }
 

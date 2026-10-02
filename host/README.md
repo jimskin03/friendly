@@ -76,6 +76,8 @@ All `/v1/*` routes and `/mcp` require `Authorization: Bearer <API_TOKEN>`.
 | POST | `/v1/browser/open` | `{ url }` | `{ ok, url, pid }` |
 | POST | `/v1/desktop/prepare` | — | `{ ok }` (layout helper) |
 | POST | `/v1/desktop/launch` | `{ app }` | `{ ok, app }` |
+| POST | `/v1/desktop/close` | — | close focused window (WM close / Alt+F4) |
+| POST | `/v1/desktop/kill` | `{ target }` | force-kill `focused` / `browser` / `terminal` |
 | POST | `/v1/stream/start` | `{ mode? }` | `{ viewer_url, session_id, expires_at, token, tunnel }` |
 | POST | `/v1/stream/stop` | `{ session_id? }` | `{ stopped, session_id }` |
 | GET | `/v1/stream/status` | — | `{ active, expires_at, mode, viewer_url, … }` |

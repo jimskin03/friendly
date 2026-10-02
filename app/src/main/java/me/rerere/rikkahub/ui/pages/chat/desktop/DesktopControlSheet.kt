@@ -105,6 +105,7 @@ import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.Browser
 import me.rerere.hugeicons.stroke.Camera01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Computer
 import me.rerere.hugeicons.stroke.Keyboard
 import me.rerere.hugeicons.stroke.KeyboardOff
@@ -376,6 +377,46 @@ fun DesktopControlSheet(
                 }
             } catch (e: Exception) {
                 toaster.show(e.message ?: "Couldn't open $app", ToastType.Error)
+            }
+        }
+    }
+
+    fun sendHotkey(keys: List<String>, label: String? = null) {
+        scope.launch {
+            try {
+                createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                ).hotkey(keys)
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Couldn't send ${label ?: keys.joinToString("+")}", ToastType.Error)
+            }
+        }
+    }
+
+    fun closeFocusedWindow() {
+        scope.launch {
+            try {
+                createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                ).closeWindow()
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Couldn't close window", ToastType.Error)
+            }
+        }
+    }
+
+    fun killDesktopApp(target: String, label: String) {
+        scope.launch {
+            try {
+                createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                ).killApp(target)
+                toaster.show("$label closed", ToastType.Info)
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Couldn't kill $label", ToastType.Error)
             }
         }
     }
@@ -737,26 +778,27 @@ fun DesktopControlSheet(
                 }
             }
 
-            Row(
+            // Only buttons/chip capture touches so titlebar close clicks can
+            // still reach the trackpad through empty areas of the top strip.
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
                 FrostedIconButton(
                     icon = HugeIcons.ArrowLeft01,
                     contentDescription = stringResource(R.string.desktop_action_close),
                     onClick = onDismissRequest,
+                    modifier = Modifier.align(Alignment.CenterStart),
                 )
-                Spacer(modifier = Modifier.weight(1f))
                 StatusChip(
                     connecting = isStartingStream,
                     live = streamLive,
+                    modifier = Modifier.align(Alignment.Center),
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Box {
+                Box(modifier = Modifier.align(Alignment.CenterEnd)) {
                     FrostedIconButton(
                         icon = HugeIcons.MoreVertical,
                         contentDescription = stringResource(R.string.desktop_action_menu),
@@ -811,6 +853,31 @@ fun DesktopControlSheet(
                         if (streamLive) {
                             HorizontalDivider()
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.desktop_action_close_window)) },
+                                leadingIcon = { Icon(HugeIcons.Cancel01, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    closeFocusedWindow()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.desktop_action_kill_browser)) },
+                                leadingIcon = { Icon(HugeIcons.Browser, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    killDesktopApp("browser", "Chromium")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.desktop_action_kill_terminal)) },
+                                leadingIcon = { Icon(HugeIcons.Bash, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    killDesktopApp("terminal", "Terminal")
+                                },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
                                 text = {
                                     Text(
                                         stringResource(R.string.desktop_action_stop),
@@ -862,6 +929,40 @@ fun DesktopControlSheet(
                 }
 
                 if (streamLive && keyboardOpen) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SoftKeyChip(
+                            label = stringResource(R.string.desktop_keyboard_esc),
+                            onClick = { sendHotkey(listOf("Escape"), "Esc") },
+                        )
+                        SoftKeyChip(
+                            label = stringResource(R.string.desktop_keyboard_ctrl_c),
+                            onClick = { sendHotkey(listOf("Control", "c"), "Ctrl+C") },
+                        )
+                        SoftKeyChip(
+                            label = stringResource(R.string.desktop_keyboard_q),
+                            onClick = { sendHotkey(listOf("q"), "q") },
+                        )
+                        SoftKeyChip(
+                            label = "Tab",
+                            onClick = { sendHotkey(listOf("Tab"), "Tab") },
+                        )
+                        SoftKeyChip(
+                            label = "↑",
+                            onClick = { sendHotkey(listOf("Up"), "Up") },
+                        )
+                        SoftKeyChip(
+                            label = "↓",
+                            onClick = { sendHotkey(listOf("Down"), "Down") },
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -915,6 +1016,11 @@ fun DesktopControlSheet(
                             icon = HugeIcons.Bash,
                             contentDescription = stringResource(R.string.desktop_action_terminal),
                             onClick = { launchDesktopApp("terminal") },
+                        )
+                        FrostedIconButton(
+                            icon = HugeIcons.Cancel01,
+                            contentDescription = stringResource(R.string.desktop_action_close_window),
+                            onClick = { closeFocusedWindow() },
                         )
                     }
                 }
@@ -994,9 +1100,13 @@ fun DesktopControlSheet(
 }
 
 @Composable
-private fun StatusChip(connecting: Boolean, live: Boolean) {
+private fun StatusChip(
+    connecting: Boolean,
+    live: Boolean,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(Color.Black.copy(alpha = 0.5f))
             .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1029,14 +1139,35 @@ private fun StatusChip(connecting: Boolean, live: Boolean) {
 }
 
 @Composable
+private fun SoftKeyChip(
+    label: String,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.12f)),
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun FrostedIconButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.5f)),
     ) {

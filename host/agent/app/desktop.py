@@ -225,20 +225,24 @@ _prepare_lock = threading.Lock()
 def workspace_frames(width: int, height: int, panel: int = 0) -> dict[str, tuple[int, int, int, int]]:
     """Chrome on the left, terminal on the right, above an optional panel.
 
-    Inset slightly from screen edges so Openbox titlebars/borders stay
-    visible and edge/corner resize grips remain reachable.
+    Inset from screen edges so Openbox titlebars/borders stay visible and
+    edge/corner resize grips remain reachable. Top inset is larger so
+    titlebar close buttons sit below the phone Computer UI chrome when the
+    stream is fit-to-screen.
     """
-    margin = 4
-    usable_h = max(200, height - max(0, panel) - margin)
+    margin_x = 6
+    margin_top = 40  # keep Close/Maximize clear of phone overlay + easier to hit
+    margin_bottom = 6
+    usable_h = max(200, height - max(0, panel) - margin_top - margin_bottom)
     chrome_w = max(320, int(width * 0.62))
     gap = 10
     # Leave the terminal a usable column.
     if chrome_w > width - 280:
         chrome_w = max(320, width - 280)
-    term_w = max(200, width - chrome_w - gap - margin)
+    term_w = max(200, width - chrome_w - gap - margin_x)
     return {
-        "chrome": (margin, margin, chrome_w - margin, usable_h - margin),
-        "terminal": (chrome_w + gap, margin, term_w, usable_h - margin),
+        "chrome": (margin_x, margin_top, chrome_w - margin_x, usable_h),
+        "terminal": (chrome_w + gap, margin_top, term_w, usable_h),
     }
 
 
@@ -434,6 +438,91 @@ def _prepare_workspace_locked(settings: Settings | None = None) -> dict:
         "chrome": chrome_id is not None,
         "terminal": terminal_id is not None,
         "frames": {name: list(rect) for name, rect in frames.items()},
+    }
+
+
+def close_focused_window(settings: Settings | None = None) -> dict:
+    """Close the focused window (Alt+F4 / WM close). Prefer over kill for apps."""
+    s = settings or get_settings()
+    disp = require_display(s)
+    if shutil.which("xdotool") is None:
+        raise DesktopError(
+            "xdotool not found. Run scripts/bootstrap-host.sh",
+            code="missing_tool",
+        )
+    # Prefer WM close so apps can save / confirm.
+    active = _run(
+        ["xdotool", "getactivewindow"],
+        display=disp,
+        check=False,
+    )
+    wid = (active.stdout or b"").decode("utf-8", errors="replace").strip()
+    if wid.isdigit():
+        closed = _run(
+            ["xdotool", "windowclose", wid],
+            display=disp,
+            check=False,
+        )
+        if closed.returncode == 0:
+            return {"ok": True, "action": "windowclose", "window_id": wid}
+    # Fallback: Openbox A-F4 binding / generic Alt+F4
+    _run(["xdotool", "key", "--clearmodifiers", "alt+F4"], display=disp)
+    return {"ok": True, "action": "alt+F4", "window_id": wid or None}
+
+
+def kill_app(target: str, settings: Settings | None = None) -> dict:
+    """Force-close chrome, terminal, or the focused window."""
+    s = settings or get_settings()
+    disp = require_display(s)
+    clean = (target or "").strip().lowercase()
+
+    if clean in ("focused", "focus", "active", "window"):
+        if shutil.which("xdotool") is None:
+            raise DesktopError("xdotool not found", code="missing_tool")
+        active = _run(["xdotool", "getactivewindow"], display=disp, check=False)
+        wid = (active.stdout or b"").decode("utf-8", errors="replace").strip()
+        if not wid.isdigit():
+            raise DesktopError("No focused window to kill", code="no_window")
+        _run(["xdotool", "windowkill", wid], display=disp, check=False)
+        return {"ok": True, "target": "focused", "window_id": wid, "action": "windowkill"}
+
+    if clean in ("browser", "chromium", "chrome"):
+        classes = _CHROME_CLASSES
+        patterns = ("chromium", "chrome", "google-chrome")
+    elif clean in ("terminal", "xterm", "bash", "shell"):
+        classes = _TERMINAL_CLASSES
+        patterns = ("xterm", "xfce4-terminal", "gnome-terminal")
+    else:
+        raise DesktopError(
+            f"Unknown kill target: {target}. Supported: focused, browser, terminal",
+            code="bad_target",
+        )
+
+    killed_ids: list[str] = []
+    if shutil.which("xdotool") is not None:
+        for name in classes:
+            for wid in _window_ids(disp, name):
+                _run(["xdotool", "windowkill", wid], display=disp, check=False)
+                killed_ids.append(wid)
+
+    pkill_hits = 0
+    if shutil.which("pkill") is not None:
+        for pat in patterns:
+            result = subprocess.run(
+                ["pkill", "-f", pat],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode == 0:
+                pkill_hits += 1
+
+    return {
+        "ok": True,
+        "target": clean,
+        "windows_killed": killed_ids,
+        "pkill_hits": pkill_hits,
+        "action": "kill",
     }
 
 

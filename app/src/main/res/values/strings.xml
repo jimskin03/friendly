@@ -61,6 +61,12 @@
   <string name="desktop_action_close">Close</string>
   <string name="desktop_keyboard_placeholder">Type on the computer</string>
   <string name="desktop_keyboard_enter">Enter</string>
+  <string name="desktop_keyboard_esc">Esc</string>
+  <string name="desktop_keyboard_ctrl_c">Ctrl+C</string>
+  <string name="desktop_keyboard_q">q</string>
+  <string name="desktop_action_close_window">Close window</string>
+  <string name="desktop_action_kill_browser">Kill Chromium</string>
+  <string name="desktop_action_kill_terminal">Kill Terminal</string>
   <string name="desktop_menu_settings">Connection</string>
   <string name="desktop_menu_assistant_on">Assistant control on</string>
   <string name="desktop_menu_assistant_off">Assistant control off</string>
