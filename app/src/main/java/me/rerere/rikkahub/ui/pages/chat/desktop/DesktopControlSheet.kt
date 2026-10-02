@@ -102,6 +102,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
+import me.rerere.hugeicons.stroke.Bash
+import me.rerere.hugeicons.stroke.Browser
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Computer
 import me.rerere.hugeicons.stroke.Keyboard
@@ -360,6 +362,22 @@ fun DesktopControlSheet(
 
     fun clickMouse(button: Int) {
         webViewInstance.trackpad("click($button)")
+    }
+
+    fun launchDesktopApp(app: String) {
+        scope.launch {
+            try {
+                val opened = createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                ).launchApp(app)
+                if (!opened) {
+                    toaster.show("Couldn't open $app", ToastType.Error)
+                }
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Couldn't open $app", ToastType.Error)
+            }
+        }
     }
 
     LaunchedEffect(activeViewerUrl, webViewInstance) {
@@ -887,6 +905,16 @@ fun DesktopControlSheet(
                             icon = HugeIcons.Keyboard,
                             contentDescription = stringResource(R.string.desktop_action_keyboard),
                             onClick = { keyboardOpen = true },
+                        )
+                        FrostedIconButton(
+                            icon = HugeIcons.Browser,
+                            contentDescription = stringResource(R.string.desktop_action_launch_browser),
+                            onClick = { launchDesktopApp("browser") },
+                        )
+                        FrostedIconButton(
+                            icon = HugeIcons.Bash,
+                            contentDescription = stringResource(R.string.desktop_action_terminal),
+                            onClick = { launchDesktopApp("terminal") },
                         )
                     }
                 }
