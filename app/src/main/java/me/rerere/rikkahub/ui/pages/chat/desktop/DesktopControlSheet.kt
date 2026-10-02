@@ -332,6 +332,7 @@ fun DesktopControlSheet(
     var testingConnection by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var keyboardOpen by remember { mutableStateOf(false) }
+    var ctrlArmed by remember { mutableStateOf(false) }
     var showHint by remember { mutableStateOf(true) }
 
     var activeViewerUrl by remember(currentViewerUrl) { mutableStateOf(currentViewerUrl) }
@@ -394,6 +395,55 @@ fun DesktopControlSheet(
         }
     }
 
+    fun sendKeyboardKey(keys: List<String>, label: String? = null) {
+        val effectiveKeys = if (ctrlArmed) {
+            ctrlArmed = false
+            listOf("Control_L") + keys
+        } else {
+            keys
+        }
+        sendHotkey(effectiveKeys, label)
+    }
+
+    fun xdotoolKeyForTypedCharacter(character: Char): String? = when (character) {
+        ' ' -> "space"
+        '\n', '\r' -> "Return"
+        '\t' -> "Tab"
+        '!', '1' -> "1"
+        '@', '2' -> "2"
+        '#', '3' -> "3"
+        '$', '4' -> "4"
+        '%', '5' -> "5"
+        '^', '6' -> "6"
+        '&', '7' -> "7"
+        '*', '8' -> "8"
+        '(', '9' -> "9"
+        ')', '0' -> "0"
+        '-' -> "minus"
+        '_' -> "underscore"
+        '=' -> "equal"
+        '+' -> "plus"
+        '[' -> "bracketleft"
+        '{' -> "braceleft"
+        ']' -> "bracketright"
+        '}' -> "braceright"
+        '\\' -> "backslash"
+        '|' -> "bar"
+        ';' -> "semicolon"
+        ':' -> "colon"
+        '\'' -> "apostrophe"
+        '"' -> "quotedbl"
+        ',' -> "comma"
+        '<' -> "less"
+        '.' -> "period"
+        '>' -> "greater"
+        '/' -> "slash"
+        '?' -> "question"
+        '`' -> "grave"
+        '~' -> "asciitilde"
+        else -> character.takeIf { it.isLetter() }?.toString()
+    }
+
     fun closeFocusedWindow() {
         scope.launch {
             try {
@@ -443,6 +493,7 @@ fun DesktopControlSheet(
             focusRequester.requestFocus()
             keyboardController?.show()
         } else {
+            ctrlArmed = false
             keyboardController?.hide()
         }
     }
@@ -505,7 +556,13 @@ fun DesktopControlSheet(
                         sentDraft = target
                     }
                     if (pressEnter) {
-                        client.hotkey(listOf("Return"))
+                        val enterKeys = if (ctrlArmed) {
+                            ctrlArmed = false
+                            listOf("Control_L", "Return")
+                        } else {
+                            listOf("Return")
+                        }
+                        client.hotkey(enterKeys)
                         sentDraft = ""
                         draft = ""
                     }
@@ -517,6 +574,24 @@ fun DesktopControlSheet(
     }
 
     fun scheduleTyping(next: String) {
+        if (ctrlArmed) {
+            val previous = draft
+            val key = when {
+                next.length == previous.length + 1 && next.startsWith(previous) -> {
+                    xdotoolKeyForTypedCharacter(next.last())
+                }
+                next.length == previous.length - 1 && previous.startsWith(next) -> "BackSpace"
+                else -> null
+            }
+            if (key != null) {
+                draft = previous
+                pendingType?.cancel()
+                ctrlArmed = false
+                sendHotkey(listOf("Control_L", key), "Ctrl+$key")
+                return
+            }
+        }
+
         draft = next
         pendingType?.cancel()
         pendingType = scope.launch {
@@ -940,27 +1015,28 @@ fun DesktopControlSheet(
                     ) {
                         SoftKeyChip(
                             label = stringResource(R.string.desktop_keyboard_esc),
-                            onClick = { sendHotkey(listOf("Escape"), "Esc") },
+                            onClick = { sendKeyboardKey(listOf("Escape"), "Esc") },
                         )
                         SoftKeyChip(
                             label = stringResource(R.string.desktop_keyboard_ctrl),
-                            onClick = { sendHotkey(listOf("Control_L"), "Ctrl") },
+                            selected = ctrlArmed,
+                            onClick = { ctrlArmed = !ctrlArmed },
                         )
                         SoftKeyChip(
                             label = stringResource(R.string.desktop_keyboard_pgup),
-                            onClick = { sendHotkey(listOf("Page_Up"), "PgUp") },
+                            onClick = { sendKeyboardKey(listOf("Page_Up"), "PgUp") },
                         )
                         SoftKeyChip(
                             label = stringResource(R.string.desktop_keyboard_pgdn),
-                            onClick = { sendHotkey(listOf("Page_Down"), "PgDn") },
+                            onClick = { sendKeyboardKey(listOf("Page_Down"), "PgDn") },
                         )
                         SoftKeyChip(
                             label = stringResource(R.string.desktop_keyboard_up_arrow),
-                            onClick = { sendHotkey(listOf("Up"), "Up arrow") },
+                            onClick = { sendKeyboardKey(listOf("Up"), "↑") },
                         )
                         SoftKeyChip(
                             label = stringResource(R.string.desktop_keyboard_down_arrow),
-                            onClick = { sendHotkey(listOf("Down"), "Down arrow") },
+                            onClick = { sendKeyboardKey(listOf("Down"), "↓") },
                         )
                     }
                     Row(
@@ -1141,13 +1217,16 @@ private fun StatusChip(
 @Composable
 private fun SoftKeyChip(
     label: String,
+    selected: Boolean = false,
     onClick: () -> Unit,
 ) {
     TextButton(
         onClick = onClick,
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color.White.copy(alpha = 0.12f)),
+            .background(
+                if (selected) Color.White.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.12f),
+            ),
     ) {
         Text(
             text = label,
