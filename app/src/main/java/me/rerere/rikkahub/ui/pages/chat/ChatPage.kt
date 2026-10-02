@@ -33,11 +33,9 @@ import androidx.compose.ui.platform.LocalContext
 import me.rerere.hugeicons.stroke.FloppyDisk
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.ui.CreateFolderDialog
-import me.rerere.rikkahub.ui.components.ui.HomeBottomBar
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentNavigationDrawer
@@ -640,13 +638,6 @@ private fun ChatPageContent(
                             showFilesSheet = true
                         },
                     )
-                    if (conversation.messageNodes.isEmpty() && !isFolderChat) {
-                        HomeBottomBar(
-                            onSettings = {
-                                navController.navigate(Screen.Setting)
-                            },
-                        )
-                    }
                 }
             },
             containerColor = Color.Transparent,
