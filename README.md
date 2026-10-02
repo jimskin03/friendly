@@ -1,12 +1,50 @@
 <div align="center">
   <img src="docs/icon.png" alt="Friendly app icon" width="100" />
   <h1>Friendly 2.0</h1>
-  <p>A modern Android LLM client for conversations, assistants, and agent tools.</p>
+  <p><strong>Your Android AI assistant that chats, acts on your phone, and controls a self-hosted Linux desktop.</strong></p>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
+    <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84.svg" alt="Android 8+" />
+    <img src="https://img.shields.io/badge/version-2.0.0-informational.svg" alt="Version 2.0.0" />
+    <img src="https://img.shields.io/badge/language-Kotlin-7F52FF.svg" alt="Kotlin" />
+  </p>
 </div>
 
-<div align="center">
-  <img src="docs/img/friendly-product.jpg" alt="Friendly 2.0 product showcase" width="100%" />
-</div>
+<p align="center">
+  <img src="docs/screenshots/hero-product.jpg" alt="Friendly 2.0 product showcase" width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://x.com/cryptgreg/status/2105931441360253273">Watch a community review on X</a>
+  ·
+  <a href="https://github.com/jimskin03/friendly/releases">Releases</a>
+  ·
+  <a href="host/SETUP_UBUNTU.md">Computer host setup</a>
+</p>
+
+---
+
+## What is Friendly?
+
+Friendly is an open-source **Android AI assistant** (Kotlin, Material 3) that goes beyond chat. Bring your own model providers, organize conversations, and optionally let the assistant:
+
+- **Automate your phone** — inspect the screen, tap, swipe, type, and launch apps (TikTok, Grab, and more) via an Accessibility service you control
+- **Control a remote Linux computer** — connect over a private network (Tailscale recommended) to a self-hosted Control API, live desktop stream, and MCP tools
+- **Self-correct** — when a phone or desktop action fails, the agent can re-inspect the UI and retry with better coordinates or steps
+
+You choose the models, search backends, and whether phone automation or Computer control is enabled. Secrets stay in app settings and host `.env` — never in the repo.
+
+---
+
+## Screenshots
+
+| Home & tools | Inspect Screen | Folders |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/01-home.jpg" alt="Friendly home with Computer and Phone tools" width="220" /> | <img src="docs/screenshots/02-chat-inspect.jpg" alt="Chat with Inspect Screen and Remote Desktop Active" width="220" /> | <img src="docs/screenshots/03-folders.jpg" alt="Conversation folders" width="220" /> |
+
+More assets live under [`docs/img/`](docs/img/) and [`docs/screenshots/`](docs/screenshots/). Drop additional Play Store frames into `docs/screenshots/` (see that folder’s README).
+
+Inline demo (GitHub attachment):
 
 <div align="center">
   <video
@@ -21,121 +59,241 @@
   </video>
 </div>
 
-## About Friendly
-
-Friendly is an Android chat client that connects to the AI model and search services you choose. It combines a polished Material 3 interface with configurable assistants, conversation organization, MCP tools, and an optional local workspace for agent tasks.
+---
 
 ## Features
 
-- **Bring your own model provider:** built-in OpenAI, Gemini, DeepSeek, OpenRouter, Vercel AI Gateway, and xAI configurations, plus custom OpenAI-compatible providers.
-- **Rich conversations:** branching and regeneration, markdown and code highlighting, LaTeX, tables, image and document attachments, and conversation history.
-- **Organize your chats:** dashboards, folders, labels, and folder-specific conversation lists.
-- **Custom assistants:** configure model behavior, prompts, memory, quick messages, skills, and tools.
-- **Search integrations:** Bing, Tavily, Exa, SearXNG, Brave, Ollama, Perplexity, Firecrawl, Grok, and custom JavaScript search services.
-- **MCP support:** connect Model Context Protocol servers and use their tools in assistant conversations; supported servers can use OAuth authorization.
-- **Workspace tools:** create isolated workspaces with agent access to workspace files and terminal tools.
-- **Voice features:** speech input and voice conversations with supported ASR providers, with optional spoken replies through a configured TTS provider.
-- **Image generation:** available when a compatible provider and model are configured.
-- **More extensions:** saved prompts, agent skills, quick messages, and other app tools.
+### Chat & assistants
+- **Bring your own providers:** OpenAI, Gemini, DeepSeek, OpenRouter, Vercel AI Gateway, xAI, plus custom OpenAI-compatible endpoints
+- **Rich conversations:** branching/regeneration, markdown, code highlighting, LaTeX, tables, image & document attachments
+- **Organize:** dashboards, folders, labels, folder-specific lists
+- **Custom assistants:** prompts, memory, quick messages, skills, and per-assistant tools
+- **Search:** Bing, Tavily, Exa, SearXNG, Brave, Ollama, Perplexity, Firecrawl, Grok, and custom JS search
+- **MCP:** connect Model Context Protocol servers (including OAuth where supported)
+- **Workspace tools:** isolated workspaces with file and terminal access for agent tasks
+- **Voice:** ASR input and optional TTS replies when providers are configured
+- **Image generation** when a compatible provider/model is set
 
-Provider availability and capabilities depend on the service, model, region, and credentials you configure.
+Provider availability depends on the service, model, region, and credentials you configure.
 
-## Download
+### Phone automation
+- Accessibility-backed **Phone Automation** local tools (enable per assistant)
+- **Inspect Screen** — analyze layout, buttons, and text on the current UI
+- Tap / swipe / type / press keys / launch apps / screenshot
+- Designed so the model can recover when a tap misses: inspect again, then retry
 
-Check [GitHub Releases](https://github.com/jimskin03/friendly/releases) for published APKs. If no suitable build is available, build the app from source using the instructions below.
+> Phone automation requires enabling Friendly’s accessibility service in Android Settings. Only grant this if you trust the app; you can revoke it anytime.
 
-## First run
+### Computer / remote desktop (self-hosted)
+- In-app **Computer** control: live stream, trackpad-style interaction, keyboard, Chromium/terminal quick actions
+- Host **Control API** on port **8787** (screenshot, click, type, hotkey, browser open, stream start/stop)
+- Host **MCP** at `/mcp` for agent desktop tools
+- Configure in **Settings → Preferences → Network** → **Desktop / Computer control** (Base URL + API token)
+- Prefer **Tailscale** (or another private mesh) between phone and host — do not expose raw VNC or unauthenticated API to the public internet
 
-1. Install and open Friendly.
-2. Go to **Settings → Providers** and configure a model provider and API key.
-3. Choose a model, then start a conversation or create an assistant.
-4. Configure search, speech, MCP servers, or workspaces from their respective settings and extensions pages when you need them.
+Full host docs: [`host/README.md`](host/README.md) · [`host/SETUP_UBUNTU.md`](host/SETUP_UBUNTU.md)
 
-API keys and service credentials belong in the app’s settings or your local development environment. Never include them in screenshots, issue reports, or source control.
+---
+
+## Requirements
+
+| | |
+|---|---|
+| **Android** | 8.0 (API 26) or newer · `targetSdk` 37 |
+| **Application ID** | `app.friendly.assistant` (debug builds use `.debug`) |
+| **Version** | 2.0.0 (`versionCode` 200) |
+| **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358`, Node.js 22 + pnpm 11 |
+
+### Permissions (honest summary)
+
+Declared in the app manifest; optional features only work when you grant the matching permission:
+
+| Permission / access | Why |
+|---|---|
+| Internet / local network | Model APIs, search, MCP, Computer host |
+| Microphone | Speech input |
+| Camera | Scanning / capture features |
+| Notifications | Generation / foreground service updates |
+| Foreground services | Long-running chat generation / web server |
+| Calendar (read/write) | Calendar tools when enabled |
+| Usage access | Screen-time style features when enabled |
+| Storage (legacy, max SDK 28) | Older Android file access |
+| **Accessibility service** | Phone Automation (inspect / gestures) — user must enable explicitly |
+
+Core chat works without accessibility, camera, or calendar. Review each provider’s privacy policy before sending prompts or attachments.
+
+---
+
+## Quick start (end users)
+
+1. Install from [GitHub Releases](https://github.com/jimskin03/friendly/releases) (Play Store listing TBD) or [build from source](#build-from-source).
+2. Open Friendly → **Settings → Providers** → add a provider and API key.
+3. Pick a model and start chatting or create an assistant.
+4. Optional:
+   - **Phone Automation:** Android Settings → Accessibility → enable Friendly → in the assistant, enable **Phone Automation** under Local Tools.
+   - **Computer:** set up the [Linux host](#self-hosted-computer-host), then **Settings → Preferences → Network** → Desktop / Computer control → Base URL + token → Test Connection.
+5. Never paste API keys, host `API_TOKEN`s, or private Tailscale URLs into issues or screenshots.
+
+---
+
+## Self-hosted Computer host
+
+The optional Linux companion runs a headless desktop (Xvfb + Openbox + Chromium) and a FastAPI Control API.
+
+### Recommended path (Ubuntu)
+
+```bash
+git clone --branch friendly-2.0 --recurse-submodules https://github.com/jimskin03/friendly.git
+cd friendly/host
+sudo ./scripts/setup-ubuntu-headless.sh
+```
+
+The script installs packages, creates a venv, generates a strong `API_TOKEN` into `.env` / `/etc/friendly-host.env`, and starts systemd units. Copy the printed **Base URL** and **token** into the Android app — do not commit `.env`.
+
+### Manual / lab quick start
+
+```bash
+cd friendly/host
+cp .env.example .env   # set a long random API_TOKEN
+./scripts/bootstrap-host.sh
+./scripts/start-idle-stack.sh
+source agent/.venv/bin/activate
+cd agent
+set -a && source ../.env && set +a
+uvicorn app.main:app --host "${API_HOST:-127.0.0.1}" --port "${API_PORT:-8787}"
+```
+
+Smoke tests: `./scripts/smoke-test-api.sh`, `./scripts/smoke-test-mcp.sh`, `./scripts/smoke-test-stream.sh`.
+
+### Networking (Tailscale first)
+
+Friendly’s host is meant for a **private network**:
+
+1. Install [Tailscale](https://tailscale.com/) on the Ubuntu host and on the Android phone (same account).
+2. On the host: `tailscale ip -4` → use `http://<tailscale-ip>:8787` as the Control API Base URL.
+3. Keep `API_HOST=127.0.0.1` where possible and reach the API via Tailscale; never publish raw VNC (ports 5999/6099 stay localhost + serve/tunnel).
+4. Alternatives (Cloudflare Tunnel, reverse proxy) are documented in [`host/SETUP_UBUNTU.md`](host/SETUP_UBUNTU.md). Prefer authenticated/private access over open public ports.
+
+### Configure the Android app
+
+1. **Settings → Preferences → Network** → **Desktop / Computer control**
+2. **Base URL:** e.g. `http://100.x.y.z:8787` (Tailscale)
+3. **API token:** same value as host `API_TOKEN` (Bearer)
+4. **Test Connection**, then use the **Computer** control in chat
+5. Per assistant: **Local Tools → Desktop Control (Linux VM)** to allow agent-driven click/type/hotkey/browser tools
+
+Optional MCP registration for the host: name `friendly-desktop`, Streamable HTTP URL `http://<host>:8787/mcp`, header `Authorization: Bearer <API_TOKEN>`.
+
+---
+
+## Architecture (brief)
+
+```
+┌──────────────────────────┐         private mesh (Tailscale)        ┌────────────────────────────┐
+│  Friendly (Android)      │ ─────────────────────────────────────── │  Friendly Host (Linux)     │
+│  • Chat / assistants     │   HTTPS/HTTP Bearer API_TOKEN           │  Xvfb :99 + Openbox        │
+│  • Phone Automation      │   Control API :8787  /mcp  /v1/*        │  Chromium + xdotool        │
+│  • Computer stream UI    │   on-demand noVNC viewer (JWT TTL)      │  FastAPI agent + stream    │
+└──────────────────────────┘                                         └────────────────────────────┘
+```
+
+- **Phone path:** Accessibility service → local tools (`phone_inspect_screen`, click, swipe, …) → model loop can re-inspect after failures.
+- **Desktop path:** `DesktopControlClient` + local desktop tools → host Control API; live viewer is a human overlay, not the only control plane.
+- **Data:** prompts go to the providers you configure; desktop pixels stay on your host unless you or the agent send screenshots into a chat that uses a cloud model.
+
+See [`host/docs/architecture.md`](host/docs/architecture.md) for host defaults.
+
+### Project layout
+
+| Path | Role |
+|---|---|
+| `app/` | Android app (Compose UI, settings, phone & desktop clients) |
+| `ai/` | Model/provider abstractions and tools |
+| `search/`, `speech/`, `workspace/` | Search, ASR/TTS, workspace agents |
+| `web/`, `web-ui/` | Embedded web server + bundled UI |
+| `host/` | Self-hosted Linux Control API, MCP, stream stack |
+| `docs/` | Icons, screenshots, references |
+
+---
 
 ## Build from source
-
-### Requirements
-
-- JDK 17
-- Android SDK Platform 37 (extension level 2)
-- Android NDK `28.2.13676358`
-- Node.js 22 and pnpm 11 (the embedded web UI is built as part of the Android build)
-- Git and an Android device or emulator running Android 8.0 / API 26 or newer to install the app
-
-The repository includes a Gradle wrapper. Android SDK components can be installed through Android Studio’s SDK Manager. Accept the Android SDK licenses before building.
-
-### Clone and build a debug APK
 
 ```bash
 git clone --branch friendly-2.0 --recurse-submodules https://github.com/jimskin03/friendly.git
 cd friendly
 
-# Enable the package manager used to build the bundled web UI.
 corepack enable
 corepack prepare pnpm@11 --activate
-cd web-ui
-pnpm install --frozen-lockfile
-cd ..
+cd web-ui && pnpm install --frozen-lockfile && cd ..
 
 ./gradlew :app:assembleDebug
 ```
 
-The web module runs the `web-ui` production build during Gradle’s `preBuild` phase. Install the generated APK from `app/build/outputs/apk/debug/` with Android Studio or `adb install -r <apk-path>`.
-
-The release application ID is `app.friendly.assistant`; debug builds use the `.debug` suffix so they can be installed alongside a release build. A local `google-services.json` is not required for a debug build; Firebase build plugins are applied when a Google Services configuration is present.
+Install from `app/build/outputs/apk/debug/`. Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
 
 ### Tests
 
 ```bash
-# App JVM unit tests
 ./gradlew :app:testDebugUnitTest
-
-# JVM unit tests across the Gradle project
 ./gradlew test
-
-# Instrumentation tests (requires a running emulator or connected device)
-./gradlew :app:connectedDebugAndroidTest
+./gradlew :app:connectedDebugAndroidTest   # device/emulator required
 ```
 
-### Release builds
+### Troubleshooting
 
-```bash
-./gradlew :app:assembleRelease
-```
+- **SDK not found:** set `ANDROID_HOME` / `sdk.dir` in untracked `local.properties`
+- **NDK:** install side-by-side `28.2.13676358`
+- **Web UI build:** Node 22 + Corepack pnpm 11 inside `web-ui/`
+- **Wrong Java:** `JAVA_HOME` → JDK 17
+- **Computer offline:** verify Tailscale connectivity, Base URL, and Bearer token; `curl` host `/health` and `/v1/desktop/status`
 
-Release builds require valid signing configuration and a keystore. Keep keystores, signing passwords, API credentials, `local.properties`, and `google-services.json` out of version control.
+---
 
-## Project structure
+## Privacy & security
 
-- `app/` — Android application, Compose UI, navigation, and app-level persistence.
-- `ai/` — model/provider abstractions, generation, and AI tools.
-- `search/` — search and scraping integrations.
-- `speech/` — speech recognition and text-to-speech integrations.
-- `workspace/` — workspace file and terminal tooling.
-- `document/`, `highlight/` — document handling and syntax highlighting.
-- `web/`, `web-ui/` — embedded web server/API and the bundled web interface.
-- `oauth/` — OAuth client and loopback callback components.
-- `common/`, `material3/`, `videogen/` — shared utilities, design components, and generated-media support.
+- Friendly does **not** ship with a built-in cloud account for your chats; you supply provider keys.
+- Phone Accessibility can read UI and inject gestures — enable only when needed; disable when idle.
+- Computer host: use a strong `API_TOKEN`, prefer Tailscale/private reachability, bind API to localhost when possible, never expose raw VNC publicly.
+- Stream sessions use short-lived viewer JWTs; prefer the in-app Computer button over letting models open tunnels without approval.
+- Prompts, attachments, screenshots, and tool payloads may leave the device toward **your chosen** model/search/MCP endpoints — review those policies.
+- Do not commit secrets. Host template: [`host/.env.example`](host/.env.example).
 
-## Permissions and privacy
+A public privacy-policy URL for Play Store listing is not yet published in this repo — add one before store submission.
 
-Friendly requests Android permissions as needed by optional features, such as microphone access for voice input, camera access for scanning, calendar access for calendar tools, and usage access for screen-time features. You can decline optional permissions and still use the core chat client.
+---
 
-Prompts, attachments, and tool inputs may be sent to the model, search, or MCP services you configure. Review each service’s privacy policy and avoid sending information you do not want that service to process.
+## Status & roadmap
 
-## Troubleshooting
+| Area | Status |
+|---|---|
+| Chat, providers, MCP, workspace | Available on `friendly-2.0` |
+| Phone Automation + Inspect Screen | Available (Accessibility) |
+| Computer host Control API + MCP + stream | Available under `host/` |
+| Play Store publish | In progress — APKs via GitHub Releases for now |
+| Hardening (OIDC / Access, UX polish) | Ongoing — see host architecture Phase 4 |
 
-- **Android SDK location not found:** install the SDK and set `ANDROID_HOME` (or `ANDROID_SDK_ROOT`), or configure `sdk.dir` in your local, untracked `local.properties` file.
-- **NDK not configured:** install NDK side-by-side version `28.2.13676358` from Android Studio’s SDK Manager.
-- **`pnpm` not found or web build fails:** use Node.js 22, enable Corepack, activate pnpm 11, and run `pnpm install --frozen-lockfile` inside `web-ui/`.
-- **Gradle uses the wrong Java:** point `JAVA_HOME` at JDK 17 and restart the build.
-- **Provider requests fail:** check the provider’s API key, selected model, endpoint, network access, and any provider-specific limits in Friendly’s settings.
+---
 
-## Feedback
+## Contributing
 
-For a bug report, open a [GitHub issue](https://github.com/jimskin03/friendly/issues) and include the Friendly version, Android version, steps to reproduce, and relevant non-sensitive logs. Remove API keys, OAuth codes, tokens, personal messages, and private URLs before posting.
+Bug reports and PRs are welcome on [`friendly-2.0`](https://github.com/jimskin03/friendly/tree/friendly-2.0).
+
+1. Fork and branch from `friendly-2.0`.
+2. Keep secrets out of commits and issue text.
+3. Prefer focused PRs; include steps to reproduce for bugs (Friendly version, Android version, non-sensitive logs).
+
+---
 
 ## License
 
 Friendly is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). Third-party components retain their own licenses.
+
+---
+
+## Links
+
+- Repository: [github.com/jimskin03/friendly](https://github.com/jimskin03/friendly)
+- Branch: [`friendly-2.0`](https://github.com/jimskin03/friendly/tree/friendly-2.0)
+- Host setup: [`host/SETUP_UBUNTU.md`](host/SETUP_UBUNTU.md)
+- Issues: [github.com/jimskin03/friendly/issues](https://github.com/jimskin03/friendly/issues)
+- Demo / review: [X post by @cryptgreg](https://x.com/cryptgreg/status/2105931441360253273)
