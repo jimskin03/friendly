@@ -1,0 +1,16 @@
+[Unit]
+Description=Friendly host Openbox on Xvfb
+After=xvfb.service
+Requires=xvfb.service
+
+[Service]
+Type=simple
+User=assistant
+EnvironmentFile=-/etc/friendly-host.env
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/openbox
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

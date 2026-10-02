@@ -86,6 +86,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Mic01
 import me.rerere.hugeicons.stroke.Zap
@@ -146,6 +147,7 @@ fun ChatInput(
     onStartVoiceMode: (() -> Unit)? = null,
     voiceState: VoiceSessionState = VoiceSessionState(),
     onStopVoiceMode: () -> Unit = {},
+    onOpenComputer: (() -> Unit)? = null,
     includeNavigationBarPadding: Boolean = true,
 ) {
     val toaster = LocalToaster.current
@@ -321,6 +323,16 @@ fun ChatInput(
                                 onUpdateSearchService = onUpdateSearchService,
                                 model = chatModel,
                             )
+
+                            // Computer / Open desktop
+                            if (onOpenComputer != null) {
+                                ActionIconButton(onClick = onOpenComputer) {
+                                    Icon(
+                                        imageVector = HugeIcons.ComputerTerminal01,
+                                        contentDescription = "Computer",
+                                    )
+                                }
+                            }
 
                             // Reasoning
                             val model = settings.getCurrentChatModel()

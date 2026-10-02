@@ -1,0 +1,7 @@
+# Phase 3 — Cloudflare Tunnel example (do not commit real credentials)
+tunnel: YOUR_TUNNEL_ID
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: desktop-session.example.com
+    service: http://127.0.0.1:6080
+  - service: http_status:404

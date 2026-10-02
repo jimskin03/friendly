@@ -761,6 +761,10 @@ data class NetworkSetting(
     val proxyUsername: String = "",
     val proxyPassword: String = "",
     val enableAutoRetry: Boolean = true,
+    /** Friendly Host Control API base URL (e.g. http://100.x.y.z:8787). */
+    val desktopControlBaseUrl: String = "http://10.0.2.2:8787",
+    /** Bearer token matching host API_TOKEN. Never commit real tokens. */
+    val desktopControlApiToken: String = "",
 )
 
 @Serializable

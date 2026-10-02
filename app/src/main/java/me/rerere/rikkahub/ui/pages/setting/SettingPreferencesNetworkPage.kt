@@ -47,6 +47,7 @@ import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.remote.DesktopControlDefaults
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.network.toProxyOrNull
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -85,6 +86,13 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
     var proxyPasswordDraft by remember { mutableStateOf("") }
     var proxyPasswordVisible by remember { mutableStateOf(false) }
     var proxyDialogVisible by remember { mutableStateOf(false) }
+    var desktopBaseUrl by remember(settings.networkSetting.desktopControlBaseUrl) {
+        mutableStateOf(settings.networkSetting.desktopControlBaseUrl)
+    }
+    var desktopApiToken by remember(settings.networkSetting.desktopControlApiToken) {
+        mutableStateOf(settings.networkSetting.desktopControlApiToken)
+    }
+    var desktopTokenVisible by remember { mutableStateOf(false) }
     val defaultUserAgent = "RikkaHub-Android/${BuildConfig.VERSION_NAME}"
     val proxyUrlInvalid = proxyUrlDraft.isNotBlank() && proxyUrlDraft.toProxyOrNull() == null
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -98,6 +106,24 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
         vm.updateSettings(
             settings.copy(
                 networkSetting = settings.networkSetting.copy(userAgent = value),
+            )
+        )
+    }
+
+    fun updateDesktopBaseUrl(value: String) {
+        desktopBaseUrl = value
+        vm.updateSettings(
+            settings.copy(
+                networkSetting = settings.networkSetting.copy(desktopControlBaseUrl = value),
+            )
+        )
+    }
+
+    fun updateDesktopApiToken(value: String) {
+        desktopApiToken = value
+        vm.updateSettings(
+            settings.copy(
+                networkSetting = settings.networkSetting.copy(desktopControlApiToken = value),
             )
         )
     }
@@ -339,6 +365,79 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
                                 TextButton(
                                     onClick = { updateUserAgent("") },
                                     enabled = userAgent.isNotEmpty(),
+                                ) {
+                                    Text(stringResource(R.string.setting_model_page_reset_to_default))
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = {
+                        Text("Desktop / Computer control")
+                    },
+                ) {
+                    item(
+                        headlineContent = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedTextField(
+                                    value = desktopBaseUrl,
+                                    onValueChange = ::updateDesktopBaseUrl,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Control API base URL") },
+                                    placeholder = { Text(DesktopControlDefaults.BASE_URL) },
+                                    supportingText = {
+                                        Text(
+                                            "Friendly Host Control API (stream/start). " +
+                                                "Emulator default: ${DesktopControlDefaults.BASE_URL}. " +
+                                                "On device use Tailscale/LAN URL, e.g. http://100.x.y.z:8787"
+                                        )
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                    singleLine = true,
+                                )
+                                OutlinedTextField(
+                                    value = desktopApiToken,
+                                    onValueChange = ::updateDesktopApiToken,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("API Bearer token") },
+                                    placeholder = { Text("Same as host API_TOKEN") },
+                                    visualTransformation = if (desktopTokenVisible) {
+                                        VisualTransformation.None
+                                    } else {
+                                        PasswordVisualTransformation()
+                                    },
+                                    trailingIcon = {
+                                        IconButton(
+                                            onClick = { desktopTokenVisible = !desktopTokenVisible },
+                                        ) {
+                                            Icon(
+                                                imageVector = if (desktopTokenVisible) {
+                                                    HugeIcons.ViewOff
+                                                } else {
+                                                    HugeIcons.View
+                                                },
+                                                contentDescription = null,
+                                            )
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                    singleLine = true,
+                                )
+                                TextButton(
+                                    onClick = {
+                                        updateDesktopBaseUrl(DesktopControlDefaults.BASE_URL)
+                                        updateDesktopApiToken("")
+                                    },
+                                    modifier = Modifier.align(Alignment.End),
+                                    enabled = desktopBaseUrl != DesktopControlDefaults.BASE_URL ||
+                                        desktopApiToken.isNotEmpty(),
                                 ) {
                                     Text(stringResource(R.string.setting_model_page_reset_to_default))
                                 }
