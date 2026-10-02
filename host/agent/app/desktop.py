@@ -8,6 +8,8 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 from .config import Settings, get_settings
@@ -213,6 +215,164 @@ def launch_app(name: str, settings: Settings | None = None) -> dict:
         return browser.open_url("https://www.google.com", s)
     else:
         raise DesktopError(f"Unknown application: {name}. Supported: menu, terminal, browser", code="bad_app")
+
+
+_CHROME_CLASSES = ("chromium", "chrome", "google-chrome")
+_TERMINAL_CLASSES = ("xterm", "xfce4-terminal", "gnome-terminal")
+_prepare_lock = threading.Lock()
+
+
+def workspace_frames(width: int, height: int, panel: int = 0) -> dict[str, tuple[int, int, int, int]]:
+    """Chrome on the left, terminal on the right, above an optional panel."""
+    usable_h = max(200, height - max(0, panel))
+    chrome_w = max(320, int(width * 0.62))
+    gap = 8
+    # Leave the terminal a usable column.
+    if chrome_w > width - 280:
+        chrome_w = max(320, width - 280)
+    term_w = max(200, width - chrome_w - gap)
+    return {
+        "chrome": (0, 0, chrome_w, usable_h),
+        "terminal": (chrome_w + gap, 0, term_w, usable_h),
+    }
+
+
+def _window_ids(display: str, class_name: str) -> list[str]:
+    if shutil.which("xdotool") is None:
+        return []
+    result = _run(
+        ["xdotool", "search", "--class", class_name],
+        display=display,
+        check=False,
+    )
+    return [
+        line.strip()
+        for line in (result.stdout or b"").decode("utf-8", errors="replace").splitlines()
+        if line.strip().isdigit()
+    ]
+
+
+def _find_window(display: str, class_names: tuple[str, ...]) -> str | None:
+    for name in class_names:
+        ids = _window_ids(display, name)
+        if ids:
+            return ids[-1]
+    return None
+
+
+def _wait_window(display: str, class_names: tuple[str, ...], timeout: float = 8.0) -> str | None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        found = _find_window(display, class_names)
+        if found:
+            return found
+        time.sleep(0.25)
+    return None
+
+
+def _panel_height() -> int:
+    if shutil.which("pgrep") is None:
+        return 0
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "tint2"],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 0
+    return 40 if result.returncode == 0 else 0
+
+
+def _place_window(display: str, window_id: str, x: int, y: int, width: int, height: int) -> None:
+    if shutil.which("xdotool") is None:
+        return
+    _run(
+        [
+            "xdotool",
+            "windowstate",
+            "--remove",
+            "MAXIMIZED_VERT",
+            "--remove",
+            "MAXIMIZED_HORZ",
+            window_id,
+        ],
+        display=display,
+        check=False,
+    )
+    _run(
+        ["xdotool", "windowsize", window_id, str(width), str(height)],
+        display=display,
+        check=False,
+    )
+    _run(
+        ["xdotool", "windowmove", window_id, str(x), str(y)],
+        display=display,
+        check=False,
+    )
+
+
+def _launch_terminal(display: str) -> None:
+    term = shutil.which("xterm") or shutil.which("x-terminal-emulator")
+    if not term:
+        raise DesktopError(
+            "xterm terminal not found. Run scripts/bootstrap-host.sh",
+            code="missing_tool",
+        )
+    argv = [term]
+    if os.path.basename(term) == "xterm":
+        argv.extend(
+            ["-fa", "DejaVu Sans Mono", "-fs", "11", "-bg", "#1c1c1c", "-fg", "#e6e6e6"]
+        )
+    subprocess.Popen(
+        argv,
+        env={**os.environ, "DISPLAY": display},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def prepare_workspace(settings: Settings | None = None) -> dict:
+    """Open Chrome and a terminal side by side. Safe to call more than once."""
+    with _prepare_lock:
+        return _prepare_workspace_locked(settings)
+
+
+def _prepare_workspace_locked(settings: Settings | None = None) -> dict:
+    s = settings or get_settings()
+    disp = require_display(s)
+    if shutil.which("xsetroot"):
+        _run(["xsetroot", "-solid", "#1e1f22"], display=disp, check=False)
+
+    frames = workspace_frames(s.screen_width, s.screen_height, _panel_height())
+    chrome_id = _find_window(disp, _CHROME_CLASSES)
+    if chrome_id is None:
+        from . import browser
+
+        browser.open_url("https://www.google.com", s)
+        chrome_id = _wait_window(disp, _CHROME_CLASSES)
+    terminal_id = _find_window(disp, _TERMINAL_CLASSES)
+    if terminal_id is None:
+        _launch_terminal(disp)
+        terminal_id = _wait_window(disp, _TERMINAL_CLASSES)
+
+    # Openbox may maximize new windows; place them again after they settle.
+    for _ in range(2):
+        if chrome_id:
+            _place_window(disp, chrome_id, *frames["chrome"])
+        if terminal_id:
+            _place_window(disp, terminal_id, *frames["terminal"])
+        time.sleep(0.35)
+        chrome_id = _find_window(disp, _CHROME_CLASSES) or chrome_id
+        terminal_id = _find_window(disp, _TERMINAL_CLASSES) or terminal_id
+
+    return {
+        "chrome": chrome_id is not None,
+        "terminal": terminal_id is not None,
+        "frames": {name: list(rect) for name, rect in frames.items()},
+    }
 
 
 def status_info(settings: Settings | None = None) -> dict:

@@ -139,6 +139,7 @@ private suspend fun PointerInputScope.trackpadGestures(
     onDragStart: () -> Unit,
     onDragEnd: () -> Unit,
     onScroll: (Float, Float) -> Unit,
+    onZoom: (factor: Float, focusX: Float, focusY: Float) -> Unit,
     onInteraction: () -> Unit,
 ) {
     val slop = viewConfiguration.touchSlop
@@ -150,16 +151,21 @@ private suspend fun PointerInputScope.trackpadGestures(
         val downAt = first.uptimeMillis
         var primaryId = first.id
         var moved = false
-        var scrolling = false
+        var twoFinger = false
+        var pinch = false
+        var scrollGesture = false
+        var didTwoFinger = false
+        var baselineSpan = -1f
+        var baseMidX = 0f
+        var baseMidY = 0f
         var dragging = false
         var longFired = false
-        var didScroll = false
         var scrollX = 0f
         var scrollY = 0f
 
         while (true) {
             val elapsed = SystemClock.uptimeMillis() - downAt
-            val waitForLongPress = !longFired && !moved && !scrolling && elapsed < longPressMs
+            val waitForLongPress = !longFired && !moved && !twoFinger && elapsed < longPressMs
             val event = if (waitForLongPress) {
                 withTimeoutOrNull(longPressMs - elapsed) {
                     awaitPointerEvent(PointerEventPass.Main)
@@ -176,28 +182,61 @@ private suspend fun PointerInputScope.trackpadGestures(
             if (pressed.isEmpty()) break
 
             if (pressed.size >= 2) {
-                scrolling = true
+                twoFinger = true
                 if (dragging) {
                     dragging = false
                     onDragEnd()
                 }
-                var dx = 0f
-                var dy = 0f
-                pressed.forEach { change ->
-                    dx += change.position.x - change.previousPosition.x
-                    dy += change.position.y - change.previousPosition.y
-                    change.consume()
+                val a = pressed[0]
+                val b = pressed[1]
+                val span = hypot(
+                    a.position.x - b.position.x,
+                    a.position.y - b.position.y,
+                ).coerceAtLeast(1f)
+                val prevSpan = hypot(
+                    a.previousPosition.x - b.previousPosition.x,
+                    a.previousPosition.y - b.previousPosition.y,
+                ).coerceAtLeast(1f)
+                val midX = (a.position.x + b.position.x) / 2f
+                val midY = (a.position.y + b.position.y) / 2f
+                if (baselineSpan < 0f) {
+                    baselineSpan = span
+                    baseMidX = midX
+                    baseMidY = midY
+                } else if (!pinch && !scrollGesture) {
+                    val grew = abs(span - baselineSpan)
+                    val slid = hypot(midX - baseMidX, midY - baseMidY)
+                    if (grew > slop * 2f && grew > slid) {
+                        pinch = true
+                    } else if (slid > slop) {
+                        scrollGesture = true
+                    }
                 }
-                val count = pressed.size.coerceAtLeast(1)
-                scrollX += dx / count
-                scrollY += dy / count
-                val step = 28f * density
-                if (abs(scrollX) >= step || abs(scrollY) >= step) {
-                    didScroll = true
-                    onScroll(scrollX, scrollY)
-                    scrollX = 0f
-                    scrollY = 0f
+                if (pinch) {
+                    val factor = (span / prevSpan).coerceIn(0.8f, 1.25f)
+                    if (abs(factor - 1f) > 0.01f) {
+                        didTwoFinger = true
+                        onZoom(factor, midX, midY)
+                    }
+                } else if (scrollGesture) {
+                    var dx = 0f
+                    var dy = 0f
+                    pressed.forEach { change ->
+                        dx += change.position.x - change.previousPosition.x
+                        dy += change.position.y - change.previousPosition.y
+                    }
+                    val count = pressed.size.coerceAtLeast(1)
+                    scrollX += dx / count
+                    scrollY += dy / count
+                    val step = 28f * density
+                    if (abs(scrollX) >= step || abs(scrollY) >= step) {
+                        didTwoFinger = true
+                        onScroll(scrollX, scrollY)
+                        scrollX = 0f
+                        scrollY = 0f
+                    }
                 }
+                pressed.forEach { it.consume() }
                 continue
             }
 
@@ -212,7 +251,7 @@ private suspend fun PointerInputScope.trackpadGestures(
             if (!longFired && !moved && SystemClock.uptimeMillis() - downAt >= longPressMs) {
                 longFired = true
             }
-            if (!scrolling && moved) {
+            if (!twoFinger && moved) {
                 if (longFired && !dragging) {
                     dragging = true
                     onDragStart()
@@ -227,10 +266,11 @@ private suspend fun PointerInputScope.trackpadGestures(
         }
 
         when {
-            scrolling && !didScroll -> onClick(2)
+            twoFinger && !didTwoFinger -> onClick(2)
+            twoFinger -> Unit
             dragging -> onDragEnd()
             !moved && longFired -> onClick(2)
-            !moved && !scrolling -> onClick(0)
+            !moved -> onClick(0)
         }
     }
 }
@@ -317,7 +357,7 @@ fun DesktopControlSheet(
         val wv = webViewInstance
         if (!target.isNullOrBlank() && wv != null && target != lastLoadedViewerUrl) {
             lastLoadedViewerUrl = target
-            wv.loadUrl(target)
+            wv.loadUrl(target.fillingViewerUrl())
         }
     }
 
@@ -364,6 +404,20 @@ fun DesktopControlSheet(
             } finally {
                 isStartingStream = false
             }
+        }
+    }
+
+    LaunchedEffect(activeViewerUrl) {
+        if (activeViewerUrl.isNullOrBlank() || networkSetting.desktopControlApiToken.isBlank()) {
+            return@LaunchedEffect
+        }
+        try {
+            createClient(
+                baseUrl = networkSetting.desktopControlBaseUrl,
+                token = networkSetting.desktopControlApiToken,
+            ).prepareDesktop()
+        } catch (e: Exception) {
+            android.util.Log.w("DesktopControl", "prepare desktop failed: ${e.message}")
         }
     }
 
@@ -557,7 +611,7 @@ fun DesktopControlSheet(
 
                             if (!activeViewerUrl.isNullOrBlank()) {
                                 lastLoadedViewerUrl = activeViewerUrl
-                                loadUrl(activeViewerUrl!!)
+                                loadUrl(activeViewerUrl!!.fillingViewerUrl())
                             }
                         }
                     },
@@ -580,6 +634,11 @@ fun DesktopControlSheet(
                                     // Pass CSS pixels; the page turns each 50px into one wheel notch.
                                     webViewInstance.trackpad(
                                         "wheel(${(-dx / density).jsNum()},${(-dy / density).jsNum()})",
+                                    )
+                                },
+                                onZoom = { factor, x, y ->
+                                    webViewInstance.trackpad(
+                                        "zoomAt(${factor.jsNum()},${(x / density).jsNum()},${(y / density).jsNum()})",
                                     )
                                 },
                                 onInteraction = { showHint = false },
@@ -1042,9 +1101,21 @@ private fun ConnectionCard(
 
 private fun Float.jsNum(): String = if (isFinite()) toString() else "0"
 
+/** Ask noVNC to resize the remote desktop to the phone, instead of letterboxing it. */
+private fun String.fillingViewerUrl(): String {
+    val withResize = replace(Regex("([?&])resize=[^&]*")) { match ->
+        match.groupValues[1] + "resize=remote"
+    }
+    return when {
+        withResize.contains("resize=") -> withResize
+        withResize.contains("?") -> "$withResize&resize=remote"
+        else -> "$withResize?resize=remote"
+    }
+}
+
 private const val TRACKPAD_INSTALL_JS = """
 (function() {
-  if (window.FriendlyTrackpad) return;
+  if (window.FriendlyTrackpad && window.FriendlyTrackpad.zoomAt) return;
   function canvas() {
     var list = document.querySelectorAll('canvas');
     var best = null;
@@ -1061,7 +1132,7 @@ private const val TRACKPAD_INSTALL_JS = """
     if (!style) {
       style = document.createElement('style');
       style.id = 'friendly-trackpad-style';
-      style.textContent = 'html, body { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000; } #noVNC_container { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; } #noVNC_control_bar, #noVNC_control_bar_anchor { display: none !important; } canvas { max-width: 100% !important; max-height: 100% !important; }';
+      style.textContent = 'html, body { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000; } #noVNC_container, #noVNC_screen { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; overflow: hidden !important; } #noVNC_control_bar, #noVNC_control_bar_anchor { display: none !important; }';
       (document.head || document.documentElement).appendChild(style);
     }
   }
@@ -1078,21 +1149,125 @@ private const val TRACKPAD_INSTALL_JS = """
   window.FriendlyTrackpad = {
     x: null,
     y: null,
-    place: function() {
+    zoom: 1,
+    cover: 1,
+    panX: 0,
+    panY: 0,
+    viewScale: function() {
+      return (this.cover || 1) * (this.zoom || 1);
+    },
+    updateCover: function(c) {
+      var frame = document.getElementById('noVNC_container') || document.documentElement;
+      var cr = frame.getBoundingClientRect();
+      var lw = c.offsetWidth;
+      var lh = c.offsetHeight;
+      if (lw < 2 || lh < 2 || cr.width < 2 || cr.height < 2) {
+        this.cover = 1;
+        return;
+      }
+      var fill = Math.max(cr.width / lw, cr.height / lh);
+      this.cover = (!isFinite(fill) || fill < 1) ? 1 : fill;
+    },
+    applyView: function(c) {
+      if (!c) c = canvas();
+      if (!c) return;
+      this.updateCover(c);
+      c.style.transformOrigin = 'center center';
+      var z = this.viewScale();
+      if (z <= 1.01) {
+        this.panX = 0;
+        this.panY = 0;
+        c.style.transform = '';
+      } else {
+        c.style.transform = 'translate(' + this.panX + 'px,' + this.panY + 'px) scale(' + z + ')';
+      }
+      var frame = document.getElementById('noVNC_container');
+      if (frame) frame.style.overflow = 'hidden';
+      var list = document.querySelectorAll('canvas');
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] !== c) list[i].style.visibility = 'hidden';
+      }
+    },
+    layoutBox: function(c) {
+      var visual = c.getBoundingClientRect();
+      var z = this.viewScale();
+      if (z <= 1.01) {
+        return {left: visual.left, top: visual.top, width: visual.width, height: visual.height};
+      }
+      var lw = visual.width / z;
+      var lh = visual.height / z;
+      return {
+        left: visual.left - this.panX - visual.width * (1 - z) / (2 * z),
+        top: visual.top - this.panY - visual.height * (1 - z) / (2 * z),
+        width: lw,
+        height: lh
+      };
+    },
+    clampPan: function(box) {
+      var container = document.getElementById('noVNC_container') || document.documentElement;
+      var cr = container.getBoundingClientRect();
+      var z = this.viewScale();
+      var visW = box.width * z;
+      var visH = box.height * z;
+      var visLeft = box.left + this.panX + box.width / 2 * (1 - z);
+      if (visW >= cr.width - 1) {
+        if (visLeft > cr.left) this.panX -= visLeft - cr.left;
+        visLeft = box.left + this.panX + box.width / 2 * (1 - z);
+        if (visLeft + visW < cr.right) this.panX += cr.right - (visLeft + visW);
+      } else {
+        if (visLeft < cr.left) this.panX += cr.left - visLeft;
+        visLeft = box.left + this.panX + box.width / 2 * (1 - z);
+        if (visLeft + visW > cr.right) this.panX -= (visLeft + visW) - cr.right;
+      }
+      var visTop = box.top + this.panY + box.height / 2 * (1 - z);
+      if (visH >= cr.height - 1) {
+        if (visTop > cr.top) this.panY -= visTop - cr.top;
+        visTop = box.top + this.panY + box.height / 2 * (1 - z);
+        if (visTop + visH < cr.bottom) this.panY += cr.bottom - (visTop + visH);
+      } else {
+        if (visTop < cr.top) this.panY += cr.top - visTop;
+        visTop = box.top + this.panY + box.height / 2 * (1 - z);
+        if (visTop + visH > cr.bottom) this.panY -= (visTop + visH) - cr.bottom;
+      }
+    },
+    revealCursor: function(box) {
+      var container = document.getElementById('noVNC_container') || document.documentElement;
+      var cr = container.getBoundingClientRect();
+      var z = this.viewScale();
+      var vx = box.left + this.panX + box.width / 2 + (this.x - box.width / 2) * z;
+      var vy = box.top + this.panY + box.height / 2 + (this.y - box.height / 2) * z;
+      var m = 36;
+      if (vx < cr.left + m) this.panX += (cr.left + m) - vx;
+      if (vx > cr.right - m) this.panX -= vx - (cr.right - m);
+      if (vy < cr.top + m) this.panY += (cr.top + m) - vy;
+      if (vy > cr.bottom - m) this.panY -= vy - (cr.bottom - m);
+      this.clampPan(box);
+    },
+    place: function(opts) {
       var c = canvas();
       if (!c) return null;
-      var rect = c.getBoundingClientRect();
-      if (rect.width < 2 || rect.height < 2) return null;
+      this.applyView(c);
+      var box = this.layoutBox(c);
+      if (box.width < 2 || box.height < 2) return null;
       if (this.x == null || this.y == null) {
-        this.x = rect.width / 2;
-        this.y = rect.height / 2;
+        this.x = box.width / 2;
+        this.y = box.height / 2;
       }
-      this.x = Math.max(1, Math.min(rect.width - 2, this.x));
-      this.y = Math.max(1, Math.min(rect.height - 2, this.y));
+      this.x = Math.max(1, Math.min(box.width - 2, this.x));
+      this.y = Math.max(1, Math.min(box.height - 2, this.y));
+      if (opts && opts.reveal && this.viewScale() > 1.01) {
+        this.revealCursor(box);
+        this.applyView(c);
+        box = this.layoutBox(c);
+      }
+      var visual = c.getBoundingClientRect();
+      var scale = this.viewScale();
+      var vx = box.left + this.panX + box.width / 2 + (this.x - box.width / 2) * scale;
+      var vy = box.top + this.panY + box.height / 2 + (this.y - box.height / 2) * scale;
       var mark = cursorEl();
-      mark.style.left = (rect.left + this.x) + 'px';
-      mark.style.top = (rect.top + this.y) + 'px';
-      return { canvas: c, rect: rect };
+      mark.style.left = vx + 'px';
+      mark.style.top = vy + 'px';
+      return { canvas: c, rect: visual, box: box };
     },
     dispatch: function(type, button, buttons) {
       var placed = this.place();
@@ -1113,8 +1288,43 @@ private const val TRACKPAD_INSTALL_JS = """
       if (!this.place()) return false;
       this.x += dx;
       this.y += dy;
+      this.place({reveal: true});
       var buttons = this.held === 4 ? 2 : (this.held ? 1 : 0);
       return this.dispatch('mousemove', 0, buttons);
+    },
+    zoomAt: function(factor, sx, sy) {
+      var c = canvas();
+      if (!c) return false;
+      this.applyView(c);
+      var box = this.layoutBox(c);
+      if (box.width < 2 || box.height < 2) return false;
+      if (this.x == null || this.y == null) {
+        this.x = box.width / 2;
+        this.y = box.height / 2;
+      }
+      var old = this.viewScale();
+      var cover = this.cover || 1;
+      var pinch = (this.zoom || 1) * factor;
+      var minPinch = 1 / cover;
+      if (pinch < minPinch) pinch = minPinch;
+      if (pinch > 4) pinch = 4;
+      var next = (this.cover || 1) * pinch;
+      if (Math.abs(next - old) < 0.001) return true;
+      var centerX = box.left + box.width / 2 + this.panX;
+      var centerY = box.top + box.height / 2 + this.panY;
+      var lx = box.width / 2 + (sx - centerX) / old;
+      var ly = box.height / 2 + (sy - centerY) / old;
+      this.zoom = pinch;
+      if (next <= 1.01) {
+        this.panX = 0;
+        this.panY = 0;
+      } else {
+        this.panX = sx - (box.left + box.width / 2) - (lx - box.width / 2) * next;
+        this.panY = sy - (box.top + box.height / 2) - (ly - box.height / 2) * next;
+        this.clampPan(box);
+      }
+      this.place();
+      return true;
     },
     down: function(button) {
       var mask = button === 2 ? 2 : 1;
@@ -1154,10 +1364,16 @@ private const val TRACKPAD_INSTALL_JS = """
       return true;
     }
   };
+  function askRemoteToFill() {
+    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+  }
   hideChrome();
+  askRemoteToFill();
   setTimeout(function() {
     hideChrome();
+    askRemoteToFill();
     if (window.FriendlyTrackpad) window.FriendlyTrackpad.moveBy(0, 0);
   }, 600);
+  setTimeout(askRemoteToFill, 1500);
 })();
 """

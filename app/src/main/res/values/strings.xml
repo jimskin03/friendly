@@ -52,7 +52,7 @@
   <string name="desktop_mode_view_toast">View Mode: Monitoring only (touches won\'t click)</string>
   <string name="desktop_mode_interactive_toast">Interactive Mode: Tap anywhere to click &amp; drag</string>
   <string name="desktop_screen_title">Computer</string>
-  <string name="desktop_trackpad_hint">Drag to move · Tap to click · Hold to right-click · Two fingers to scroll</string>
+  <string name="desktop_trackpad_hint">Drag to move · Tap to click · Pinch to zoom · Two fingers to scroll</string>
   <string name="desktop_action_start">Start</string>
   <string name="desktop_action_keyboard">Keyboard</string>
   <string name="desktop_action_right_click">Right click</string>

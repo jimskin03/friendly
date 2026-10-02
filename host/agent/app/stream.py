@@ -36,6 +36,16 @@ from .desktop import display_available
 
 logger = logging.getLogger(__name__)
 
+def _launch_desktop_workspace() -> None:
+    """Best-effort Chrome + terminal layout. Never fails the stream start."""
+    try:
+        from .desktop import prepare_workspace
+
+        prepare_workspace()
+    except Exception:
+        logger.warning("could not prepare chrome and terminal desktop", exc_info=True)
+
+
 HOST_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = HOST_ROOT / "logs"
 PID_DIR = HOST_ROOT / "data" / "pids"
@@ -203,7 +213,7 @@ def _build_local_viewer_url(
         {
             "autoconnect": "1",
             "reconnect": "1",
-            "resize": "scale",
+            "resize": "remote",
             "token": token,
         }
     )
@@ -859,6 +869,7 @@ def _start_x11vnc(settings: Settings, mode: str) -> int:
         "-nopw",
         "-xkb",
         "-noxdamage",
+        "-xrandr",
         "-quiet",
     ]
     # Bind localhost only when configured
@@ -1095,6 +1106,11 @@ class StreamManager:
                 viewer_url.split("?", 1)[0],
                 tunnel.get("mode"),
             )
+            threading.Thread(
+                target=_launch_desktop_workspace,
+                name="friendly-desktop-prepare",
+                daemon=True,
+            ).start()
             return {
                 "viewer_url": viewer_url,
                 "local_viewer_url": local_url,

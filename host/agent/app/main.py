@@ -221,6 +221,24 @@ def desktop_launch(
     return {"ok": True, **result}
 
 
+@app.post("/v1/desktop/prepare")
+def desktop_prepare(
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Make sure the desktop is showing Chrome and a terminal."""
+    try:
+        result = desktop.prepare_workspace(settings)
+    except DesktopError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            if e.code in ("no_display", "missing_tool")
+            else status.HTTP_400_BAD_REQUEST,
+            detail={"error": e.code, "message": e.message},
+        ) from e
+    return {"ok": True, **result}
+
+
 
 # --- stream (Phase 3 stubs) ---
 

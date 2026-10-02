@@ -252,6 +252,27 @@ class DesktopControlClient(
         return JsonInstant.decodeFromString(text)
     }
 
+    /**
+     * Ask the host to show Chrome and a terminal side by side.
+     * Returns false when the host does not have this endpoint yet.
+     */
+    suspend fun prepareDesktop(): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/desktop/prepare") {
+            auth()
+        }
+        if (response.status.value == 404) {
+            return false
+        }
+        if (!response.status.isSuccess()) {
+            val text = response.bodyAsText()
+            throw DesktopControlException(
+                message = "desktop/prepare failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
     suspend fun launchApp(app: String): Boolean {
         val clean = app.trim().lowercase()
         return try {

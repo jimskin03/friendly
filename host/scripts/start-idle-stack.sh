@@ -113,6 +113,15 @@ if command -v tint2 >/dev/null 2>&1 && display_up; then
   fi
 fi
 
+# Chrome on the left, terminal on the right. Safe to run repeatedly.
+if [[ -x "$ROOT/agent/.venv/bin/python" ]]; then
+  echo "Preparing Chrome and terminal on $DISPLAY_NUM"
+  (
+    cd "$ROOT/agent"
+    DISPLAY="$DISPLAY_NUM" "$ROOT/agent/.venv/bin/python" -c "from app.desktop import prepare_workspace; print(prepare_workspace())"
+  ) || echo "WARN: desktop prepare failed — see API logs after the next stream start"
+fi
+
 echo ""
 echo "Idle stack up."
 echo "  DISPLAY=$DISPLAY_NUM"

@@ -30,6 +30,11 @@
     <keybind key="W-d">
       <action name="ToggleShowDesktop"/>
     </keybind>
+    <keybind key="C-A-t">
+      <action name="Execute">
+        <command>xterm -fa 'DejaVu Sans Mono' -fs 11 -bg '#1c1c1c' -fg '#e6e6e6'</command>
+      </action>
+    </keybind>
   </keyboard>
   <mouse>
     <default/>
@@ -44,7 +49,7 @@
   </mouse>
   <applications>
     <application class="*">
-      <maximized>yes</maximized>
+      <maximized>no</maximized>
       <decor>yes</decor>
     </application>
   </applications>
