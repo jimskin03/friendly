@@ -864,8 +864,6 @@ def _start_x11vnc(settings: Settings, mode: str) -> int:
     # Bind localhost only when configured
     if bind in ("127.0.0.1", "localhost", "::1"):
         argv.append("-localhost")
-    if mode == "view":
-        argv.append("-viewonly")
 
     env = {**os.environ, "DISPLAY": settings.display}
     with open(log, "ab") as lf:

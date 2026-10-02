@@ -72,16 +72,20 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.dokar.sonner.ToastType
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert02
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.CheckmarkCircle02
 import me.rerere.hugeicons.stroke.Collapse
+import me.rerere.hugeicons.stroke.CommandLine
 import me.rerere.hugeicons.stroke.Computer
 import me.rerere.hugeicons.stroke.Expand
 import me.rerere.hugeicons.stroke.Globe
 import me.rerere.hugeicons.stroke.Keyboard
+import me.rerere.hugeicons.stroke.Menu01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Stop
@@ -165,7 +169,7 @@ fun DesktopControlSheet(
                     baseUrl = networkSetting.desktopControlBaseUrl,
                     token = networkSetting.desktopControlApiToken,
                 )
-                val started = client.startStream(mode = if (displayMode == StreamDisplayMode.INTERACTIVE) "interactive" else "view")
+                val started = client.startStream(mode = "interactive")
                 activeViewerUrl = started.viewer_url
                 onStreamStarted(started.viewer_url)
             } catch (e: Exception) {
@@ -417,7 +421,7 @@ fun DesktopControlSheet(
                                         isStartingStream = true
                                         try {
                                             val client = createClient(baseUrl = configBaseUrl, token = configApiToken)
-                                            val started = client.startStream(mode = if (displayMode == StreamDisplayMode.INTERACTIVE) "interactive" else "view")
+                                            val started = client.startStream(mode = "interactive")
                                             activeViewerUrl = started.viewer_url
                                             onStreamStarted(started.viewer_url)
                                             toaster.show("Connected to desktop", ToastType.Success)
@@ -487,6 +491,21 @@ fun DesktopControlSheet(
                             },
                             modifier = Modifier.fillMaxSize()
                         )
+
+                        // In View Mode: overlay intercepts touches so scrolling/monitoring doesn't accidentally click on desktop
+                        if (displayMode == StreamDisplayMode.VIEW) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onTap = {
+                                                toaster.show("Switch to Interactive Mode above to click & drag", ToastType.Info)
+                                            }
+                                        )
+                                    }
+                            )
+                        }
                     } else {
                         // Offline placeholder
                         Column(
@@ -524,7 +543,7 @@ fun DesktopControlSheet(
                                             isStartingStream = true
                                             try {
                                                 val client = createClient()
-                                                val started = client.startStream(mode = if (displayMode == StreamDisplayMode.INTERACTIVE) "interactive" else "view")
+                                                val started = client.startStream(mode = "interactive")
                                                 activeViewerUrl = started.viewer_url
                                                 onStreamStarted(started.viewer_url)
                                             } catch (e: Exception) {
@@ -566,18 +585,10 @@ fun DesktopControlSheet(
                                         } else {
                                             StreamDisplayMode.VIEW
                                         }
-                                        // Reload stream with updated mode
-                                        scope.launch {
-                                            try {
-                                                val client = createClient()
-                                                client.stopStream()
-                                                val started = client.startStream(mode = if (displayMode == StreamDisplayMode.INTERACTIVE) "interactive" else "view")
-                                                activeViewerUrl = started.viewer_url
-                                                onStreamStarted(started.viewer_url)
-                                                webViewInstance?.loadUrl(started.viewer_url)
-                                            } catch (e: Exception) {
-                                                toaster.show(e.message ?: "Failed to switch mode", ToastType.Error)
-                                            }
+                                        if (displayMode == StreamDisplayMode.INTERACTIVE) {
+                                            toaster.show(context.getString(R.string.desktop_mode_interactive_toast), ToastType.Success)
+                                        } else {
+                                            toaster.show(context.getString(R.string.desktop_mode_view_toast), ToastType.Info)
                                         }
                                     },
                                     label = {
@@ -606,10 +617,29 @@ fun DesktopControlSheet(
                 }
             }
 
-            // Quick Actions Bar: Snap to Chat, Browser, Hotkeys, Type
+            // Desktop Guidance Hint Banner
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.desktop_tip_banner),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+
+            // Quick Actions Bar: Snap to Chat, Menu, Browser, Terminal, Type
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Snap to Chat
@@ -631,7 +661,7 @@ fun DesktopControlSheet(
                         }
                     },
                     enabled = !isTakingSnapshot && networkSetting.desktopControlApiToken.isNotBlank(),
-                    modifier = Modifier.weight(1.2f),
+                    modifier = Modifier.weight(1.3f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -639,15 +669,35 @@ fun DesktopControlSheet(
                 ) {
                     if (isTakingSnapshot) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                     } else {
-                        Icon(HugeIcons.Camera01, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(HugeIcons.Camera01, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Text(stringResource(R.string.desktop_action_snap), fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.desktop_action_snap), fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
 
-                // Open Browser
+                // Open Desktop Menu (Super / Right Click)
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                val client = createClient()
+                                client.launchApp("menu")
+                                toaster.show("Opened desktop menu", ToastType.Info)
+                            } catch (e: Exception) {
+                                toaster.show(e.message ?: "Failed to open menu", ToastType.Error)
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(HugeIcons.Menu01, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.desktop_action_menu), maxLines = 1)
+                }
+
+                // Open Browser Drawer
                 OutlinedButton(
                     onClick = { showBrowserDialog = !showBrowserDialog },
                     modifier = Modifier.weight(1f)
@@ -657,55 +707,132 @@ fun DesktopControlSheet(
                     Text("Browser", maxLines = 1)
                 }
 
+                // Open Terminal
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                val client = createClient()
+                                client.launchApp("terminal")
+                                toaster.show("Launched Terminal", ToastType.Success)
+                            } catch (e: Exception) {
+                                toaster.show(e.message ?: "Failed to launch terminal", ToastType.Error)
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(HugeIcons.CommandLine, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.desktop_action_terminal), maxLines = 1)
+                }
+
                 // Type Text
                 OutlinedButton(
                     onClick = { showTypeDialog = !showTypeDialog },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(0.9f)
                 ) {
                     Icon(HugeIcons.Keyboard, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     Text("Type", maxLines = 1)
                 }
             }
 
-            // Expandable Browser Launcher Input
+            // Expandable Browser Launcher Drawer
             AnimatedVisibility(visible = showBrowserDialog) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedTextField(
-                            value = browserUrlInput,
-                            onValueChange = { browserUrlInput = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("URL to open in Chromium") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
-                        )
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    try {
-                                        val client = createClient()
-                                        client.openBrowser(browserUrlInput)
-                                        toaster.show("Launched $browserUrlInput", ToastType.Success)
-                                        showBrowserDialog = false
-                                    } catch (e: Exception) {
-                                        toaster.show(e.message ?: "Failed to open browser", ToastType.Error)
-                                    }
-                                }
-                            },
-                            enabled = browserUrlInput.isNotBlank()
+                        // Quick 1-tap Launch Chromium button + Presets
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("Open")
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        try {
+                                            val client = createClient()
+                                            client.openBrowser("https://www.google.com")
+                                            toaster.show("Chromium launched", ToastType.Success)
+                                            showBrowserDialog = false
+                                        } catch (e: Exception) {
+                                            toaster.show(e.message ?: "Failed to open browser", ToastType.Error)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1.3f)
+                            ) {
+                                Icon(HugeIcons.Globe, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(stringResource(R.string.desktop_action_launch_browser), maxLines = 1)
+                            }
+
+                            listOf(
+                                "Google" to "https://www.google.com",
+                                "GitHub" to "https://github.com",
+                                "YouTube" to "https://www.youtube.com"
+                            ).forEach { (label, url) ->
+                                FilterChip(
+                                    selected = browserUrlInput == url,
+                                    onClick = {
+                                        browserUrlInput = url
+                                        scope.launch {
+                                            try {
+                                                val client = createClient()
+                                                client.openBrowser(url)
+                                                toaster.show("Launched $label", ToastType.Success)
+                                                showBrowserDialog = false
+                                            } catch (e: Exception) {
+                                                toaster.show(e.message ?: "Failed to open $label", ToastType.Error)
+                                            }
+                                        }
+                                    },
+                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+
+                        // Custom URL row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = browserUrlInput,
+                                onValueChange = { browserUrlInput = it },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Custom URL") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                            )
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        try {
+                                            val client = createClient()
+                                            client.openBrowser(browserUrlInput)
+                                            toaster.show("Launched $browserUrlInput", ToastType.Success)
+                                            showBrowserDialog = false
+                                        } catch (e: Exception) {
+                                            toaster.show(e.message ?: "Failed to open browser", ToastType.Error)
+                                        }
+                                    }
+                                },
+                                enabled = browserUrlInput.isNotBlank()
+                            ) {
+                                Text("Go")
+                            }
                         }
                     }
                 }

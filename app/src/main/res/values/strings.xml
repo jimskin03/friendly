@@ -45,6 +45,12 @@
   <string name="desktop_config_success">Connected successfully to Friendly Host!</string>
   <string name="desktop_config_failed">Unable to reach host. Check URL &amp; Token.</string>
   <string name="desktop_active_banner_title">Remote Desktop Active</string>
+  <string name="desktop_action_menu">Menu</string>
+  <string name="desktop_action_terminal">Terminal</string>
+  <string name="desktop_action_launch_browser">Launch Chromium</string>
+  <string name="desktop_tip_banner">💡 Tip: Ask Friendly in chat to browse the web or control the desktop, or use the quick actions below.</string>
+  <string name="desktop_mode_view_toast">View Mode: Monitoring only (touches won\'t click)</string>
+  <string name="desktop_mode_interactive_toast">Interactive Mode: Tap anywhere to click &amp; drag</string>
   <string name="assistant_page_local_tools_desktop_control_title">Desktop Control (Linux VM)</string>
   <string name="assistant_page_local_tools_desktop_control_desc">Allow AI to interact with remote desktop: click, type, hotkeys, launch browser, capture screen</string>
   <string name="asr_button_content_description">Speech Recognition</string>

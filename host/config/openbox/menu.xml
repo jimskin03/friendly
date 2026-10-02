@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Applications">
+    <item label="Chromium Browser">
+      <action name="Execute">
+        <command>chromium --no-sandbox</command>
+      </action>
+    </item>
+    <item label="Terminal (xterm)">
+      <action name="Execute">
+        <command>xterm</command>
+      </action>
+    </item>
+    <separator label="System" />
+    <item label="Reconfigure Openbox">
+      <action name="Reconfigure" />
+    </item>
+    <item label="Restart Openbox">
+      <action name="Restart" />
+    </item>
+    <item label="Exit Openbox">
+      <action name="Exit" />
+    </item>
+  </menu>
+</openbox_menu>

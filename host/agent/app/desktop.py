@@ -191,6 +191,30 @@ def hotkey(keys: list[str], settings: Settings | None = None) -> None:
     _run(["xdotool", "key", "--clearmodifiers", chord], display=disp)
 
 
+def launch_app(name: str, settings: Settings | None = None) -> dict:
+    """Launch common desktop applications or trigger the application menu."""
+    s = settings or get_settings()
+    disp = require_display(s)
+    clean_name = (name or "").strip().lower()
+
+    if clean_name in ("menu", "root-menu", "app-menu"):
+        if shutil.which("xdotool") is None:
+            raise DesktopError("xdotool not found", code="missing_tool")
+        _run(["xdotool", "key", "--clearmodifiers", "Super"], display=disp)
+        return {"app": "menu", "status": "ok"}
+    elif clean_name in ("terminal", "xterm", "bash", "shell"):
+        term = shutil.which("xterm") or shutil.which("x-terminal-emulator")
+        if not term:
+            raise DesktopError("xterm terminal not found. Run scripts/bootstrap-host.sh", code="missing_tool")
+        subprocess.Popen([term], env={**os.environ, "DISPLAY": disp}, start_new_session=True)
+        return {"app": "terminal", "status": "ok", "binary": term}
+    elif clean_name in ("browser", "chromium", "chrome"):
+        from . import browser
+        return browser.open_url("https://www.google.com", s)
+    else:
+        raise DesktopError(f"Unknown application: {name}. Supported: menu, terminal, browser", code="bad_app")
+
+
 def status_info(settings: Settings | None = None) -> dict:
     s = settings or get_settings()
     disp = _display(s)
@@ -211,3 +235,4 @@ def status_info(settings: Settings | None = None) -> dict:
             "depth": s.screen_depth,
         },
     }
+

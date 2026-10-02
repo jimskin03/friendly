@@ -65,6 +65,14 @@ fi
 
 # Openbox
 if command -v openbox >/dev/null 2>&1; then
+  mkdir -p "$HOME/.config/openbox"
+  if [[ -f "$ROOT/config/openbox/rc.xml" && ! -f "$HOME/.config/openbox/rc.xml" ]]; then
+    cp "$ROOT/config/openbox/rc.xml" "$HOME/.config/openbox/rc.xml"
+  fi
+  if [[ -f "$ROOT/config/openbox/menu.xml" && ! -f "$HOME/.config/openbox/menu.xml" ]]; then
+    cp "$ROOT/config/openbox/menu.xml" "$HOME/.config/openbox/menu.xml"
+  fi
+
   if pgrep -f "openbox" >/dev/null 2>&1 && display_up; then
     # Heuristic: if openbox already running on this display, skip
     if DISPLAY="$DISPLAY_NUM" xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null 2>&1; then
@@ -92,6 +100,17 @@ if command -v openbox >/dev/null 2>&1; then
   fi
 else
   echo "WARN: openbox not found — continuing without WM"
+fi
+
+# Tint2 Desktop Panel (Taskbar & Start Menu)
+if command -v tint2 >/dev/null 2>&1 && display_up; then
+  if ! pgrep -f "tint2" >/dev/null 2>&1; then
+    echo "Starting tint2 panel on $DISPLAY_NUM"
+    DISPLAY="$DISPLAY_NUM" tint2 >"$LOG_DIR/tint2.log" 2>&1 &
+    echo $! >"$PID_DIR/tint2.pid"
+  else
+    echo "tint2 panel already running"
+  fi
 fi
 
 echo ""

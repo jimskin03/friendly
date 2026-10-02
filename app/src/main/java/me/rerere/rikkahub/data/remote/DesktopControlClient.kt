@@ -82,6 +82,12 @@ data class BrowserOpenRequest(
 )
 
 @Serializable
+data class LaunchAppRequest(
+    val app: String,
+)
+
+
+@Serializable
 data class BrowserOpenResponse(
     val ok: Boolean = true,
     val url: String = "",
@@ -245,6 +251,22 @@ class DesktopControlClient(
         }
         return JsonInstant.decodeFromString(text)
     }
+
+    suspend fun launchApp(app: String): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/desktop/launch") {
+            auth()
+            setBody(JsonInstant.encodeToString(LaunchAppRequest(app = app)))
+        }
+        if (!response.status.isSuccess()) {
+            val text = response.bodyAsText()
+            throw DesktopControlException(
+                message = "desktop/launch failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
 
     suspend fun desktopStatus(): DesktopStatusResponse {
         val response = http.get("${normalizedBaseUrl()}/v1/desktop/status") { auth() }

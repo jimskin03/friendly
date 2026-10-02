@@ -40,10 +40,11 @@ echo "==> apt update + install display / input / browser deps"
   curl \
   ca-certificates \
   fonts-dejavu-core \
+  tint2 \
   || "${SUDO[@]}" apt-get install -y --no-install-recommends \
     xvfb openbox xterm xdotool scrot imagemagick x11-utils x11-xserver-utils \
     chromium-browser x11vnc novnc websockify \
-    python3 python3-venv python3-pip curl ca-certificates fonts-dejavu-core
+    python3 python3-venv python3-pip curl ca-certificates fonts-dejavu-core tint2
 
 echo "==> stream packages (x11vnc / novnc / websockify) required for Phase 3"
 

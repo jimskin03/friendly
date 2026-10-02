@@ -39,8 +39,9 @@ This guide explains how to set up the **Friendly Linux Host** on any remote head
 
 The stack operates in **Idle mode** (very low CPU usage ~0.1%) until you or the AI interacts with it:
 - **Xvfb**: Virtual display running in memory (`DISPLAY=:99`, 1280x720).
-- **Openbox**: Lightweight X11 window manager.
-- **FastAPI Control API (`:8787`)**: Exposes REST endpoints (`/v1/actions/*`) and MCP tools (`/mcp`) secured with a Bearer Token.
+- **Openbox**: Lightweight X11 window manager with Applications Menu (Right-Click, `Super` key, or Menu quick action).
+- **tint2**: Sleek bottom desktop taskbar displaying active application windows and launcher.
+- **FastAPI Control API (`:8787`)**: Exposes REST endpoints (`/v1/actions/*`, `/v1/desktop/launch`) and MCP tools (`/mcp`) secured with a Bearer Token.
 - **On-Demand Streaming (`:6099`)**: Starts `x11vnc` and `noVNC/websockify` on demand when you view the desktop, shutting down automatically after inactivity to save bandwidth.
 
 ---

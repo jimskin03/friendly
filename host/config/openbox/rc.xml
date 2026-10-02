@@ -15,8 +15,33 @@
   </theme>
   <keyboard>
     <chainQuitKey>C-g</chainQuitKey>
+    <keybind key="W-space">
+      <action name="ShowMenu"><menu>root-menu</menu></action>
+    </keybind>
+    <keybind key="super">
+      <action name="ShowMenu"><menu>root-menu</menu></action>
+    </keybind>
+    <keybind key="A-F1">
+      <action name="ShowMenu"><menu>root-menu</menu></action>
+    </keybind>
+    <keybind key="A-Tab">
+      <action name="NextWindow"/>
+    </keybind>
+    <keybind key="W-d">
+      <action name="ToggleShowDesktop"/>
+    </keybind>
   </keyboard>
-  <mouse/>
+  <mouse>
+    <default/>
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>root-menu</menu></action>
+      </mousebind>
+      <mousebind button="Middle" action="Press">
+        <action name="ShowMenu"><menu>client-list-combined-menu</menu></action>
+      </mousebind>
+    </context>
+  </mouse>
   <applications>
     <application class="*">
       <maximized>yes</maximized>

@@ -69,6 +69,10 @@ class BrowserOpenBody(BaseModel):
     url: str
 
 
+class LaunchAppBody(BaseModel):
+    app: str = "menu"
+
+
 class StreamStartBody(BaseModel):
     mode: Literal["view", "interactive"] = "view"
 
@@ -197,6 +201,25 @@ def browser_open(
             detail={"error": e.code, "message": e.message},
         ) from e
     return {"ok": True, **result}
+
+
+@app.post("/v1/desktop/launch")
+def desktop_launch(
+    body: LaunchAppBody,
+    _: None = Depends(require_bearer),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    try:
+        result = desktop.launch_app(body.app, settings)
+    except DesktopError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            if e.code in ("no_display", "missing_tool")
+            else status.HTTP_400_BAD_REQUEST,
+            detail={"error": e.code, "message": e.message},
+        ) from e
+    return {"ok": True, **result}
+
 
 
 # --- stream (Phase 3 stubs) ---

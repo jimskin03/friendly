@@ -55,6 +55,7 @@ echo "==> [1/6] Updating apt repositories and installing packages..."
   ca-certificates \
   fonts-dejavu-core \
   net-tools \
+  tint2 \
   || true
 
 # Chromium package detection (Ubuntu 24.04 uses snap or deb, fallback gracefully)
@@ -117,6 +118,17 @@ TUNNEL_MODE=auto
 echo "$ENV_CONTENT" > "$HOST_ROOT/.env"
 "${SUDO[@]}" cp "$HOST_ROOT/.env" /etc/friendly-host.env
 "${SUDO[@]}" chmod 600 "$HOST_ROOT/.env" /etc/friendly-host.env
+# 5.1 Configure Openbox application menus and theme
+echo "==> Configuring Openbox application menu and taskbar..."
+"${SUDO[@]}" mkdir -p "/home/$SERVICE_USER/.config/openbox" "/etc/xdg/openbox"
+if [[ -f "$HOST_ROOT/config/openbox/rc.xml" ]]; then
+  "${SUDO[@]}" cp "$HOST_ROOT/config/openbox/rc.xml" "/home/$SERVICE_USER/.config/openbox/rc.xml"
+fi
+if [[ -f "$HOST_ROOT/config/openbox/menu.xml" ]]; then
+  "${SUDO[@]}" cp "$HOST_ROOT/config/openbox/menu.xml" "/home/$SERVICE_USER/.config/openbox/menu.xml"
+  "${SUDO[@]}" cp "$HOST_ROOT/config/openbox/menu.xml" "/etc/xdg/openbox/menu.xml"
+fi
+"${SUDO[@]}" chown -R "$SERVICE_USER:$SERVICE_USER" "/home/$SERVICE_USER/.config" 2>/dev/null || true
 "${SUDO[@]}" chown -R "$SERVICE_USER:$SERVICE_USER" "$HOST_ROOT" 2>/dev/null || true
 
 # 6. Configure systemd units
@@ -159,6 +171,26 @@ RestartSec=2
 WantedBy=multi-user.target
 EOF
 
+"${SUDO[@]}" bash -c "cat > /etc/systemd/system/friendly-tint2.service" <<EOF
+[Unit]
+Description=Friendly Host Tint2 Desktop Taskbar
+After=friendly-openbox.service
+Requires=friendly-openbox.service
+ConditionPathExists=/usr/bin/tint2
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+EnvironmentFile=-/etc/friendly-host.env
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/tint2
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 "${SUDO[@]}" bash -c "cat > /etc/systemd/system/friendly-agent.service" <<EOF
 [Unit]
 Description=Friendly Host Control API & MCP Server
@@ -181,8 +213,8 @@ EOF
 
 # Reload and enable services
 "${SUDO[@]}" systemctl daemon-reload
-"${SUDO[@]}" systemctl enable friendly-xvfb friendly-openbox friendly-agent
-"${SUDO[@]}" systemctl restart friendly-xvfb friendly-openbox friendly-agent
+"${SUDO[@]}" systemctl enable friendly-xvfb friendly-openbox friendly-tint2 friendly-agent || true
+"${SUDO[@]}" systemctl restart friendly-xvfb friendly-openbox friendly-tint2 friendly-agent || true
 
 echo "==> [6/6] Verifying services..."
 sleep 2
