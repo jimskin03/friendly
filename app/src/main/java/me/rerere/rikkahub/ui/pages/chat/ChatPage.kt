@@ -4,6 +4,7 @@ import android.net.Uri
 import android.content.Intent
 import android.provider.Settings as AndroidSettings
 import me.rerere.rikkahub.service.phone.PhoneAutomationMiniIndicatorManager
+import me.rerere.rikkahub.service.VoiceCaptureForegroundService
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -372,6 +373,10 @@ private fun ChatPageContent(
         }
         pendingPhoneMiniActivate = false
         phoneMiniIndicator.activate()
+        // Start mic FGS before moveTaskToBack so continuous STT survives ON_STOP.
+        if (vm.voiceSession.state.value.isActive) {
+            VoiceCaptureForegroundService.acquire(context.applicationContext)
+        }
         (context as? ComponentActivity)?.moveTaskToBack(true)
     }
 
@@ -419,6 +424,9 @@ private fun ChatPageContent(
                         pendingPhoneMiniActivate = false
                         // Notification backup still works without SYSTEM_ALERT_WINDOW.
                         phoneMiniIndicator.activate()
+                        if (vm.voiceSession.state.value.isActive) {
+                            VoiceCaptureForegroundService.acquire(context.applicationContext)
+                        }
                         (context as? ComponentActivity)?.moveTaskToBack(true)
                     }
                 ) {

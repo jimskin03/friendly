@@ -5,8 +5,14 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,13 +27,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -61,6 +71,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.rikkahub.service.VoiceCaptureForegroundService
 import me.rerere.rikkahub.utils.sendNotification
 
 private const val TAG = "PhoneAutoMiniIndicator"
@@ -68,7 +79,7 @@ private const val FLOATING_TAG = "phone_automation_mini_indicator"
 private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
 
 /**
- * Phone Automation mini indicator — compact floating rabbit face.
+ * Phone Automation mini indicator — compact premium glass rabbit mark.
  *
  * Entry: explicit activate() from Phone sheet "Minimize with mini indicator"
  * or long-press on the phone icon (never the primary phone tap). Caller
@@ -80,6 +91,9 @@ private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
  *
  * Single tap → bring Friendly back (last chat / last place).
  * Drag toward the bottom → X close zone; drop dismisses the mini session.
+ *
+ * While the mini session is active, continuous voice STT is allowed to keep
+ * running across ProcessLifecycle ON_STOP (see VoiceMode + VoiceCaptureForegroundService).
  */
 class PhoneAutomationMiniIndicatorManager(
     private val app: Application,
@@ -180,6 +194,8 @@ class PhoneAutomationMiniIndicatorManager(
     fun dismiss() {
         if (!_sessionActive.value) return
         _sessionActive.value = false
+        // Mini closed → background mic session is no longer authorized.
+        VoiceCaptureForegroundService.release(app)
         Log.i(TAG, "Mini session dismissed")
     }
 
@@ -217,6 +233,7 @@ class PhoneAutomationMiniIndicatorManager(
         // Settings toggled off while session active → end session.
         if (state.sessionActive && !state.enabled) {
             _sessionActive.value = false
+            VoiceCaptureForegroundService.release(app)
             hideOverlay()
             hideCloseZone()
             hideNotification()
@@ -458,48 +475,142 @@ private fun MiniIndicatorBubble(
     val ledColor = when (status) {
         PhoneAutomationWorkStatus.Running -> MaterialTheme.colorScheme.primary
         PhoneAutomationWorkStatus.Error -> MaterialTheme.colorScheme.error
-        PhoneAutomationWorkStatus.Idle -> Color(0xFF4CAF50)
+        PhoneAutomationWorkStatus.Idle -> Color(0xFF34C759)
     }
     val a11y = stringResource(R.string.phone_mini_indicator_back_to_app) + " · " + statusLabel
+    val dark = LocalDarkMode.current
+    val discBrush = if (dark) {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.22f),
+                Color(0xFF2C2C2E).copy(alpha = 0.82f),
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.96f),
+                Color(0xFFE8ECF2).copy(alpha = 0.90f),
+            )
+        )
+    }
+    val rimBrush = if (dark) {
+        Brush.linearGradient(
+            listOf(
+                Color.White.copy(alpha = 0.38f),
+                Color.White.copy(alpha = 0.06f),
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                Color.White.copy(alpha = 0.95f),
+                Color.White.copy(alpha = 0.25f),
+                Color(0xFFB8C0CC).copy(alpha = 0.35f),
+            )
+        )
+    }
+    val markTint = if (dark) Color.White.copy(alpha = 0.92f) else Color(0xFF1C1C1E)
+    val ledRing = if (dark) Color(0xFF1C1C1E) else Color.White
+    val running = status == PhoneAutomationWorkStatus.Running
+    val transition = rememberInfiniteTransition(label = "mini_led_pulse")
+    val animatedAlpha by transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "mini_led_alpha",
+    )
+    val animatedScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.55f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "mini_led_glow",
+    )
+    val pulseAlpha = if (running) animatedAlpha else 1f
+    val pulseScale = if (running) animatedScale else 1f
 
-    // Compact app-logo rabbit (~square). Sketch size vs old Idle pill ≈ 48–56dp.
+    // Compact premium glass disc (~54dp) with soft shadow + refined rabbit mark + LED.
     Box(
         modifier = Modifier
-            .padding(4.dp)
-            .size(52.dp)
+            .padding(8.dp)
+            .size(54.dp)
             .semantics { contentDescription = a11y }
-            .clickable(onClick = onBackToApp),
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = Color.White,
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher_foreground),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(7.dp),
+            .shadow(
+                elevation = 14.dp,
+                shape = CircleShape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = if (dark) 0.45f else 0.18f),
+                spotColor = Color.Black.copy(alpha = if (dark) 0.55f else 0.22f),
             )
-        }
-        // Status LED badge (Idle green / Running primary / Error)
+            .clip(CircleShape)
+            .background(discBrush, CircleShape)
+            .border(width = 1.dp, brush = rimBrush, shape = CircleShape)
+            .clickable(onClick = onBackToApp),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Soft inner highlight (glass sheen)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(1.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = if (dark) 0.14f else 0.35f),
+                            Color.Transparent,
+                            Color.Transparent,
+                        )
+                    )
+                ),
+        )
+        Icon(
+            painter = painterResource(R.drawable.small_icon),
+            contentDescription = null,
+            tint = markTint,
+            modifier = Modifier.size(28.dp),
+        )
+        // Polished status LED (Idle green / Running primary+pulse / Error)
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(1.dp)
-                .size(14.dp)
-                .background(Color.White, CircleShape),
+                .padding(3.dp)
+                .size(16.dp),
             contentAlignment = Alignment.Center,
         ) {
+            if (running) {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .scale(pulseScale)
+                        .background(ledColor.copy(alpha = 0.28f * pulseAlpha), CircleShape),
+                )
+            }
             Box(
                 modifier = Modifier
-                    .size(10.dp)
-                    .background(ledColor, CircleShape),
-            )
+                    .size(13.dp)
+                    .shadow(
+                        elevation = 3.dp,
+                        shape = CircleShape,
+                        clip = false,
+                        ambientColor = ledColor.copy(alpha = 0.35f),
+                        spotColor = ledColor.copy(alpha = 0.45f),
+                    )
+                    .background(ledRing, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(ledColor.copy(alpha = pulseAlpha), CircleShape),
+                )
+            }
         }
     }
 }

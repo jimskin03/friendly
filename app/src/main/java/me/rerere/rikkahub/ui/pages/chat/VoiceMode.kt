@@ -7,14 +7,17 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.asr.ASRController
@@ -27,6 +30,8 @@ import me.rerere.asr.providers.StepASRController
 import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.asr.providers.WhisperASRController
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.service.VoiceCaptureForegroundService
+import me.rerere.rikkahub.service.phone.PhoneAutomationMiniIndicatorManager
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
@@ -57,14 +62,49 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
     val provider = settings.getSelectedASRProvider()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    DisposableEffect(voice, lifecycleOwner, provider, settings.getSelectedTTSProvider()) {
+    val phoneMiniIndicator = koinInject<PhoneAutomationMiniIndicatorManager>()
+    val appContext = context
+
+    // Keep continuous STT alive across minimize while the mini indicator session is active.
+    // Otherwise ON_STOP (moveTaskToBack / home) would tear down the voice session.
+    DisposableEffect(voice, lifecycleOwner, provider, settings.getSelectedTTSProvider(), phoneMiniIndicator) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) voice.stop()
+            if (event == Lifecycle.Event.ON_STOP && !phoneMiniIndicator.isSessionActive()) {
+                voice.stop()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            voice.stop()
+        }
+    }
+
+    // Microphone FGS while voice + mini are both active so OEM/Android allow mic after backgrounding.
+    // Also stop voice when mini is dismissed while Friendly is already backgrounded.
+    LaunchedEffect(voice, phoneMiniIndicator) {
+        combine(voice.state, phoneMiniIndicator.sessionActive) { session, mini ->
+            session.isActive to mini
+        }
+            .distinctUntilChanged()
+            .collect { (voiceActive, miniActive) ->
+                VoiceCaptureForegroundService.sync(appContext, hold = voiceActive && miniActive)
+                if (!miniActive && voiceActive) {
+                    val appForeground = ProcessLifecycleOwner.get()
+                        .lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                    if (!appForeground) {
+                        voice.stop()
+                    }
+                }
+            }
+    }
+    DisposableEffect(appContext, phoneMiniIndicator, voice) {
+        onDispose {
+            // moveTaskToBack keeps composition; if we do leave chat while mini is active,
+            // leave mic FGS up until mini dismiss() releases it.
+            if (!phoneMiniIndicator.isSessionActive()) {
+                VoiceCaptureForegroundService.sync(appContext, hold = false)
+                voice.stop()
+            }
         }
     }
 

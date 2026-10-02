@@ -52,6 +52,7 @@ const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val PHONE_AUTOMATION_NOTIFICATION_CHANNEL_ID = "phone_automation"
+const val VOICE_CAPTURE_NOTIFICATION_CHANNEL_ID = "voice_capture"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -251,6 +252,14 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(phoneAutomationChannel)
+
+        val voiceCaptureChannel = NotificationChannelCompat
+            .Builder(VOICE_CAPTURE_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName(getString(R.string.notification_channel_voice_capture))
+            .setVibrationEnabled(false)
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(voiceCaptureChannel)
     }
 
     override fun onTerminate() {

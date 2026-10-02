@@ -463,6 +463,9 @@
   <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
   <string name="notification_channel_web_server">Web Server</string>
   <string name="notification_channel_phone_automation">Phone Automation</string>
+  <string name="notification_channel_voice_capture">Voice listening</string>
+  <string name="notification_voice_capture_title">Friendly is listening</string>
+  <string name="notification_voice_capture_content">Voice stays on while the mini indicator is active — tap to return</string>
   <string name="phone_automation_notification_content">Status: %1$s - tap to open Friendly</string>
   <string name="notification_live_update_chip_thinking">Thinking</string>
   <string name="notification_live_update_chip_tool">Tool</string>
