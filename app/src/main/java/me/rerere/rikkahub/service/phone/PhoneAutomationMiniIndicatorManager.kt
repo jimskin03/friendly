@@ -5,35 +5,29 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -59,8 +53,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.Message01
-import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.PHONE_AUTOMATION_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
@@ -76,17 +68,17 @@ private const val FLOATING_TAG = "phone_automation_mini_indicator"
 private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
 
 /**
- * Phone Automation mini indicator — toolbar-driven floating pill.
+ * Phone Automation mini indicator — compact floating rabbit face.
  *
  * Entry: explicit activate() from Phone sheet "Minimize with mini indicator"
  * or long-press on the phone icon (never the primary phone tap). Caller
  * minimizes Friendly via moveTaskToBack. While the session is active:
  *  1. Ongoing notification while Friendly is backgrounded (OEM-safe backup; tap reopens app)
- *  2. System-overlay Idle/Running/Error pill whenever SYSTEM_ALERT_WINDOW is granted
- *     (shown immediately on activate so it cannot race ProcessLifecycle ON_STOP /
+ *  2. System-overlay rabbit face with Idle/Running/Error LED whenever SYSTEM_ALERT_WINDOW
+ *     is granted (shown immediately on activate so it cannot race ProcessLifecycle ON_STOP /
  *     moveTaskToBack)
  *
- * Tap the pill → Back to app / Send new prompt.
+ * Single tap → bring Friendly back (last chat / last place).
  * Drag toward the bottom → X close zone; drop dismisses the mini session.
  */
 class PhoneAutomationMiniIndicatorManager(
@@ -205,9 +197,9 @@ class PhoneAutomationMiniIndicatorManager(
             get() = enabled && sessionActive && !appForeground
 
         /**
-         * Floating pill whenever the mini session is active and overlay permission
+         * Floating rabbit whenever the mini session is active and overlay permission
          * is granted — including briefly while still foreground so activate() +
-         * moveTaskToBack cannot race ProcessLifecycle ON_STOP and leave the pill missing.
+         * moveTaskToBack cannot race ProcessLifecycle ON_STOP and leave the indicator missing.
          */
         val shouldShowOverlay: Boolean
             get() = enabled && sessionActive && canDrawOverlays
@@ -402,7 +394,6 @@ class PhoneAutomationMiniIndicatorManager(
                         MiniIndicatorBubble(
                             status = status,
                             onBackToApp = { bringFriendlyToFront(focusInput = false) },
-                            onSendNewPrompt = { bringFriendlyToFront(focusInput = true) },
                         )
                     }
                 }
@@ -455,104 +446,60 @@ private fun CloseZonePill() {
 private fun MiniIndicatorBubble(
     status: PhoneAutomationWorkStatus,
     onBackToApp: () -> Unit,
-    onSendNewPrompt: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val (label, dotColor) = when (status) {
+    val statusLabel = when (status) {
         PhoneAutomationWorkStatus.Running ->
-            stringResource(R.string.phone_mini_indicator_running) to MaterialTheme.colorScheme.primary
+            stringResource(R.string.phone_mini_indicator_running)
         PhoneAutomationWorkStatus.Error ->
-            stringResource(R.string.phone_mini_indicator_error) to MaterialTheme.colorScheme.error
+            stringResource(R.string.phone_mini_indicator_error)
         PhoneAutomationWorkStatus.Idle ->
-            stringResource(R.string.phone_mini_indicator_idle) to Color(0xFF4CAF50)
+            stringResource(R.string.phone_mini_indicator_idle)
     }
-
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp,
-        shadowElevation = 6.dp,
-        modifier = Modifier.padding(4.dp),
-    ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = HugeIcons.SmartPhone01,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(dotColor, CircleShape)
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            AnimatedVisibility(visible = expanded) {
-                Column {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    )
-                    MiniMenuRow(
-                        icon = HugeIcons.SmartPhone01,
-                        label = stringResource(R.string.phone_mini_indicator_back_to_app),
-                        onClick = {
-                            expanded = false
-                            onBackToApp()
-                        },
-                    )
-                    MiniMenuRow(
-                        icon = HugeIcons.Message01,
-                        label = stringResource(R.string.phone_mini_indicator_send_new_prompt),
-                        onClick = {
-                            expanded = false
-                            onSendNewPrompt()
-                        },
-                    )
-                }
-            }
-        }
+    val ledColor = when (status) {
+        PhoneAutomationWorkStatus.Running -> MaterialTheme.colorScheme.primary
+        PhoneAutomationWorkStatus.Error -> MaterialTheme.colorScheme.error
+        PhoneAutomationWorkStatus.Idle -> Color(0xFF4CAF50)
     }
-}
+    val a11y = stringResource(R.string.phone_mini_indicator_back_to_app) + " · " + statusLabel
 
-@Composable
-private fun MiniMenuRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Row(
+    // Compact app-logo rabbit (~square). Sketch size vs old Idle pill ≈ 48–56dp.
+    Box(
         modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(4.dp)
+            .size(52.dp)
+            .semantics { contentDescription = a11y }
+            .clickable(onClick = onBackToApp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 12.sp,
-        )
+        Surface(
+            shape = CircleShape,
+            color = Color.White,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Image(
+                painter = painterResource(R.mipmap.ic_launcher_foreground),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(7.dp),
+            )
+        }
+        // Status LED badge (Idle green / Running primary / Error)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(1.dp)
+                .size(14.dp)
+                .background(Color.White, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(ledColor, CircleShape),
+            )
+        }
     }
 }

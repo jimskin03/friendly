@@ -342,7 +342,7 @@ private fun ChatPageContent(
     val activeFolderLabelId = folderLabelId ?: currentFolder?.label ?: "planning"
     val isFolderChat = effectiveFolderUuid != null || activeFolderName != null
 
-    // Mini indicator "Send new prompt" → focus Ask-me-anything input
+    // Legacy EXTRA_FOCUS_INPUT / focusInputRequests (kept for older intents)
     LaunchedEffect(phoneMiniIndicator) {
         phoneMiniIndicator.focusInputRequests.collect {
             inputState.requestFocus()
