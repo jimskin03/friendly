@@ -8,7 +8,8 @@ Type=simple
 User=assistant
 EnvironmentFile=-/etc/friendly-host.env
 Environment=DISPLAY=:99
-ExecStart=/usr/bin/openbox
+# setup-ubuntu-headless.sh rewrites this path to the installed host tree.
+ExecStart=/usr/bin/openbox --config-file /home/assistant/.config/openbox/rc.xml
 Restart=on-failure
 RestartSec=2
 

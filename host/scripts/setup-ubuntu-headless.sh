@@ -123,6 +123,7 @@ echo "==> Configuring Openbox application menu and taskbar..."
 "${SUDO[@]}" mkdir -p "/home/$SERVICE_USER/.config/openbox" "/etc/xdg/openbox"
 if [[ -f "$HOST_ROOT/config/openbox/rc.xml" ]]; then
   "${SUDO[@]}" cp "$HOST_ROOT/config/openbox/rc.xml" "/home/$SERVICE_USER/.config/openbox/rc.xml"
+  "${SUDO[@]}" cp "$HOST_ROOT/config/openbox/rc.xml" "/etc/xdg/openbox/rc.xml"
 fi
 if [[ -f "$HOST_ROOT/config/openbox/menu.xml" ]]; then
   "${SUDO[@]}" cp "$HOST_ROOT/config/openbox/menu.xml" "/home/$SERVICE_USER/.config/openbox/menu.xml"
@@ -163,7 +164,7 @@ Type=simple
 User=$SERVICE_USER
 EnvironmentFile=-/etc/friendly-host.env
 Environment=DISPLAY=:99
-ExecStart=/usr/bin/openbox
+ExecStart=/usr/bin/openbox --config-file $HOST_ROOT/config/openbox/rc.xml
 Restart=on-failure
 RestartSec=2
 

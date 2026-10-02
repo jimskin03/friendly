@@ -66,33 +66,37 @@ fi
 # Openbox
 if command -v openbox >/dev/null 2>&1; then
   mkdir -p "$HOME/.config/openbox"
-  if [[ -f "$ROOT/config/openbox/rc.xml" && ! -f "$HOME/.config/openbox/rc.xml" ]]; then
+  # Always sync Friendly WM config so decoration/mouse fixes apply without a
+  # manual wipe of ~/.config/openbox.
+  if [[ -f "$ROOT/config/openbox/rc.xml" ]]; then
     cp "$ROOT/config/openbox/rc.xml" "$HOME/.config/openbox/rc.xml"
   fi
-  if [[ -f "$ROOT/config/openbox/menu.xml" && ! -f "$HOME/.config/openbox/menu.xml" ]]; then
+  if [[ -f "$ROOT/config/openbox/menu.xml" ]]; then
     cp "$ROOT/config/openbox/menu.xml" "$HOME/.config/openbox/menu.xml"
   fi
 
+  OPENBOX_ARGS=()
+  if [[ -f "$ROOT/config/openbox/rc.xml" ]]; then
+    OPENBOX_ARGS=(--config-file "$ROOT/config/openbox/rc.xml")
+  fi
+
   if pgrep -f "openbox" >/dev/null 2>&1 && display_up; then
-    # Heuristic: if openbox already running on this display, skip
+    # Heuristic: if openbox already running on this display, reconfigure it
     if DISPLAY="$DISPLAY_NUM" xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null 2>&1; then
-      echo "Openbox already managing $DISPLAY_NUM"
+      echo "Openbox already managing $DISPLAY_NUM — reconfigure with Friendly rc.xml"
+      # --reconfigure reloads the config file openbox was started with (and
+      # ~/.config/openbox which we just synced).
+      DISPLAY="$DISPLAY_NUM" openbox --reconfigure >/dev/null 2>&1 \
+        || DISPLAY="$DISPLAY_NUM" openbox --restart >/dev/null 2>&1 \
+        || true
     else
       echo "Starting Openbox on $DISPLAY_NUM"
-      OPENBOX_ARGS=()
-      if [[ -f "$ROOT/config/openbox/rc.xml" ]]; then
-        OPENBOX_ARGS=(--config-file "$ROOT/config/openbox/rc.xml")
-      fi
       DISPLAY="$DISPLAY_NUM" openbox "${OPENBOX_ARGS[@]}" \
         >"$LOG_DIR/openbox.log" 2>&1 &
       echo $! >"$PID_DIR/openbox.pid"
     fi
   else
     echo "Starting Openbox on $DISPLAY_NUM"
-    OPENBOX_ARGS=()
-    if [[ -f "$ROOT/config/openbox/rc.xml" ]]; then
-      OPENBOX_ARGS=(--config-file "$ROOT/config/openbox/rc.xml")
-    fi
     DISPLAY="$DISPLAY_NUM" openbox "${OPENBOX_ARGS[@]}" \
       >"$LOG_DIR/openbox.log" 2>&1 &
     echo $! >"$PID_DIR/openbox.pid"

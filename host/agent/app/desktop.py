@@ -217,23 +217,28 @@ def launch_app(name: str, settings: Settings | None = None) -> dict:
         raise DesktopError(f"Unknown application: {name}. Supported: menu, terminal, browser", code="bad_app")
 
 
-_CHROME_CLASSES = ("chromium", "chrome", "google-chrome")
+_CHROME_CLASSES = ("chromium", "chrome", "google-chrome", "Google-chrome", "Chromium-browser")
 _TERMINAL_CLASSES = ("xterm", "xfce4-terminal", "gnome-terminal")
 _prepare_lock = threading.Lock()
 
 
 def workspace_frames(width: int, height: int, panel: int = 0) -> dict[str, tuple[int, int, int, int]]:
-    """Chrome on the left, terminal on the right, above an optional panel."""
-    usable_h = max(200, height - max(0, panel))
+    """Chrome on the left, terminal on the right, above an optional panel.
+
+    Inset slightly from screen edges so Openbox titlebars/borders stay
+    visible and edge/corner resize grips remain reachable.
+    """
+    margin = 4
+    usable_h = max(200, height - max(0, panel) - margin)
     chrome_w = max(320, int(width * 0.62))
-    gap = 8
+    gap = 10
     # Leave the terminal a usable column.
     if chrome_w > width - 280:
         chrome_w = max(320, width - 280)
-    term_w = max(200, width - chrome_w - gap)
+    term_w = max(200, width - chrome_w - gap - margin)
     return {
-        "chrome": (0, 0, chrome_w, usable_h),
-        "terminal": (chrome_w + gap, 0, term_w, usable_h),
+        "chrome": (margin, margin, chrome_w - margin, usable_h - margin),
+        "terminal": (chrome_w + gap, margin, term_w, usable_h - margin),
     }
 
 
@@ -285,8 +290,56 @@ def _panel_height() -> int:
     return 40 if result.returncode == 0 else 0
 
 
-def _place_window(display: str, window_id: str, x: int, y: int, width: int, height: int) -> None:
+def _force_decorations(display: str, window_id: str) -> None:
+    """Make Openbox draw a titlebar even when Chromium sets Motif undecorated."""
+    if shutil.which("xprop") is None:
+        return
+    # Drop client Motif "no decorations" hints so the WM frame returns.
+    _run(
+        ["xprop", "-id", window_id, "-remove", "_MOTIF_WM_HINTS"],
+        display=display,
+        check=False,
+    )
+    # Explicitly request full Motif decorations (flags=DECORATIONS, decor=ALL).
+    _run(
+        [
+            "xprop",
+            "-id",
+            window_id,
+            "-f",
+            "_MOTIF_WM_HINTS",
+            "32c",
+            "-set",
+            "_MOTIF_WM_HINTS",
+            "0x2, 0x0, 0x1, 0x0, 0x0",
+        ],
+        display=display,
+        check=False,
+    )
+
+
+def _unmaximize(display: str, window_id: str) -> None:
+    """Clear maximized state so windowsize/windowmove stick."""
+    if shutil.which("wmctrl") is not None:
+        _run(
+            [
+                "wmctrl",
+                "-i",
+                "-r",
+                window_id,
+                "-b",
+                "remove,maximized_vert,maximized_horz,fullscreen",
+            ],
+            display=display,
+            check=False,
+        )
+        return
+    # Older xdotool builds lack `windowstate`; probe before calling.
     if shutil.which("xdotool") is None:
+        return
+    help_out = _run(["xdotool", "help"], display=display, check=False)
+    help_txt = (help_out.stdout or b"").decode("utf-8", errors="replace")
+    if "windowstate" not in help_txt:
         return
     _run(
         [
@@ -296,11 +349,20 @@ def _place_window(display: str, window_id: str, x: int, y: int, width: int, heig
             "MAXIMIZED_VERT",
             "--remove",
             "MAXIMIZED_HORZ",
+            "--remove",
+            "FULLSCREEN",
             window_id,
         ],
         display=display,
         check=False,
     )
+
+
+def _place_window(display: str, window_id: str, x: int, y: int, width: int, height: int) -> None:
+    if shutil.which("xdotool") is None:
+        return
+    _force_decorations(display, window_id)
+    _unmaximize(display, window_id)
     _run(
         ["xdotool", "windowsize", window_id, str(width), str(height)],
         display=display,
