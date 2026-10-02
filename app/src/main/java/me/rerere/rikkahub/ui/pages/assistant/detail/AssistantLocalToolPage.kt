@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
+import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -109,6 +112,15 @@ private fun AssistantLocalToolContent(
         if (enabled && option == LocalToolOption.Calendar && !calendarPermissionState.allPermissionsGranted) {
             calendarPermissionState.requestPermissions()
             return
+        }
+        if (enabled && option == LocalToolOption.PhoneAutomation && !PhoneAutomationService.isAccessibilityEnabled(context)) {
+            toaster.show(
+                message = context.getString(R.string.phone_service_inactive_desc),
+                type = ToastType.Warning
+            )
+            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
         val newLocalTools = if (enabled) {
             assistant.localTools + option
@@ -237,6 +249,20 @@ private fun AssistantLocalToolContent(
                     Switch(
                         checked = assistant.localTools.contains(LocalToolOption.ChartDisplay),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.ChartDisplay, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_phone_automation_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_phone_automation_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.PhoneAutomation),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.PhoneAutomation, it) }
                     )
                 }
             )

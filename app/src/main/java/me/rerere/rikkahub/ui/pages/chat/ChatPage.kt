@@ -100,6 +100,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import io.ktor.client.HttpClient
 import me.rerere.rikkahub.data.remote.DesktopControlClient
 import me.rerere.rikkahub.data.remote.DesktopControlDefaults
+import me.rerere.rikkahub.ui.pages.chat.phone.PhoneAutomationSheet
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
@@ -279,6 +280,7 @@ private fun ChatPageContent(
     val workspaceRepository: WorkspaceRepository = koinInject()
     val httpClient: HttpClient = koinInject()
     var openingComputer by remember { mutableStateOf(false) }
+    var showPhoneAutomationSheet by remember { mutableStateOf(false) }
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
@@ -402,6 +404,9 @@ private fun ChatPageContent(
                                     }
                                 }
                             }
+                        },
+                        onOpenPhone = {
+                            showPhoneAutomationSheet = true
                         },
                         state = inputState,
                         messageQueue = messageQueue,
@@ -642,6 +647,39 @@ private fun ChatPageContent(
                 attachmentPickerActions = attachmentPickerActions,
                 onStartVoiceMode = onStartVoiceMode,
                 onDismiss = { showFilesSheet = false },
+            )
+        }
+
+        if (showPhoneAutomationSheet) {
+            val filesManager: FilesManager = koinInject()
+            PhoneAutomationSheet(
+                assistant = assistant,
+                onUpdateAssistant = { updatedAssistant ->
+                    vm.updateSettings(
+                        setting.copy(
+                            assistants = setting.assistants.map {
+                                if (it.id == updatedAssistant.id) updatedAssistant else it
+                            }
+                        )
+                    )
+                },
+                onDismissRequest = { showPhoneAutomationSheet = false },
+                onAppendPrompt = { prompt ->
+                    val current = inputState.textContent.text.toString()
+                    if (current.isNotBlank()) {
+                        inputState.setMessageText("$current\n\n$prompt")
+                    } else {
+                        inputState.setMessageText(prompt)
+                    }
+                },
+                onAttachScreenshot = { bytes ->
+                    scope.launch {
+                        val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
+                        if (uris.isNotEmpty()) {
+                            inputState.addImages(uris)
+                        }
+                    }
+                }
             )
         }
 

@@ -1,11 +1,13 @@
 package me.rerere.rikkahub.ui.pages.assistant
 
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BubbleChat
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,9 +24,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,21 +44,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.ItemAction
@@ -71,7 +81,10 @@ import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
@@ -85,6 +98,9 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     }
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val repo: ConversationRepository = koinInject()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
 
     var searchQuery by remember { mutableStateOf("") }
@@ -207,6 +223,20 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                             },
                             onDelete = {
                                 deleteTarget = assistant
+                            },
+                            onSelectAndChat = {
+                                vm.updateSettings(settings.copy(assistantId = assistant.id))
+                                scope.launch {
+                                    val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
+                                        Uuid.random()
+                                    } else {
+                                        repo.getConversationsOfAssistant(assistant.id)
+                                            .first()
+                                            .firstOrNull()
+                                            ?.id ?: Uuid.random()
+                                    }
+                                    navigateToChatPage(navigator = navController, chatId = id)
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -368,13 +398,22 @@ private fun AssistantItem(
     onEdit: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onSelectAndChat: () -> Unit,
 ) {
+    val isActive = assistant.id == settings.assistantId
     Card(
         modifier = modifier.fillMaxWidth(),
         onClick = onEdit,
         colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
-        )
+            containerColor = if (isActive) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            } else {
+                CustomColors.listItemColors.containerColor
+            }
+        ),
+        border = if (isActive) {
+            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+        } else null
     ) {
         Row(
             modifier = Modifier
@@ -395,13 +434,33 @@ private fun AssistantItem(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
 
-                Text(
-                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    if (isActive) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.primary,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.active),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -437,6 +496,22 @@ private fun AssistantItem(
                         }
                     }
                 }
+            }
+
+            // Quick Chat / Set Active button
+            FilledTonalIconButton(
+                onClick = onSelectAndChat,
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            ) {
+                Icon(
+                    imageVector = HugeIcons.BubbleChat,
+                    contentDescription = if (isActive) "Chat" else stringResource(R.string.use_assistant),
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             ItemActionMenu(

@@ -86,9 +86,11 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Computer
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Mic01
+import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -148,6 +150,7 @@ fun ChatInput(
     voiceState: VoiceSessionState = VoiceSessionState(),
     onStopVoiceMode: () -> Unit = {},
     onOpenComputer: (() -> Unit)? = null,
+    onOpenPhone: (() -> Unit)? = null,
     includeNavigationBarPadding: Boolean = true,
 ) {
     val toaster = LocalToaster.current
@@ -291,7 +294,8 @@ fun ChatInput(
                             modifier = Modifier
                                 .weight(1f)
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             // Model Picker
                             ModelSelectorButton(
@@ -328,8 +332,20 @@ fun ChatInput(
                             if (onOpenComputer != null) {
                                 ActionIconButton(onClick = onOpenComputer) {
                                     Icon(
-                                        imageVector = HugeIcons.ComputerTerminal01,
+                                        imageVector = HugeIcons.Computer,
                                         contentDescription = "Computer",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            // Phone Automation
+                            if (onOpenPhone != null) {
+                                ActionIconButton(onClick = onOpenPhone) {
+                                    Icon(
+                                        imageVector = HugeIcons.SmartPhone01,
+                                        contentDescription = stringResource(R.string.phone_automation),
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
@@ -477,7 +493,7 @@ private fun ActionIconButton(
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(30.dp),
+        modifier = Modifier.size(40.dp),
         shape = CircleShape,
         tonalElevation = 0.dp,
         color = Color.Transparent,

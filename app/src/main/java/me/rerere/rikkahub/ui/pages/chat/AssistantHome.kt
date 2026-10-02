@@ -43,9 +43,11 @@ import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.FolderLabel
 import me.rerere.rikkahub.ui.components.ui.FolderBadge
+import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import java.util.Calendar
 import kotlin.uuid.Uuid
 
@@ -74,6 +76,9 @@ private val DefaultTemplateFolders = listOf(
 @Composable
 fun AssistantHome(
     userNickname: String,
+    userAvatar: Avatar = Avatar.Dummy,
+    assistantName: String = "",
+    assistantAvatar: Avatar = Avatar.Dummy,
     folders: List<Folder>,
     onSelectFolder: (Folder) -> Unit,
     onSeeAllFolders: () -> Unit,
@@ -93,6 +98,8 @@ fun AssistantHome(
         // Top Header
         DashboardHeader(
             nickname = userNickname,
+            userAvatar = userAvatar,
+            assistantName = assistantName,
             onOpenSettings = onOpenSettings,
         )
 
@@ -120,6 +127,8 @@ fun AssistantHome(
 @Composable
 private fun DashboardHeader(
     nickname: String,
+    userAvatar: Avatar = Avatar.Dummy,
+    assistantName: String = "",
     onOpenSettings: () -> Unit,
 ) {
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
@@ -129,7 +138,8 @@ private fun DashboardHeader(
         in 18..22 -> stringResource(R.string.menu_page_evening_greeting)
         else -> stringResource(R.string.menu_page_night_greeting)
     }
-    val displayName = nickname.ifBlank { "Khai" }
+    val cleanGreeting = greeting.replace("👋", "").trim()
+    val displayName = nickname.ifBlank { stringResource(R.string.user_default_name) }
 
     Box(
         modifier = Modifier
@@ -147,23 +157,38 @@ private fun DashboardHeader(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.weight(1f),
             ) {
-                // Gradient orb avatar with online indicator
-                Box(modifier = Modifier.size(54.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        Color(0xFFF472B6), // Pink
-                                        Color(0xFFA855F7), // Purple
-                                        Color(0xFFFBBF24), // Peach/Amber
-                                        Color(0xFF38BDF8), // Cyan
+                // User avatar with online indicator (tappable to open settings/profile)
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clickable(onClick = onOpenSettings)
+                ) {
+                    if (userAvatar != Avatar.Dummy) {
+                        UIAvatar(
+                            name = displayName,
+                            value = userAvatar,
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape),
+                        )
+                    } else {
+                        // Gradient orb avatar when no custom avatar is set
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFFF472B6), // Pink
+                                            Color(0xFFA855F7), // Purple
+                                            Color(0xFFFBBF24), // Peach/Amber
+                                            Color(0xFF38BDF8), // Cyan
+                                        )
                                     )
                                 )
-                            )
-                    )
+                        )
+                    }
 
                     // Green online dot badge
                     Box(
@@ -185,7 +210,7 @@ private fun DashboardHeader(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "$greeting, $displayName",
+                            text = "$cleanGreeting, $displayName 👋",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 19.sp,
@@ -194,14 +219,10 @@ private fun DashboardHeader(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
-                            text = "👋",
-                            fontSize = 18.sp,
-                        )
                     }
 
                     Text(
-                        text = "Your AI assistant",
+                        text = assistantName.ifBlank { "Your AI assistant" },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF94A3B8),
                         maxLines = 1,

@@ -98,6 +98,13 @@ object ToolUIRegistry {
         ReadFileToolUI,
         WriteFileToolUI,
         ShellToolUI,
+        PhoneInspectScreenToolUI,
+        PhoneClickToolUI,
+        PhoneSwipeToolUI,
+        PhoneTypeTextToolUI,
+        PhonePressKeyToolUI,
+        PhoneLaunchAppToolUI,
+        PhoneScreenshotToolUI,
     ).associateBy { it.toolName }
 
 

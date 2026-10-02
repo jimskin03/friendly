@@ -30,6 +30,14 @@ class LocalTools(
 
     val chartDisplayTool by lazy { buildChartDisplayTool() }
 
+    val phoneInspectScreenTool by lazy { buildPhoneInspectScreenTool() }
+    val phoneClickTool by lazy { buildPhoneClickTool() }
+    val phoneSwipeTool by lazy { buildPhoneSwipeTool(context) }
+    val phoneTypeTextTool by lazy { buildPhoneTypeTextTool() }
+    val phonePressKeyTool by lazy { buildPhonePressKeyTool() }
+    val phoneLaunchAppTool by lazy { buildPhoneLaunchAppTool(context) }
+    val phoneScreenshotTool by lazy { buildPhoneScreenshotTool(org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.files.FilesManager>()) }
+
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -56,6 +64,15 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.ChartDisplay)) {
             tools.add(chartDisplayTool)
+        }
+        if (options.contains(LocalToolOption.PhoneAutomation)) {
+            tools.add(phoneInspectScreenTool)
+            tools.add(phoneClickTool)
+            tools.add(phoneSwipeTool)
+            tools.add(phoneTypeTextTool)
+            tools.add(phonePressKeyTool)
+            tools.add(phoneLaunchAppTool)
+            tools.add(phoneScreenshotTool)
         }
         return tools
     }

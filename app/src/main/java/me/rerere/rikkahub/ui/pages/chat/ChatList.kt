@@ -372,6 +372,9 @@ private fun ChatListNormal(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             AssistantHome(
                                 userNickname = settings.displaySetting.userNickname,
+                                userAvatar = settings.displaySetting.userAvatar,
+                                assistantName = assistant?.name.orEmpty(),
+                                assistantAvatar = assistant?.avatar ?: me.rerere.rikkahub.data.model.Avatar.Dummy,
                                 folders = folders,
                                 onSelectFolder = onSelectFolder,
                                 onSeeAllFolders = onSeeAllFolders,

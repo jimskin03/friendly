@@ -57,6 +57,13 @@ import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.LaunchedEffect
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -107,6 +114,13 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 item {
                     ProviderConfigWarningCard(navController)
                 }
+            }
+
+            item("userProfile") {
+                UserProfileCard(
+                    settings = settings,
+                    onUpdateSettings = { vm.updateSettings(it) },
+                )
             }
 
             item("generalSettings") {
@@ -290,3 +304,106 @@ private fun ProviderConfigWarningCard(navController: Navigator) {
         }
     }
 }
+
+@Composable
+private fun UserProfileCard(
+    settings: me.rerere.rikkahub.data.datastore.Settings,
+    onUpdateSettings: (me.rerere.rikkahub.data.datastore.Settings) -> Unit,
+) {
+    val nicknameEditState = useEditState<String> { newNickname ->
+        onUpdateSettings(
+            settings.copy(
+                displaySetting = settings.displaySetting.copy(
+                    userNickname = newNickname.trim()
+                )
+            )
+        )
+    }
+
+    CardGroup(
+        modifier = Modifier.padding(horizontal = 8.dp),
+        title = { Text(stringResource(R.string.setting_page_profile)) },
+    ) {
+        item(
+            leadingContent = {
+                UIAvatar(
+                    name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                    value = settings.displaySetting.userAvatar,
+                    onUpdate = { newAvatar ->
+                        onUpdateSettings(
+                            settings.copy(
+                                displaySetting = settings.displaySetting.copy(
+                                    userAvatar = newAvatar
+                                )
+                            )
+                        )
+                    },
+                    modifier = Modifier.size(52.dp),
+                )
+            },
+            headlineContent = {
+                Text(
+                    text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            supportingContent = {
+                Text(stringResource(R.string.setting_page_profile_desc))
+            },
+            trailingContent = {
+                IconButton(
+                    onClick = {
+                        nicknameEditState.open(settings.displaySetting.userNickname)
+                    }
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.PencilEdit01,
+                        contentDescription = stringResource(R.string.chat_page_edit_nickname),
+                    )
+                }
+            },
+            onClick = {
+                nicknameEditState.open(settings.displaySetting.userNickname)
+            }
+        )
+    }
+
+    nicknameEditState.EditStateContent { nickname, onUpdate ->
+        AlertDialog(
+            onDismissRequest = {
+                nicknameEditState.dismiss()
+            },
+            title = {
+                Text(stringResource(R.string.chat_page_edit_nickname))
+            },
+            text = {
+                OutlinedTextField(
+                    value = nickname,
+                    onValueChange = onUpdate,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.chat_page_nickname_placeholder)) }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        nicknameEditState.confirm()
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        nicknameEditState.dismiss()
+                    }
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
