@@ -253,18 +253,48 @@ class DesktopControlClient(
     }
 
     suspend fun launchApp(app: String): Boolean {
-        val response = http.post("${normalizedBaseUrl()}/v1/desktop/launch") {
-            auth()
-            setBody(JsonInstant.encodeToString(LaunchAppRequest(app = app)))
+        val clean = app.trim().lowercase()
+        return try {
+            val response = http.post("${normalizedBaseUrl()}/v1/desktop/launch") {
+                auth()
+                setBody(JsonInstant.encodeToString(LaunchAppRequest(app = clean)))
+            }
+            if (response.status.isSuccess()) {
+                true
+            } else if (response.status.value == 404) {
+                fallbackLaunchApp(clean)
+            } else {
+                val text = response.bodyAsText()
+                throw DesktopControlException(
+                    message = "desktop/launch failed: ${response.status} $text",
+                    statusCode = response.status.value,
+                )
+            }
+        } catch (e: DesktopControlException) {
+            if (e.statusCode == 404) {
+                fallbackLaunchApp(clean)
+            } else {
+                throw e
+            }
+        } catch (_: Exception) {
+            fallbackLaunchApp(clean)
         }
-        if (!response.status.isSuccess()) {
-            val text = response.bodyAsText()
-            throw DesktopControlException(
-                message = "desktop/launch failed: ${response.status} $text",
-                statusCode = response.status.value,
-            )
+    }
+
+    private suspend fun fallbackLaunchApp(app: String): Boolean {
+        return when (app) {
+            "menu", "root-menu", "app-menu" -> {
+                hotkey(listOf("Super"))
+            }
+            "browser", "chromium", "chrome" -> {
+                openBrowser("https://www.google.com")
+                true
+            }
+            "terminal", "xterm", "bash", "shell" -> {
+                hotkey(listOf("Control", "Alt", "t"))
+            }
+            else -> false
         }
-        return true
     }
 
 

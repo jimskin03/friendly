@@ -158,7 +158,7 @@ def click(
     b = btn_map.get(button.lower())
     if b is None:
         raise DesktopError(f"Unknown button: {button}", code="bad_button")
-    _run(["xdotool", "mousemove", "--sync", str(int(x)), str(int(y))], display=disp)
+    _run(["xdotool", "mousemove", str(int(x)), str(int(y))], display=disp)
     _run(["xdotool", "click", b], display=disp)
 
 

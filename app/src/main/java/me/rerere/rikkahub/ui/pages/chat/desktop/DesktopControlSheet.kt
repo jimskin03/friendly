@@ -4,7 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
+import android.net.http.SslError
+import android.webkit.ConsoleMessage
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -139,10 +144,20 @@ fun DesktopControlSheet(
     var isFullScreen by remember { mutableStateOf(false) }
     var displayMode by remember { mutableStateOf(StreamDisplayMode.VIEW) }
     var activeViewerUrl by remember(currentViewerUrl) { mutableStateOf(currentViewerUrl) }
+    var lastLoadedViewerUrl by remember { mutableStateOf<String?>(null) }
     var isStartingStream by remember { mutableStateOf(false) }
     var isTakingSnapshot by remember { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webViewLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(activeViewerUrl, webViewInstance) {
+        val target = activeViewerUrl
+        val wv = webViewInstance
+        if (!target.isNullOrBlank() && wv != null && target != lastLoadedViewerUrl) {
+            lastLoadedViewerUrl = target
+            wv.loadUrl(target)
+        }
+    }
 
     // Quick action states
     var showBrowserDialog by remember { mutableStateOf(false) }
@@ -160,35 +175,26 @@ fun DesktopControlSheet(
         )
     }
 
-    // Auto-start stream if token is configured and not yet streaming
+    // Ensure active stream session on entry (auto-start or refresh expired session)
     LaunchedEffect(networkSetting.desktopControlApiToken) {
-        if (networkSetting.desktopControlApiToken.isNotBlank() && activeViewerUrl == null && !isStartingStream) {
+        if (networkSetting.desktopControlApiToken.isNotBlank() && !isStartingStream) {
             isStartingStream = true
             try {
                 val client = createClient(
                     baseUrl = networkSetting.desktopControlBaseUrl,
                     token = networkSetting.desktopControlApiToken,
                 )
-                val started = client.startStream(mode = "interactive")
-                activeViewerUrl = started.viewer_url
-                onStreamStarted(started.viewer_url)
-            } catch (e: Exception) {
-                // If stream is already active on host, fetch status
-                try {
-                    val client = createClient(
-                        baseUrl = networkSetting.desktopControlBaseUrl,
-                        token = networkSetting.desktopControlApiToken,
-                    )
-                    val status = client.status()
-                    if (status.active && status.viewer_url != null) {
-                        activeViewerUrl = status.viewer_url
-                        onStreamStarted(status.viewer_url)
-                    } else {
-                        toaster.show(e.message ?: "Failed to start desktop stream", ToastType.Error)
-                    }
-                } catch (_: Exception) {
-                    toaster.show(e.message ?: "Failed to start desktop stream", ToastType.Error)
+                val status = try { client.status() } catch (_: Exception) { null }
+                if (status != null && status.active && !status.viewer_url.isNullOrBlank()) {
+                    activeViewerUrl = status.viewer_url
+                    onStreamStarted(status.viewer_url)
+                } else {
+                    val started = client.startStream(mode = "interactive")
+                    activeViewerUrl = started.viewer_url
+                    onStreamStarted(started.viewer_url)
                 }
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Failed to start desktop stream", ToastType.Error)
             } finally {
                 isStartingStream = false
             }
@@ -459,16 +465,25 @@ fun DesktopControlSheet(
                             factory = { ctx ->
                                 WebView(ctx).apply {
                                     webViewInstance = this
+                                    layoutParams = android.view.ViewGroup.LayoutParams(
+                                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                    WebView.setWebContentsDebuggingEnabled(true)
+                                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                                     @SuppressLint("SetJavaScriptEnabled")
                                     settings.javaScriptEnabled = true
                                     settings.domStorageEnabled = true
+                                    settings.databaseEnabled = true
                                     settings.allowContentAccess = true
                                     settings.loadWithOverviewMode = true
                                     settings.useWideViewPort = true
                                     settings.setSupportZoom(true)
                                     settings.builtInZoomControls = false
                                     settings.displayZoomControls = false
-                                    settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                                    settings.cacheMode = WebSettings.LOAD_DEFAULT
+                                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                    settings.mediaPlaybackRequiresUserGesture = false
 
                                     webViewClient = object : WebViewClient() {
                                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -477,17 +492,54 @@ fun DesktopControlSheet(
 
                                         override fun onPageFinished(view: WebView?, url: String?) {
                                             webViewLoading = false
+                                            view?.evaluateJavascript(
+                                                """
+                                                (function() {
+                                                    var style = document.createElement('style');
+                                                    style.innerHTML = 'html, body { position: fixed !important; top: 0; bottom: 0; left: 0; right: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; } #noVNC_container { position: absolute !important; top: 0; bottom: 0; left: 0; right: 0; width: 100% !important; height: 100% !important; display: flex !important; justify-content: center !important; align-items: center !important; } #noVNC_control_bar_anchor { display: none !important; } canvas { max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }';
+                                                    document.head.appendChild(style);
+                                                    if (typeof UI !== 'undefined' && UI.resize) {
+                                                        UI.resize();
+                                                    }
+                                                })();
+                                                """.trimIndent(),
+                                                null
+                                            )
+                                        }
+
+                                        override fun onReceivedSslError(
+                                            view: WebView?,
+                                            handler: SslErrorHandler?,
+                                            error: SslError?
+                                        ) {
+                                            // Allow Tailscale and local network SSL certificates
+                                            handler?.proceed()
+                                        }
+
+                                        override fun onReceivedError(
+                                            view: WebView?,
+                                            request: WebResourceRequest?,
+                                            error: WebResourceError?
+                                        ) {
+                                            android.util.Log.w("DesktopControl", "WebView error: ${error?.errorCode} ${error?.description}")
                                         }
                                     }
-                                    webChromeClient = WebChromeClient()
 
-                                    loadUrl(activeViewerUrl!!)
+                                    webChromeClient = object : WebChromeClient() {
+                                        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                            android.util.Log.d("DesktopControl_noVNC", "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} (${consoleMessage?.sourceId()})")
+                                            return true
+                                        }
+                                    }
+
+                                    if (!activeViewerUrl.isNullOrBlank()) {
+                                        lastLoadedViewerUrl = activeViewerUrl
+                                        loadUrl(activeViewerUrl!!)
+                                    }
                                 }
                             },
                             update = { view ->
-                                if (view.url != activeViewerUrl && activeViewerUrl != null) {
-                                    view.loadUrl(activeViewerUrl!!)
-                                }
+                                webViewInstance = view
                             },
                             modifier = Modifier.fillMaxSize()
                         )
@@ -600,9 +652,23 @@ fun DesktopControlSheet(
                                     }
                                 )
 
-                                // Reload button
+                                // Reconnect / Reload button
                                 IconButton(
-                                    onClick = { webViewInstance?.reload() },
+                                    onClick = {
+                                        scope.launch {
+                                            try {
+                                                val client = createClient()
+                                                val started = client.startStream(mode = "interactive")
+                                                lastLoadedViewerUrl = null
+                                                activeViewerUrl = started.viewer_url
+                                                onStreamStarted(started.viewer_url)
+                                                toaster.show("Reconnected to desktop", ToastType.Success)
+                                            } catch (e: Exception) {
+                                                lastLoadedViewerUrl = null
+                                                webViewInstance?.reload()
+                                            }
+                                        }
+                                    },
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
@@ -636,105 +702,116 @@ fun DesktopControlSheet(
                 }
             }
 
-            // Quick Actions Bar: Snap to Chat, Menu, Browser, Terminal, Type
-            Row(
+            // Quick Actions: Row 1 (Snap to Chat & Type) + Row 2 (Menu, Browser, Terminal)
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Snap to Chat
-                Button(
-                    onClick = {
-                        isTakingSnapshot = true
-                        scope.launch {
-                            try {
-                                val client = createClient()
-                                val response = client.screenshot()
-                                val bytes = Base64.decode(response.image_b64, Base64.DEFAULT)
-                                onAttachScreenshot(bytes)
-                                toaster.show("Desktop screenshot attached to chat", ToastType.Success)
-                            } catch (e: Exception) {
-                                toaster.show(e.message ?: "Failed to capture snapshot", ToastType.Error)
-                            } finally {
-                                isTakingSnapshot = false
-                            }
-                        }
-                    },
-                    enabled = !isTakingSnapshot && networkSetting.desktopControlApiToken.isNotBlank(),
-                    modifier = Modifier.weight(1.3f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isTakingSnapshot) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                    } else {
-                        Icon(HugeIcons.Camera01, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
+                    // Snap to Chat
+                    Button(
+                        onClick = {
+                            isTakingSnapshot = true
+                            scope.launch {
+                                try {
+                                    val client = createClient()
+                                    val response = client.screenshot()
+                                    val bytes = Base64.decode(response.image_b64, Base64.DEFAULT)
+                                    onAttachScreenshot(bytes)
+                                    toaster.show("Desktop screenshot attached to chat", ToastType.Success)
+                                } catch (e: Exception) {
+                                    toaster.show(e.message ?: "Failed to capture snapshot", ToastType.Error)
+                                } finally {
+                                    isTakingSnapshot = false
+                                }
+                            }
+                        },
+                        enabled = !isTakingSnapshot && networkSetting.desktopControlApiToken.isNotBlank(),
+                        modifier = Modifier.weight(1.4f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        if (isTakingSnapshot) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                        } else {
+                            Icon(HugeIcons.Camera01, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(stringResource(R.string.desktop_action_snap), fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
-                    Text(stringResource(R.string.desktop_action_snap), fontWeight = FontWeight.SemiBold, maxLines = 1)
+
+                    // Type Text
+                    OutlinedButton(
+                        onClick = { showTypeDialog = !showTypeDialog },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(HugeIcons.Keyboard, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Type", maxLines = 1)
+                    }
                 }
 
-                // Open Desktop Menu (Super / Right Click)
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            try {
-                                val client = createClient()
-                                client.launchApp("menu")
-                                toaster.show("Opened desktop menu", ToastType.Info)
-                            } catch (e: Exception) {
-                                toaster.show(e.message ?: "Failed to open menu", ToastType.Error)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Open Desktop Menu (Super / Right Click)
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val client = createClient()
+                                    client.launchApp("menu")
+                                    toaster.show("Opened desktop menu", ToastType.Info)
+                                } catch (e: Exception) {
+                                    toaster.show(e.message ?: "Failed to open menu", ToastType.Error)
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(HugeIcons.Menu01, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(R.string.desktop_action_menu), maxLines = 1)
-                }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(HugeIcons.Menu01, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.desktop_action_menu), maxLines = 1)
+                    }
 
-                // Open Browser Drawer
-                OutlinedButton(
-                    onClick = { showBrowserDialog = !showBrowserDialog },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(HugeIcons.Globe, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Browser", maxLines = 1)
-                }
+                    // Open Browser Drawer
+                    OutlinedButton(
+                        onClick = { showBrowserDialog = !showBrowserDialog },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(HugeIcons.Globe, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Browser", maxLines = 1)
+                    }
 
-                // Open Terminal
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            try {
-                                val client = createClient()
-                                client.launchApp("terminal")
-                                toaster.show("Launched Terminal", ToastType.Success)
-                            } catch (e: Exception) {
-                                toaster.show(e.message ?: "Failed to launch terminal", ToastType.Error)
+                    // Open Terminal
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val client = createClient()
+                                    client.launchApp("terminal")
+                                    toaster.show("Launched Terminal", ToastType.Success)
+                                } catch (e: Exception) {
+                                    toaster.show(e.message ?: "Failed to launch terminal", ToastType.Error)
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(HugeIcons.CommandLine, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(R.string.desktop_action_terminal), maxLines = 1)
-                }
-
-                // Type Text
-                OutlinedButton(
-                    onClick = { showTypeDialog = !showTypeDialog },
-                    modifier = Modifier.weight(0.9f)
-                ) {
-                    Icon(HugeIcons.Keyboard, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text("Type", maxLines = 1)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(HugeIcons.CommandLine, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.desktop_action_terminal), maxLines = 1)
+                    }
                 }
             }
 
