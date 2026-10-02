@@ -1,19 +1,47 @@
 /**
- * Example stub for Friendly Android — DesktopControlClient
+ * Host-side reference copy of the Friendly Android Control API client.
  *
- * Place conceptually under:
- *   app/src/main/java/.../data/remote/DesktopControlClient.kt
+ * Canonical implementation (source of truth):
+ *   app/src/main/java/me/rerere/rikkahub/data/remote/DesktopControlClient.kt
  *
- * Not compiled here (Friendly repo is not checked out). Wire into chat UI
- * "Open desktop" / "Stop desktop" actions in Phase 3 client work.
+ * This file is documentation for host developers — it is not compiled by the
+ * Android app. Keep it aligned with the app client when Control API endpoints
+ * or DTOs change.
+ *
+ * Auth: every `/v1/*` call sends `Authorization: Bearer <API_TOKEN>`.
+ * Configure base URL + token in the app under Settings → Preferences → Network
+ * (`desktopControlBaseUrl` / `desktopControlApiToken`), or [DesktopControlDefaults].
  */
-package me.rerere.rikkahub.data.remote // adjust to actual package
+package me.rerere.rikkahub.data.remote
 
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.http.*
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
+import me.rerere.rikkahub.utils.JsonInstant
+
+object DesktopControlDefaults {
+    /** Emulator loopback → host machine. Use Tailscale/LAN IP on a real device. */
+    const val BASE_URL = "http://10.0.2.2:8787"
+}
+
+@Serializable
+data class StreamStartRequest(
+    val mode: String = "view",
+)
+
+@Serializable
+data class StreamStopRequest(
+    val session_id: String? = null,
+)
 
 @Serializable
 data class StreamStartResponse(
@@ -33,9 +61,70 @@ data class StreamStatusResponse(
     val mode: String? = null,
 )
 
+@Serializable
+data class ScreenshotResponse(
+    val image_b64: String,
+    val mime: String = "image/png",
+)
+
+@Serializable
+data class ClickRequest(
+    val x: Int,
+    val y: Int,
+    val button: String = "left",
+)
+
+@Serializable
+data class TypeRequest(
+    val text: String,
+)
+
+@Serializable
+data class HotkeyRequest(
+    val keys: List<String>,
+)
+
+@Serializable
+data class BrowserOpenRequest(
+    val url: String,
+)
+
+@Serializable
+data class LaunchAppRequest(
+    val app: String,
+)
+
+@Serializable
+data class BrowserOpenResponse(
+    val ok: Boolean = true,
+    val url: String = "",
+    val pid: Int? = null,
+)
+
+@Serializable
+data class HealthResponse(
+    val ok: Boolean = false,
+    val service: String? = null,
+    val version: String? = null,
+)
+
+@Serializable
+data class DesktopStatusResponse(
+    val display: String = "",
+    val display_available: Boolean = false,
+    val width: Int = 1280,
+    val height: Int = 720,
+    val depth: Int = 24,
+)
+
+class DesktopControlException(
+    message: String,
+    val statusCode: Int? = null,
+) : Exception(message)
+
 class DesktopControlClient(
     private val http: HttpClient,
-    private val baseUrl: String, // e.g. http://100.x.y.z:8787
+    private val baseUrl: String,
     private val apiToken: String,
 ) {
     private fun HttpRequestBuilder.auth() {
@@ -43,29 +132,217 @@ class DesktopControlClient(
         contentType(ContentType.Application.Json)
     }
 
-    suspend fun startStream(mode: String = "view"): StreamStartResponse =
-        http.post("$baseUrl/v1/stream/start") {
-            auth()
-            setBody(mapOf("mode" to mode))
-        }.body()
+    private fun normalizedBaseUrl(): String = baseUrl.trimEnd('/')
 
-    suspend fun stopStream(sessionId: String? = null): Map<String, Any?> =
-        http.post("$baseUrl/v1/stream/stop") {
+    suspend fun startStream(mode: String = "view"): StreamStartResponse {
+        val response = http.post("${normalizedBaseUrl()}/v1/stream/start") {
             auth()
-            setBody(buildMap {
-                if (sessionId != null) put("session_id", sessionId)
-            })
-        }.body()
+            setBody(JsonInstant.encodeToString(StreamStartRequest(mode = mode)))
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "stream/start failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
 
-    suspend fun status(): StreamStatusResponse =
-        http.get("$baseUrl/v1/stream/status") { auth() }.body()
+    suspend fun stopStream(sessionId: String? = null): String {
+        val response = http.post("${normalizedBaseUrl()}/v1/stream/stop") {
+            auth()
+            setBody(JsonInstant.encodeToString(StreamStopRequest(session_id = sessionId)))
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "stream/stop failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return text
+    }
+
+    suspend fun status(): StreamStatusResponse {
+        val response = http.get("${normalizedBaseUrl()}/v1/stream/status") { auth() }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "stream/status failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
+
+    /** Unauthenticated probe — host `GET /health` does not require Bearer. */
+    suspend fun health(): Boolean {
+        return try {
+            val response = http.get("${normalizedBaseUrl()}/health")
+            response.status.isSuccess()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun screenshot(): ScreenshotResponse {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/screenshot") {
+            auth()
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "screenshot failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
+
+    suspend fun click(x: Int, y: Int, button: String = "left"): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/click") {
+            auth()
+            setBody(JsonInstant.encodeToString(ClickRequest(x = x, y = y, button = button)))
+        }
+        if (!response.status.isSuccess()) {
+            val text = response.bodyAsText()
+            throw DesktopControlException(
+                message = "click failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun typeText(text: String): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/type") {
+            auth()
+            setBody(JsonInstant.encodeToString(TypeRequest(text = text)))
+        }
+        if (!response.status.isSuccess()) {
+            val err = response.bodyAsText()
+            throw DesktopControlException(
+                message = "type failed: ${response.status} $err",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun hotkey(keys: List<String>): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/hotkey") {
+            auth()
+            setBody(JsonInstant.encodeToString(HotkeyRequest(keys = keys)))
+        }
+        if (!response.status.isSuccess()) {
+            val err = response.bodyAsText()
+            throw DesktopControlException(
+                message = "hotkey failed: ${response.status} $err",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun openBrowser(url: String): BrowserOpenResponse {
+        val response = http.post("${normalizedBaseUrl()}/v1/browser/open") {
+            auth()
+            setBody(JsonInstant.encodeToString(BrowserOpenRequest(url = url)))
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "browser/open failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
+
+    /** Show Chrome + terminal side by side. Returns false on 404 (older hosts). */
+    suspend fun prepareDesktop(): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/desktop/prepare") {
+            auth()
+        }
+        if (response.status.value == 404) {
+            return false
+        }
+        if (!response.status.isSuccess()) {
+            val text = response.bodyAsText()
+            throw DesktopControlException(
+                message = "desktop/prepare failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun launchApp(app: String): Boolean {
+        val clean = app.trim().lowercase()
+        return try {
+            val response = http.post("${normalizedBaseUrl()}/v1/desktop/launch") {
+                auth()
+                setBody(JsonInstant.encodeToString(LaunchAppRequest(app = clean)))
+            }
+            if (response.status.isSuccess()) {
+                true
+            } else if (response.status.value == 404) {
+                fallbackLaunchApp(clean)
+            } else {
+                val text = response.bodyAsText()
+                throw DesktopControlException(
+                    message = "desktop/launch failed: ${response.status} $text",
+                    statusCode = response.status.value,
+                )
+            }
+        } catch (e: DesktopControlException) {
+            if (e.statusCode == 404) {
+                fallbackLaunchApp(clean)
+            } else {
+                throw e
+            }
+        } catch (_: Exception) {
+            fallbackLaunchApp(clean)
+        }
+    }
+
+    private suspend fun fallbackLaunchApp(app: String): Boolean {
+        return when (app) {
+            "menu", "root-menu", "app-menu" -> {
+                hotkey(listOf("Super"))
+            }
+            "browser", "chromium", "chrome" -> {
+                openBrowser("https://www.google.com")
+                true
+            }
+            "terminal", "xterm", "bash", "shell" -> {
+                hotkey(listOf("Control", "Alt", "t"))
+            }
+            else -> false
+        }
+    }
+
+    suspend fun desktopStatus(): DesktopStatusResponse {
+        val response = http.get("${normalizedBaseUrl()}/v1/desktop/status") { auth() }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "desktop/status failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
 }
 
 /*
- * UI sketch:
- *  - "Open desktop" → startStream() → open viewer_url in Custom Tabs / WebView
- *  - Poll status() or show "Desktop live" when active → "Stop" → stopStream()
- *  - Do NOT expose stream_start to the model without needsApproval; prefer this button.
+ * App wiring (already in-tree — do not re-implement here):
+ *  - Settings → Network: desktopControlBaseUrl + desktopControlApiToken
+ *  - Open desktop UI → startStream() → open viewer_url (Custom Tabs / WebView)
+ *  - Active stream → stopStream(); poll status() as needed
+ *  - Agent tools also call actions / browser / desktop via this client or MCP
  *
- * MCP remains for agent click/type/screenshot; stream is a human overlay.
+ * Prefer the in-app Open desktop control for tunnels/viewers; keep MCP
+ * stream_start needsApproval when exposed to the model.
  */

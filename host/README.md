@@ -3,23 +3,22 @@
 Headless remote-desktop host for the [Friendly](https://github.com/jimskin03/friendly) Android assistant.
 
 **Idle stack:** Xvfb (`DISPLAY=:99`) + Openbox + Chromium  
-**Control plane:** Python FastAPI (`agent/`) — screenshot / click / type / hotkey / browser open  
-**MCP:** Streamable HTTP at `/mcp` (Phase 2) wrapping desktop tools  
-**Stream:** on-demand x11vnc + noVNC (Phase 3); Tailscale/CF tunnel when available, else localhost viewer
+**Control plane:** Python FastAPI (`agent/`) — screenshot / click / type / hotkey / browser / desktop  
+**MCP:** Streamable HTTP at `/mcp` wrapping desktop tools  
+**Stream:** on-demand x11vnc + noVNC; Tailscale/CF tunnel when available, else localhost viewer
 
-This tree is a **standalone host** (`friendly-host/`). It can later sit as `friendly/host/` in a monorepo; the layout matches the plan either way.
+This tree lives at `friendly/host/` in the monorepo (Android app under `app/`).
 
 - [`SETUP_UBUNTU.md`](SETUP_UBUNTU.md) — **Complete headless Ubuntu setup guide (turnkey installer, systemd, Tailscale)**
 - [`docs/architecture.md`](docs/architecture.md) — defaults summary / pointer
-- `/workspace/friendly-assistant-plan.md` — phased plan
-- `/workspace/assistant-remote-desktop-architecture.md` — full architecture
+- [`examples/DesktopControlClient.kt`](examples/DesktopControlClient.kt) — host-side mirror of the Android Control API client (canonical: `app/.../data/remote/DesktopControlClient.kt`)
 
 ---
 
 ## Quick start
 
 ```bash
-cd /workspace/friendly-host
+cd host   # from repo root: /workspace/friendly/host
 
 # 1) Install OS packages + Python venv (needs sudo for apt)
 ./scripts/bootstrap-host.sh
@@ -75,6 +74,8 @@ All `/v1/*` routes and `/mcp` require `Authorization: Bearer <API_TOKEN>`.
 | POST | `/v1/actions/type` | `{ text }` | `{ ok, chars }` |
 | POST | `/v1/actions/hotkey` | `{ keys: ["ctrl","t"] }` | `{ ok, keys }` |
 | POST | `/v1/browser/open` | `{ url }` | `{ ok, url, pid }` |
+| POST | `/v1/desktop/prepare` | — | `{ ok }` (layout helper) |
+| POST | `/v1/desktop/launch` | `{ app }` | `{ ok, app }` |
 | POST | `/v1/stream/start` | `{ mode? }` | `{ viewer_url, session_id, expires_at, token, tunnel }` |
 | POST | `/v1/stream/stop` | `{ session_id? }` | `{ stopped, session_id }` |
 | GET | `/v1/stream/status` | — | `{ active, expires_at, mode, viewer_url, … }` |
@@ -132,7 +133,7 @@ In Friendly chat, tools appear as `mcp__friendly_desktop__screenshot` etc. (sani
 3. Open the **PC assistant** profile → bind that MCP server in `Assistant.mcpServers`.
 4. Start a chat; confirm tools appear. Ask the model to take a screenshot / open a URL.
 
-`stream_start` should stay approval-gated in Friendly (`McpTool.needsApproval`). Prefer the future **Open desktop** button (Phase 3) over letting the model open tunnels.
+`stream_start` should stay approval-gated in Friendly (`McpTool.needsApproval`). Prefer the in-app **Open desktop** control (via `DesktopControlClient`) over letting the model open tunnels.
 
 ### Smoke
 
@@ -145,7 +146,7 @@ In Friendly chat, tools appear as `mcp__friendly_desktop__screenshot` etc. (sani
 
 ---
 
-## Open desktop / streaming (Phase 3)
+## Open desktop / streaming
 
 **Idle:** Xvfb + Openbox + Control API/MCP — no viewer URL, no public tunnel.  
 **Open desktop:** `POST /v1/stream/start` → starts **x11vnc** (localhost) + **websockify/noVNC** → returns `viewer_url` + JWT `token` (TTL ~15 min, one session).  
@@ -174,17 +175,23 @@ The Tailscale viewer uses a dedicated port so it does not replace a Funnel or an
 
 ### Friendly Android client notes
 
-1. Add MCP server (Phase 2) for agent control tools.
-2. Add `DesktopControlClient` (see [`examples/DesktopControlClient.kt`](examples/DesktopControlClient.kt)):
-   - **Open desktop** button → `POST /v1/stream/start` → open `viewer_url` in Custom Tabs / WebView.
-   - While `GET /v1/stream/status` is active → show **Stop** → `POST /v1/stream/stop`.
-3. Keep `stream_start` MCP tool `needsApproval`; prefer the human button for tunnels/viewers.
-4. Reachability: Tailscale on phone+host (or CF Access) for API + viewer — never publish raw VNC.
+The production client lives in the app:
+
+- Canonical: [`app/src/main/java/me/rerere/rikkahub/data/remote/DesktopControlClient.kt`](../app/src/main/java/me/rerere/rikkahub/data/remote/DesktopControlClient.kt)
+- Host mirror (for docs / API parity): [`examples/DesktopControlClient.kt`](examples/DesktopControlClient.kt)
+
+All `/v1/*` calls use `Authorization: Bearer <API_TOKEN>` (same token as host `.env`). `GET /health` is unauthenticated.
+
+1. Register the MCP server (above) for agent control tools.
+2. Point the app Network settings at the host (`desktopControlBaseUrl` + `desktopControlApiToken`).
+3. **Open desktop** → `POST /v1/stream/start` → open `viewer_url` in Custom Tabs / WebView; **Stop** → `POST /v1/stream/stop` (see also `status`, `screenshot`, `click`, `type`, `hotkey`, `browser/open`, `desktop/prepare`, `desktop/launch`, `desktop/status`).
+4. Keep `stream_start` MCP tool `needsApproval`; prefer the human Open desktop control for tunnels/viewers.
+5. Reachability: Tailscale on phone+host (or CF Access) for API + viewer — never publish raw VNC.
 
 ## Layout
 
 ```
-friendly-host/
+host/
 ├── README.md
 ├── .env.example
 ├── docker-compose.yml          # optional lab stack
@@ -198,14 +205,17 @@ friendly-host/
 │       ├── config.py
 │       ├── desktop.py          # screenshot / xdotool
 │       ├── browser.py          # Chromium open URL
-│       └── stream.py           # Phase 3 stub
+│       ├── stream.py           # x11vnc + noVNC sessions
+│       └── mcp_server.py
+├── examples/
+│   └── DesktopControlClient.kt # mirror of app Control API client
 ├── scripts/
 │   ├── bootstrap-host.sh
 │   ├── start-idle-stack.sh
 │   └── smoke-test-api.sh
 ├── systemd/                    # unit templates
 ├── config/
-├── viewer/novnc/               # Phase 3 placeholder
+├── viewer/novnc/
 └── docs/architecture.md
 ```
 
@@ -223,13 +233,13 @@ sudo systemctl enable --now xvfb openbox agent-api
 
 ---
 
-## What is stubbed
+## Status
 
-| Area | Phase | Status |
-|---|---|---|
-| Xvfb + Openbox + Control API actions | **1** | Implemented |
-| MCP server wrapping actions | **2** | Done — `/mcp` Streamable HTTP |
-| x11vnc + noVNC + JWT + localhost viewer | **3** | Done; Tailscale/CF when binaries+creds exist |
-| Friendly Android Open desktop client | **3** | See `examples/DesktopControlClient.kt` |
+| Area | Status |
+|---|---|
+| Xvfb + Openbox + Control API actions | Implemented |
+| MCP server wrapping actions | Done — `/mcp` Streamable HTTP |
+| x11vnc + noVNC + JWT + localhost viewer | Done; Tailscale/CF when binaries+creds exist |
+| Friendly Android Control API client | In app (`app/.../DesktopControlClient.kt`); host mirror at `examples/DesktopControlClient.kt` |
 
 Do not expose the API or VNC on a public interface without Tailscale / Cloudflare Access.
