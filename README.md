@@ -65,7 +65,7 @@ Inline demo:
 ## Features
 
 ### Chat & assistants
-- **Bring your own providers:** OpenAI, Gemini, DeepSeek, OpenRouter, Vercel AI Gateway, xAI, plus custom OpenAI-compatible endpoints
+- **Bring your own providers:** OpenAI, Gemini, DeepSeek, OpenRouter, Ollama (local or cloud), xAI, plus custom OpenAI-compatible endpoints
 - **Rich conversations:** branching/regeneration, markdown, code highlighting, LaTeX, tables, image & document attachments
 - **Organize:** dashboards, folders, labels, folder-specific lists
 - **Custom assistants:** prompts, memory, quick messages, skills, and per-assistant tools
@@ -76,6 +76,15 @@ Inline demo:
 - **Image generation** when a compatible provider/model is set
 
 Provider availability depends on the service, model, region, and credentials you configure.
+
+#### Ollama (local or cloud)
+
+Built-in **Ollama** uses the OpenAI-compatible client (`/v1/chat/completions`).
+
+- **Local:** keep Base URL `http://localhost:11434/v1` (or your LAN/Tailscale host). API key is optional — local Ollama ignores it. On an Android emulator, use `http://10.0.2.2:11434/v1` to reach the host machine.
+- **Cloud:** set Base URL to `https://ollama.com/v1` and paste an [Ollama Cloud API key](https://ollama.com/settings/keys).
+
+Then add models by ID (e.g. `llama3.2` locally, or a cloud model id from Ollama) under the provider’s model list.
 
 ### Phone automation
 - Accessibility-backed **Phone Automation** local tools (enable per assistant)

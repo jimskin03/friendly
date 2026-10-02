@@ -411,14 +411,15 @@ class SettingsStore(
                 }
             }
             providers = providers.map { provider ->
-                val defaultProvider = DEFAULT_PROVIDERS.find { it.id == provider.id }
+                val migratedProvider = provider.migrateLegacyBuiltInProvider()
+                val defaultProvider = DEFAULT_PROVIDERS.find { it.id == migratedProvider.id }
                 if (defaultProvider != null) {
-                    provider.copyProvider(
+                    migratedProvider.copyProvider(
                         builtIn = defaultProvider.builtIn,
                         description = defaultProvider.description,
                         shortDescription = defaultProvider.shortDescription,
                     )
-                } else provider
+                } else migratedProvider
             }.toMutableList()
             val assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
             DEFAULT_ASSISTANTS.forEach { defaultAssistant ->

@@ -959,6 +959,8 @@
   <string name="setting_provider_page_advanced_settings">Advanced Settings</string>
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
+  <string name="setting_provider_ollama_description">OpenAI-compatible Ollama endpoint. Local default is http://localhost:11434/v1 (API key optional). For Ollama Cloud, set base URL to https://ollama.com/v1 and add your API key.</string>
+  <string name="setting_provider_ollama_short_description">Local or cloud Ollama (OpenAI-compatible)</string>
   <string name="setting_provider_page_api_path">API Path</string>
   <string name="setting_provider_page_avaliable_models">Avaliable Models</string>
   <string name="setting_provider_page_balance_api_path">Balance API Path</string>

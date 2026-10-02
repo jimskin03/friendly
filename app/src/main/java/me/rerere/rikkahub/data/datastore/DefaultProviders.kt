@@ -1,10 +1,21 @@
 package me.rerere.rikkahub.data.datastore
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.R
 import kotlin.uuid.Uuid
 
 val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
+
+/** Built-in provider slot formerly used for Vercel AI Gateway. */
+val BUILTIN_OLLAMA_PROVIDER_ID = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88")
+
+const val OLLAMA_LOCAL_BASE_URL = "http://localhost:11434/v1"
+const val OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1"
+private const val LEGACY_VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1"
 
 val DEFAULT_PROVIDERS = listOf(
     ProviderSetting.OpenAI(
@@ -49,17 +60,26 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
-        id = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88"),
-        name = "Vercel",
-        baseUrl = "https://ai-gateway.vercel.sh/v1",
+        id = BUILTIN_OLLAMA_PROVIDER_ID,
+        name = "Ollama",
+        baseUrl = OLLAMA_LOCAL_BASE_URL,
         apiKey = "",
         enabled = true,
         builtIn = true,
-        balanceOption = BalanceOption(
-            enabled = true,
-            apiPath = "/credits",
-            resultPath = "balance",
-        )
+        description = {
+            Text(
+                text = stringResource(R.string.setting_provider_ollama_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        shortDescription = {
+            Text(
+                text = stringResource(R.string.setting_provider_ollama_short_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("ff3cde7e-0f65-43d7-8fb2-6475c99f5990"),
@@ -72,3 +92,30 @@ val DEFAULT_PROVIDERS = listOf(
     ),
 )
 
+/**
+ * Migrates the built-in Vercel AI Gateway slot to Ollama for users who still
+ * have the old name and/or gateway URL. Preserves API keys and custom models.
+ */
+fun ProviderSetting.migrateLegacyBuiltInProvider(): ProviderSetting {
+    if (id != BUILTIN_OLLAMA_PROVIDER_ID || this !is ProviderSetting.OpenAI) {
+        return this
+    }
+    val defaultOllama = DEFAULT_PROVIDERS
+        .filterIsInstance<ProviderSetting.OpenAI>()
+        .first { it.id == BUILTIN_OLLAMA_PROVIDER_ID }
+
+    val legacyName = name.equals("Vercel", ignoreCase = true)
+    val legacyBaseUrl = baseUrl.trimEnd('/').equals(
+        LEGACY_VERCEL_AI_GATEWAY_BASE_URL.trimEnd('/'),
+        ignoreCase = true,
+    )
+    if (!legacyName && !legacyBaseUrl) {
+        return this
+    }
+
+    return copy(
+        name = if (legacyName) defaultOllama.name else name,
+        baseUrl = if (legacyBaseUrl) defaultOllama.baseUrl else baseUrl,
+        balanceOption = if (legacyBaseUrl) defaultOllama.balanceOption else balanceOption,
+    )
+}
