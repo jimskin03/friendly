@@ -9,6 +9,7 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -85,6 +86,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.dokar.sonner.ToastType
 import io.ktor.client.HttpClient
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -357,7 +367,7 @@ fun DesktopControlSheet(
         val wv = webViewInstance
         if (!target.isNullOrBlank() && wv != null && target != lastLoadedViewerUrl) {
             lastLoadedViewerUrl = target
-            wv.loadUrl(target.fillingViewerUrl())
+            wv.loadUrl(target.fittedViewerUrl())
         }
     }
 
@@ -572,6 +582,13 @@ fun DesktopControlSheet(
                             settings.mediaPlaybackRequiresUserGesture = false
 
                             webViewClient = object : WebViewClient() {
+                                override fun shouldInterceptRequest(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                ): WebResourceResponse? {
+                                    return request?.url?.toString()?.let(::viewerScriptWithHook)
+                                }
+
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     view?.evaluateJavascript(TRACKPAD_INSTALL_JS, null)
                                 }
@@ -611,7 +628,7 @@ fun DesktopControlSheet(
 
                             if (!activeViewerUrl.isNullOrBlank()) {
                                 lastLoadedViewerUrl = activeViewerUrl
-                                loadUrl(activeViewerUrl!!.fillingViewerUrl())
+                                loadUrl(activeViewerUrl!!.fittedViewerUrl())
                             }
                         }
                     },
@@ -1101,15 +1118,49 @@ private fun ConnectionCard(
 
 private fun Float.jsNum(): String = if (isFinite()) toString() else "0"
 
-/** Ask noVNC to resize the remote desktop to the phone, instead of letterboxing it. */
-private fun String.fillingViewerUrl(): String {
+/**
+ * noVNC keeps its session inside an ES module. Append a hook so the page can
+ * turn scaling back on. The viewer certificate is already accepted by the WebView.
+ */
+private fun viewerScriptWithHook(url: String): WebResourceResponse? {
+    if (!url.contains("/app/ui.js")) return null
+    return try {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8000
+            readTimeout = 8000
+            instanceFollowRedirects = true
+            if (this is HttpsURLConnection) {
+                sslSocketFactory = viewerTlsSocketFactory()
+                hostnameVerifier = HostnameVerifier { _, _ -> true }
+            }
+        }
+        connection.inputStream.use { input ->
+            val hooked = input.bufferedReader().readText() + "\nglobalThis.__novncUI = UI;\n"
+            WebResourceResponse("text/javascript", "utf-8", hooked.byteInputStream(Charsets.UTF_8))
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("DesktopControl", "ui.js hook skipped: ${e.message}")
+        null
+    }
+}
+
+private fun viewerTlsSocketFactory() = SSLContext.getInstance("TLS").apply {
+    init(null, arrayOf<TrustManager>(object : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+    }), SecureRandom())
+}.socketFactory
+
+/** Fit the whole remote desktop in the phone. resize=remote makes one remote pixel one CSS pixel, which crops it. */
+private fun String.fittedViewerUrl(): String {
     val withResize = replace(Regex("([?&])resize=[^&]*")) { match ->
-        match.groupValues[1] + "resize=remote"
+        match.groupValues[1] + "resize=scale"
     }
     return when {
         withResize.contains("resize=") -> withResize
-        withResize.contains("?") -> "$withResize&resize=remote"
-        else -> "$withResize?resize=remote"
+        withResize.contains("?") -> "$withResize&resize=scale"
+        else -> "$withResize?resize=scale"
     }
 }
 
@@ -1132,7 +1183,7 @@ private const val TRACKPAD_INSTALL_JS = """
     if (!style) {
       style = document.createElement('style');
       style.id = 'friendly-trackpad-style';
-      style.textContent = 'html, body { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000; } #noVNC_container, #noVNC_screen { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; overflow: hidden !important; } #noVNC_control_bar, #noVNC_control_bar_anchor { display: none !important; }';
+      style.textContent = 'html, body { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000; border-radius: 0 !important; } #noVNC_container, #noVNC_screen { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; overflow: hidden !important; border-radius: 0 !important; } canvas { border-radius: 0 !important; } #noVNC_control_bar, #noVNC_control_bar_anchor { display: none !important; }';
       (document.head || document.documentElement).appendChild(style);
     }
   }
@@ -1156,17 +1207,9 @@ private const val TRACKPAD_INSTALL_JS = """
     viewScale: function() {
       return (this.cover || 1) * (this.zoom || 1);
     },
-    updateCover: function(c) {
-      var frame = document.getElementById('noVNC_container') || document.documentElement;
-      var cr = frame.getBoundingClientRect();
-      var lw = c.offsetWidth;
-      var lh = c.offsetHeight;
-      if (lw < 2 || lh < 2 || cr.width < 2 || cr.height < 2) {
-        this.cover = 1;
-        return;
-      }
-      var fill = Math.max(cr.width / lw, cr.height / lh);
-      this.cover = (!isFinite(fill) || fill < 1) ? 1 : fill;
+    updateCover: function() {
+      // noVNC already fits the framebuffer. Magnifying it here crops the desktop.
+      this.cover = 1;
     },
     applyView: function(c) {
       if (!c) c = canvas();
@@ -1182,7 +1225,11 @@ private const val TRACKPAD_INSTALL_JS = """
         c.style.transform = 'translate(' + this.panX + 'px,' + this.panY + 'px) scale(' + z + ')';
       }
       var frame = document.getElementById('noVNC_container');
-      if (frame) frame.style.overflow = 'hidden';
+      if (frame) {
+        frame.style.overflow = 'hidden';
+        // The hosted noVNC page clips the bottom-right with an 800px by 600px radius.
+        frame.style.setProperty('border-radius', '0', 'important');
+      }
       var list = document.querySelectorAll('canvas');
       for (var i = 0; i < list.length; i++) {
         if (list[i] !== c) list[i].style.visibility = 'hidden';
@@ -1364,16 +1411,30 @@ private const val TRACKPAD_INSTALL_JS = """
       return true;
     }
   };
-  function askRemoteToFill() {
-    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+  function fitDesktop() {
+    var ui = window.__novncUI;
+    var rfb = ui && ui.rfb;
+    if (!rfb || !rfb._sock) return false;
+    try {
+      rfb.resizeSession = false;
+      rfb.clipViewport = false;
+      rfb.scaleViewport = true;
+      if (rfb._fbWidth < 1000 && rfb._supportsSetDesktopSize) {
+        var messages = rfb.constructor && rfb.constructor.messages;
+        if (messages && messages.setDesktopSize) {
+          messages.setDesktopSize(rfb._sock, 1280, 720, rfb._screenID, rfb._screenFlags);
+        }
+      }
+    } catch (e) {}
+    return true;
   }
   hideChrome();
-  askRemoteToFill();
+  fitDesktop();
   setTimeout(function() {
     hideChrome();
-    askRemoteToFill();
+    fitDesktop();
     if (window.FriendlyTrackpad) window.FriendlyTrackpad.moveBy(0, 0);
   }, 600);
-  setTimeout(askRemoteToFill, 1500);
+  setTimeout(fitDesktop, 1500);
 })();
 """
