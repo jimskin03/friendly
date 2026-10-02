@@ -642,9 +642,6 @@ private fun ChatPageContent(
                     )
                     if (conversation.messageNodes.isEmpty() && !isFolderChat) {
                         HomeBottomBar(
-                            onAnalyze = {
-                                navController.navigate(Screen.Stats)
-                            },
                             onSettings = {
                                 navController.navigate(Screen.Setting)
                             },

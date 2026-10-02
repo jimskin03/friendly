@@ -843,6 +843,8 @@
   <string name="setting_model_page_title">Model Settings</string>
     <string name="setting_model_page_translate_model">Translation Model</string>
   <string name="setting_model_page_translate_model_desc">The model used for translation features</string>
+  <string name="setting_page_analyze">Analyze</string>
+  <string name="setting_page_analyze_desc">Usage and activity stats</string>
     <string name="setting_page_assistant">Assistant</string>
   <string name="setting_page_assistant_desc">Set up personalized assistants (agents)</string>
   <string name="setting_page_built_in_tools">Built-in Tools</string>

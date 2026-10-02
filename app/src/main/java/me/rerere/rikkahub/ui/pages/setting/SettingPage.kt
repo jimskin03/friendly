@@ -43,6 +43,7 @@ import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
@@ -172,6 +173,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.LookTop, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_assistant_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_assistant)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.Stats) },
+                        leadingContent = { Icon(HugeIcons.ChartColumn, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_analyze_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_analyze)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Extensions) },
