@@ -41,6 +41,7 @@ import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sparkles
+import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Folder
@@ -81,6 +82,7 @@ fun AssistantHome(
     onOpenSearch: () -> Unit,
     onOpenActivity: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenComputer: () -> Unit = {},
     onQuickCreateFolder: (name: String, labelId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -114,6 +116,9 @@ fun AssistantHome(
         ActionStartersRow(
             onStarterClick = onStarterClick,
         )
+
+        // Dedicated Computer / Open desktop control
+        ComputerControlButton(onOpenComputer = onOpenComputer)
     }
 }
 
@@ -573,6 +578,63 @@ private fun ActionStartersRow(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ComputerControlButton(
+    onOpenComputer: () -> Unit,
+) {
+    Surface(
+        onClick = onOpenComputer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0x221E293B),
+        border = BorderStroke(1.dp, Color(0x6638BDF8)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, Color(0x6638BDF8), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = HugeIcons.ComputerTerminal01,
+                    contentDescription = null,
+                    tint = Color(0xFF38BDF8),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Computer",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "Open desktop",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF94A3B8),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                imageVector = HugeIcons.ArrowRight01,
+                contentDescription = null,
+                tint = Color(0xFF64748B),
+                modifier = Modifier.size(14.dp),
+            )
         }
     }
 }

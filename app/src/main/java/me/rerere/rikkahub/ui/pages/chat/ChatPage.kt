@@ -97,6 +97,10 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import io.ktor.client.HttpClient
+import me.rerere.rikkahub.data.remote.DesktopControlClient
+import me.rerere.rikkahub.data.remote.DesktopControlDefaults
+import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.ChatInput
@@ -273,6 +277,8 @@ private fun ChatPageContent(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
+    val httpClient: HttpClient = koinInject()
+    var openingComputer by remember { mutableStateOf(false) }
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
@@ -528,6 +534,39 @@ private fun ChatPageContent(
                 },
                 onOpenSettings = {
                     navController.navigate(Screen.Setting)
+                },
+                onOpenComputer = {
+                    if (!openingComputer) {
+                        val baseUrl = setting.networkSetting.desktopControlBaseUrl
+                            .ifBlank { DesktopControlDefaults.BASE_URL }
+                        val token = setting.networkSetting.desktopControlApiToken
+                        if (token.isBlank()) {
+                            toaster.show(
+                                message = "Set Desktop API token in Settings → Preferences → Network",
+                                type = ToastType.Warning,
+                            )
+                        } else {
+                            openingComputer = true
+                            scope.launch {
+                                try {
+                                    val client = DesktopControlClient(
+                                        http = httpClient,
+                                        baseUrl = baseUrl,
+                                        apiToken = token,
+                                    )
+                                    val started = client.startStream(mode = "view")
+                                    context.openUrl(started.viewer_url)
+                                } catch (e: Exception) {
+                                    toaster.show(
+                                        message = e.message ?: "Failed to open desktop",
+                                        type = ToastType.Error,
+                                    )
+                                } finally {
+                                    openingComputer = false
+                                }
+                            }
+                        }
+                    }
                 },
                 onQuickCreateFolder = { name, labelId ->
                     drawerVm.createFolder(name, labelId)

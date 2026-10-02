@@ -1,0 +1,35 @@
+# Optional Compose stack for the Friendly companion host (Phase 1).
+# Prefer systemd on a dedicated VM; Compose is for lab / single-node trials.
+services:
+  xvfb:
+    image: debian:bookworm-slim
+    command: >
+      bash -c "apt-get update && apt-get install -y --no-install-recommends
+      xvfb openbox xdotool scrot imagemagick x11-utils chromium fonts-dejavu-core
+      && Xvfb :99 -screen 0 1280x720x24 -ac &
+      sleep 1 && DISPLAY=:99 openbox &
+      wait"
+    environment:
+      DISPLAY: ":99"
+    volumes:
+      - x11:/tmp/.X11-unix
+    # Note: production images should bake packages; this is a scaffold.
+
+  agent-api:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DISPLAY: ":99"
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - x11:/tmp/.X11-unix
+    depends_on:
+      - xvfb
+    profiles:
+      - full
+
+volumes:
+  x11:

@@ -11,3 +11,8 @@ local.properties
 .cursor
 .history
 .kotlin
+# Friendly Host local secrets / runtime
+host/.env
+host/agent/.venv/
+host/data/
+host/logs/

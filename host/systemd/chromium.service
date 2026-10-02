@@ -1,0 +1,16 @@
+[Unit]
+Description=Friendly host Chromium (optional always-on)
+After=openbox.service
+Wants=openbox.service
+
+[Service]
+Type=simple
+User=assistant
+EnvironmentFile=-/etc/friendly-host.env
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/chromium --user-data-dir=/var/lib/assistant/chromium-profile --no-first-run about:blank
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
