@@ -149,6 +149,53 @@ sealed class ASRProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("gemini")
+    data class Gemini(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "Gemini ASR",
+        val apiKey: String = "",
+        val baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
+        val model: String = "gemini-2.0-flash",
+        val prompt: String = "Transcribe this audio verbatim. Output only the transcribed text, without any additional comments, explanations, formatting, markdown, or notes.",
+        val sampleRate: Int = 16000,
+        val segmentDurationSec: Int = 30,
+    ) : ASRProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): ASRProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
+    @Serializable
+    @SerialName("whisper")
+    data class Whisper(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "Groq Whisper ASR",
+        val apiKey: String = "",
+        val baseUrl: String = "https://api.groq.com/openai/v1",
+        val model: String = "whisper-large-v3-turbo",
+        val language: String = "",
+        val prompt: String = "",
+        val sampleRate: Int = 16000,
+        val segmentDurationSec: Int = 30,
+    ) : ASRProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): ASRProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -157,6 +204,8 @@ sealed class ASRProviderSetting {
                 Volcengine::class,
                 MiMo::class,
                 Step::class,
+                Gemini::class,
+                Whisper::class,
             )
         }
     }

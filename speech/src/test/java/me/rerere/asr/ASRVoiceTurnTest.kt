@@ -34,5 +34,7 @@ class ASRVoiceTurnTest {
         assertTrue(ASRProviderSetting.Volcengine().supportsServerVadVoiceMode)
         assertFalse(ASRProviderSetting.Step().supportsServerVadVoiceMode)
         assertFalse(ASRProviderSetting.MiMo().supportsServerVadVoiceMode)
+        assertFalse(ASRProviderSetting.Gemini().supportsServerVadVoiceMode)
+        assertFalse(ASRProviderSetting.Whisper().supportsServerVadVoiceMode)
     }
 }

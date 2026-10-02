@@ -528,6 +528,38 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
             onDismissRequest = { showTypeMenu = false }
         ) {
             DropdownMenuItem(
+                text = { Text("Gemini ASR") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.Gemini()
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Groq Whisper") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.Whisper(
+                        name = "Groq Whisper ASR",
+                        baseUrl = "https://api.groq.com/openai/v1",
+                        model = "whisper-large-v3-turbo"
+                    )
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("OpenAI Whisper") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.Whisper(
+                        name = "OpenAI Whisper",
+                        baseUrl = "https://api.openai.com/v1",
+                        model = "whisper-1"
+                    )
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
+            DropdownMenuItem(
                 text = { Text("OpenAI Realtime") },
                 onClick = {
                     currentProvider = ASRProviderSetting.OpenAIRealtime()
@@ -807,6 +839,8 @@ private fun ASRProviderItem(
                             is ASRProviderSetting.Volcengine -> "Volcengine"
                             is ASRProviderSetting.MiMo -> "MiMo"
                             is ASRProviderSetting.Step -> "Step"
+                            is ASRProviderSetting.Gemini -> "Gemini ASR"
+                            is ASRProviderSetting.Whisper -> "Whisper (Groq / OpenAI)"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

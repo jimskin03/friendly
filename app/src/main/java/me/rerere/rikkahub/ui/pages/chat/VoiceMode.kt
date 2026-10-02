@@ -20,10 +20,12 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.providers.DashScopeASRController
+import me.rerere.asr.providers.GeminiASRController
 import me.rerere.asr.providers.MiMoASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
 import me.rerere.asr.providers.StepASRController
 import me.rerere.asr.providers.VolcengineASRController
+import me.rerere.asr.providers.WhisperASRController
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
@@ -142,6 +144,14 @@ private fun createVoiceAsr(context: Context, client: OkHttpClient, provider: ASR
         is ASRProviderSetting.Step -> {
             check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
             StepASRController(context, client, provider)
+        }
+        is ASRProviderSetting.Gemini -> {
+            check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
+            GeminiASRController(context, client, provider)
+        }
+        is ASRProviderSetting.Whisper -> {
+            check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
+            WhisperASRController(context, client, provider)
         }
     }
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
