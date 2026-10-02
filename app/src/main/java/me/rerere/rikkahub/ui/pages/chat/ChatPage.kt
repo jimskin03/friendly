@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
+import android.content.Intent
+import android.provider.Settings as AndroidSettings
+import me.rerere.rikkahub.service.phone.PhoneAutomationMiniIndicatorManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -284,6 +287,8 @@ private fun ChatPageContent(
     var showDesktopSheet by remember { mutableStateOf(false) }
     var desktopStreamUrl by remember { mutableStateOf<String?>(null) }
     var showPhoneAutomationSheet by remember { mutableStateOf(false) }
+    var showPhoneMiniOverlayDialog by remember { mutableStateOf(false) }
+    val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager = koinInject()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
@@ -331,6 +336,71 @@ private fun ChatPageContent(
     val activeFolderName = folderName ?: currentFolder?.name
     val activeFolderLabelId = folderLabelId ?: currentFolder?.label ?: "planning"
     val isFolderChat = effectiveFolderUuid != null || activeFolderName != null
+
+    // Mini indicator "Send new prompt" → focus Ask-me-anything input
+    LaunchedEffect(phoneMiniIndicator) {
+        phoneMiniIndicator.focusInputRequests.collect {
+            inputState.requestFocus()
+        }
+    }
+    LaunchedEffect(Unit) {
+        val act = context as? ComponentActivity ?: return@LaunchedEffect
+        if (act.intent?.getBooleanExtra(PhoneAutomationMiniIndicatorManager.EXTRA_FOCUS_INPUT, false) == true) {
+            act.intent?.removeExtra(PhoneAutomationMiniIndicatorManager.EXTRA_FOCUS_INPUT)
+            inputState.requestFocus()
+        }
+    }
+
+    fun activatePhoneMiniMode() {
+        if (!setting.displaySetting.enablePhoneAutomationMiniIndicator) {
+            toaster.show(
+                message = context.getString(R.string.phone_mini_indicator_disabled_toast),
+                type = ToastType.Warning,
+            )
+            return
+        }
+        if (!AndroidSettings.canDrawOverlays(context)) {
+            showPhoneMiniOverlayDialog = true
+            return
+        }
+        phoneMiniIndicator.activate()
+        (context as? ComponentActivity)?.moveTaskToBack(true)
+    }
+
+    if (showPhoneMiniOverlayDialog) {
+        AlertDialog(
+            onDismissRequest = { showPhoneMiniOverlayDialog = false },
+            title = { Text(context.getString(R.string.phone_mini_indicator_overlay_title)) },
+            text = { Text(context.getString(R.string.phone_mini_indicator_overlay_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPhoneMiniOverlayDialog = false
+                        val intent = Intent(
+                            AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                        runCatching { context.startActivity(intent) }
+                        // Stay in foreground so the user can grant overlay, then tap phone again.
+                    }
+                ) {
+                    Text(context.getString(R.string.phone_mini_indicator_overlay_continue))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPhoneMiniOverlayDialog = false
+                        // Notification backup still works without SYSTEM_ALERT_WINDOW.
+                        phoneMiniIndicator.activate()
+                        (context as? ComponentActivity)?.moveTaskToBack(true)
+                    }
+                ) {
+                    Text(context.getString(R.string.cancel))
+                }
+            },
+        )
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -423,6 +493,9 @@ private fun ChatPageContent(
                             showDesktopSheet = true
                         },
                         onOpenPhone = {
+                            activatePhoneMiniMode()
+                        },
+                        onLongOpenPhone = {
                             showPhoneAutomationSheet = true
                         },
                         state = inputState,

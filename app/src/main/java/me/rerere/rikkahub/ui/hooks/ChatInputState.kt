@@ -13,6 +13,13 @@ class ChatInputState {
     val textContent = TextFieldState()
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
     var editingMessage by mutableStateOf<Uuid?>(null)
+    /** Bumped to ask ChatInput to focus the text field (e.g. from mini indicator). */
+    var focusRequestId by mutableStateOf(0)
+        private set
+
+    fun requestFocus() {
+        focusRequestId++
+    }
     private var editingParts: List<UIMessagePart>? = null
     private var editingAttachmentUrls: Set<String> = emptySet()
 

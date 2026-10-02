@@ -57,6 +57,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -151,6 +153,7 @@ fun ChatInput(
     onStopVoiceMode: () -> Unit = {},
     onOpenComputer: (() -> Unit)? = null,
     onOpenPhone: (() -> Unit)? = null,
+    onLongOpenPhone: (() -> Unit)? = null,
     includeNavigationBarPadding: Boolean = true,
 ) {
     val toaster = LocalToaster.current
@@ -339,9 +342,12 @@ fun ChatInput(
                                 }
                             }
 
-                            // Phone Automation
+                            // Phone Automation — tap: mini mode; long-press: manage sheet
                             if (onOpenPhone != null) {
-                                ActionIconButton(onClick = onOpenPhone) {
+                                ActionIconButton(
+                                    onClick = onOpenPhone,
+                                    onLongClick = onLongOpenPhone,
+                                ) {
                                     Icon(
                                         imageVector = HugeIcons.SmartPhone01,
                                         contentDescription = stringResource(R.string.phone_automation),
@@ -489,20 +495,25 @@ private fun SendButton(
 @Composable
 private fun ActionIconButton(
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.size(40.dp),
-        shape = CircleShape,
-        tonalElevation = 0.dp,
-        color = Color.Transparent,
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                    )
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
-        ) {
-            content()
-        }
+        content()
     }
 }
 
@@ -547,6 +558,12 @@ private fun TextInputRow(
 
         var isFocused by remember { mutableStateOf(false) }
         var isFullScreen by remember { mutableStateOf(false) }
+        val focusRequester = remember { FocusRequester() }
+        LaunchedEffect(state.focusRequestId) {
+            if (state.focusRequestId > 0) {
+                runCatching { focusRequester.requestFocus() }
+            }
+        }
         var completionList by remember { mutableStateOf<ChatCompletionList?>(null) }
         val receiveContentListener = remember(
             settings.displaySetting.pasteLongTextAsFile, settings.displaySetting.pasteLongTextThreshold
@@ -638,6 +655,7 @@ private fun TextInputRow(
             state = state.textContent,
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(focusRequester)
                 .testTag("chat_input")
                 .contentReceiver(receiveContentListener)
                 .onFocusChanged {
