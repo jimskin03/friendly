@@ -80,10 +80,11 @@ private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
  *
  * Entry: explicit activate() from Phone sheet "Minimize with mini indicator"
  * or long-press on the phone icon (never the primary phone tap). Caller
- * minimizes Friendly via moveTaskToBack. While the session is active
- * and Friendly is backgrounded:
- *  1. Ongoing notification (OEM-safe backup; tap reopens app)
- *  2. System-overlay Idle/Running/Error pill when SYSTEM_ALERT_WINDOW is granted
+ * minimizes Friendly via moveTaskToBack. While the session is active:
+ *  1. Ongoing notification while Friendly is backgrounded (OEM-safe backup; tap reopens app)
+ *  2. System-overlay Idle/Running/Error pill whenever SYSTEM_ALERT_WINDOW is granted
+ *     (shown immediately on activate so it cannot race ProcessLifecycle ON_STOP /
+ *     moveTaskToBack)
  *
  * Tap the pill → Back to app / Send new prompt.
  * Drag toward the bottom → X close zone; drop dismisses the mini session.
@@ -199,11 +200,17 @@ class PhoneAutomationMiniIndicatorManager(
         val appForeground: Boolean,
         val canDrawOverlays: Boolean,
     ) {
+        /** Ongoing notification only while Friendly is backgrounded. */
         val shouldShowStatus: Boolean
             get() = enabled && sessionActive && !appForeground
 
+        /**
+         * Floating pill whenever the mini session is active and overlay permission
+         * is granted — including briefly while still foreground so activate() +
+         * moveTaskToBack cannot race ProcessLifecycle ON_STOP and leave the pill missing.
+         */
         val shouldShowOverlay: Boolean
-            get() = shouldShowStatus && canDrawOverlays
+            get() = enabled && sessionActive && canDrawOverlays
     }
 
     private fun syncIndicators(state: IndicatorState) {
@@ -224,14 +231,18 @@ class PhoneAutomationMiniIndicatorManager(
             return
         }
 
-        if (!state.shouldShowStatus) {
+        if (!state.enabled || !state.sessionActive) {
             hideOverlay()
             hideCloseZone()
             hideNotification()
             return
         }
 
-        showOrUpdateNotification(state.workStatus)
+        if (state.shouldShowStatus) {
+            showOrUpdateNotification(state.workStatus)
+        } else {
+            hideNotification()
+        }
 
         if (state.shouldShowOverlay) {
             showOverlay()
@@ -239,7 +250,7 @@ class PhoneAutomationMiniIndicatorManager(
             hideOverlay()
             hideCloseZone()
             if (!state.canDrawOverlays) {
-                Log.i(TAG, "Overlay skipped (no SYSTEM_ALERT_WINDOW); notification is active")
+                Log.i(TAG, "Overlay skipped (no SYSTEM_ALERT_WINDOW); notification backup when backgrounded")
             }
         }
     }
@@ -363,12 +374,20 @@ class PhoneAutomationMiniIndicatorManager(
             runCatching { existing.removeListener(dragListener) }
             existing.addListener(dragListener)
             if (!existing.isShowing) {
-                existing.show()
+                runCatching { existing.show() }
+                    .onFailure { Log.w(TAG, "Existing overlay show failed; reinstalling", it) }
+                    .onSuccess { return }
+                // Fall through to reinstall if show failed.
+                hideOverlay()
+            } else {
+                return
             }
-            return
         }
 
         try {
+            if (FloatingX.isInstalled(FLOATING_TAG)) {
+                runCatching { FloatingX.uninstall(FLOATING_TAG) }
+            }
             val installed = FloatingX.install(FLOATING_TAG) {
                 anchor(FxGravity.TOP_END, dx = 16f, dy = 120f)
                 animation(FxAnimations.fade())

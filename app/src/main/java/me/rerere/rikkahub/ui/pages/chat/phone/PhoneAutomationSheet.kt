@@ -27,7 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -411,6 +411,8 @@ fun PhoneAutomationSheet(
                 fontWeight = FontWeight.SemiBold
             )
 
+            // Clickable whenever phone tools are on and accessibility is allowed
+            val promptsEnabled = hasPhoneTools && isEnabled
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -423,12 +425,12 @@ fun PhoneAutomationSheet(
                     "Take a screenshot and summarize what is displayed"
                 )
                 prompts.forEach { promptText ->
-                    FilterChip(
-                        selected = false,
+                    SuggestionChip(
                         onClick = {
                             onAppendPrompt(promptText)
                             onDismissRequest()
                         },
+                        enabled = promptsEnabled,
                         label = {
                             Text(
                                 text = promptText,

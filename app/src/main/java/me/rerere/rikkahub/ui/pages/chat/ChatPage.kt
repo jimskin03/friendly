@@ -69,6 +69,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
+import androidx.compose.runtime.DisposableEffect
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -288,6 +292,7 @@ private fun ChatPageContent(
     var desktopStreamUrl by remember { mutableStateOf<String?>(null) }
     var showPhoneAutomationSheet by remember { mutableStateOf(false) }
     var showPhoneMiniOverlayDialog by remember { mutableStateOf(false) }
+    var pendingPhoneMiniActivate by remember { mutableStateOf(false) }
     val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager = koinInject()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val assistant = setting.getCurrentAssistant()
@@ -351,37 +356,57 @@ private fun ChatPageContent(
         }
     }
 
-    fun activatePhoneMiniMode() {
+    fun activatePhoneMiniMode(requireOverlay: Boolean = true) {
         if (!setting.displaySetting.enablePhoneAutomationMiniIndicator) {
             toaster.show(
                 message = context.getString(R.string.phone_mini_indicator_disabled_toast),
                 type = ToastType.Warning,
             )
+            pendingPhoneMiniActivate = false
             return
         }
-        if (!AndroidSettings.canDrawOverlays(context)) {
+        if (requireOverlay && !AndroidSettings.canDrawOverlays(context)) {
+            pendingPhoneMiniActivate = true
             showPhoneMiniOverlayDialog = true
             return
         }
+        pendingPhoneMiniActivate = false
         phoneMiniIndicator.activate()
         (context as? ComponentActivity)?.moveTaskToBack(true)
     }
 
+    // After user grants SYSTEM_ALERT_WINDOW, finish Minimize → floating pill.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, pendingPhoneMiniActivate) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingPhoneMiniActivate) {
+                if (AndroidSettings.canDrawOverlays(context)) {
+                    activatePhoneMiniMode(requireOverlay = false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     if (showPhoneMiniOverlayDialog) {
         AlertDialog(
-            onDismissRequest = { showPhoneMiniOverlayDialog = false },
+            onDismissRequest = {
+                showPhoneMiniOverlayDialog = false
+                pendingPhoneMiniActivate = false
+            },
             title = { Text(context.getString(R.string.phone_mini_indicator_overlay_title)) },
             text = { Text(context.getString(R.string.phone_mini_indicator_overlay_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showPhoneMiniOverlayDialog = false
+                        pendingPhoneMiniActivate = true
                         val intent = Intent(
                             AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:${context.packageName}"),
                         )
                         runCatching { context.startActivity(intent) }
-                        // Stay in foreground so the user can grant overlay, then use Minimize again.
                     }
                 ) {
                     Text(context.getString(R.string.phone_mini_indicator_overlay_continue))
@@ -391,6 +416,7 @@ private fun ChatPageContent(
                 TextButton(
                     onClick = {
                         showPhoneMiniOverlayDialog = false
+                        pendingPhoneMiniActivate = false
                         // Notification backup still works without SYSTEM_ALERT_WINDOW.
                         phoneMiniIndicator.activate()
                         (context as? ComponentActivity)?.moveTaskToBack(true)
@@ -772,8 +798,8 @@ private fun ChatPageContent(
                     }
                 },
                 onMinimizeWithMiniIndicator = {
-                    showPhoneAutomationSheet = false
                     activatePhoneMiniMode()
+                    showPhoneAutomationSheet = false
                 },
             )
         }
