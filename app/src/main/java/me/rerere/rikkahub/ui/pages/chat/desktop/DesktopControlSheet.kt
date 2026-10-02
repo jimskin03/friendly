@@ -943,24 +943,24 @@ fun DesktopControlSheet(
                             onClick = { sendHotkey(listOf("Escape"), "Esc") },
                         )
                         SoftKeyChip(
-                            label = stringResource(R.string.desktop_keyboard_ctrl_c),
-                            onClick = { sendHotkey(listOf("Control", "c"), "Ctrl+C") },
+                            label = stringResource(R.string.desktop_keyboard_ctrl),
+                            onClick = { sendHotkey(listOf("Control_L"), "Ctrl") },
                         )
                         SoftKeyChip(
-                            label = stringResource(R.string.desktop_keyboard_q),
-                            onClick = { sendHotkey(listOf("q"), "q") },
+                            label = stringResource(R.string.desktop_keyboard_pgup),
+                            onClick = { sendHotkey(listOf("Page_Up"), "PgUp") },
                         )
                         SoftKeyChip(
-                            label = "Tab",
-                            onClick = { sendHotkey(listOf("Tab"), "Tab") },
+                            label = stringResource(R.string.desktop_keyboard_pgdn),
+                            onClick = { sendHotkey(listOf("Page_Down"), "PgDn") },
                         )
                         SoftKeyChip(
-                            label = "↑",
-                            onClick = { sendHotkey(listOf("Up"), "Up") },
+                            label = stringResource(R.string.desktop_keyboard_up_arrow),
+                            onClick = { sendHotkey(listOf("Up"), "Up arrow") },
                         )
                         SoftKeyChip(
-                            label = "↓",
-                            onClick = { sendHotkey(listOf("Down"), "Down") },
+                            label = stringResource(R.string.desktop_keyboard_down_arrow),
+                            onClick = { sendHotkey(listOf("Down"), "Down arrow") },
                         )
                     }
                     Row(

@@ -62,8 +62,11 @@
   <string name="desktop_keyboard_placeholder">Type on the computer</string>
   <string name="desktop_keyboard_enter">Enter</string>
   <string name="desktop_keyboard_esc">Esc</string>
-  <string name="desktop_keyboard_ctrl_c">Ctrl+C</string>
-  <string name="desktop_keyboard_q">q</string>
+  <string name="desktop_keyboard_ctrl">Ctrl</string>
+  <string name="desktop_keyboard_pgup">PgUp</string>
+  <string name="desktop_keyboard_pgdn">PgDn</string>
+  <string name="desktop_keyboard_up_arrow">Up arrow</string>
+  <string name="desktop_keyboard_down_arrow">Down arrow</string>
   <string name="desktop_action_close_window">Close window</string>
   <string name="desktop_action_kill_browser">Kill Chromium</string>
   <string name="desktop_action_kill_terminal">Kill Terminal</string>
