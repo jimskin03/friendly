@@ -370,6 +370,39 @@ private fun ChatPageContent(
                         onStartVoiceMode = onStartVoiceMode,
                         voiceState = voiceState,
                         onStopVoiceMode = vm.voiceSession::stop,
+                        onOpenComputer = {
+                            if (!openingComputer) {
+                                val baseUrl = setting.networkSetting.desktopControlBaseUrl
+                                    .ifBlank { DesktopControlDefaults.BASE_URL }
+                                val token = setting.networkSetting.desktopControlApiToken
+                                if (token.isBlank()) {
+                                    toaster.show(
+                                        message = "Set Desktop API token in Settings → Preferences → Network",
+                                        type = ToastType.Warning,
+                                    )
+                                } else {
+                                    openingComputer = true
+                                    scope.launch {
+                                        try {
+                                            val client = DesktopControlClient(
+                                                http = httpClient,
+                                                baseUrl = baseUrl,
+                                                apiToken = token,
+                                            )
+                                            val started = client.startStream(mode = "view")
+                                            context.openUrl(started.viewer_url)
+                                        } catch (e: Exception) {
+                                            toaster.show(
+                                                message = e.message ?: "Failed to open desktop",
+                                                type = ToastType.Error,
+                                            )
+                                        } finally {
+                                            openingComputer = false
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         state = inputState,
                         messageQueue = messageQueue,
                         onRemoveQueuedMessage = vm::removeQueuedMessage,
@@ -534,39 +567,6 @@ private fun ChatPageContent(
                 },
                 onOpenSettings = {
                     navController.navigate(Screen.Setting)
-                },
-                onOpenComputer = {
-                    if (!openingComputer) {
-                        val baseUrl = setting.networkSetting.desktopControlBaseUrl
-                            .ifBlank { DesktopControlDefaults.BASE_URL }
-                        val token = setting.networkSetting.desktopControlApiToken
-                        if (token.isBlank()) {
-                            toaster.show(
-                                message = "Set Desktop API token in Settings → Preferences → Network",
-                                type = ToastType.Warning,
-                            )
-                        } else {
-                            openingComputer = true
-                            scope.launch {
-                                try {
-                                    val client = DesktopControlClient(
-                                        http = httpClient,
-                                        baseUrl = baseUrl,
-                                        apiToken = token,
-                                    )
-                                    val started = client.startStream(mode = "view")
-                                    context.openUrl(started.viewer_url)
-                                } catch (e: Exception) {
-                                    toaster.show(
-                                        message = e.message ?: "Failed to open desktop",
-                                        type = ToastType.Error,
-                                    )
-                                } finally {
-                                    openingComputer = false
-                                }
-                            }
-                        }
-                    }
                 },
                 onQuickCreateFolder = { name, labelId ->
                     drawerVm.createFolder(name, labelId)
