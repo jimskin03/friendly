@@ -342,7 +342,7 @@ fun ChatInput(
                                 }
                             }
 
-                            // Phone Automation — tap: mini mode; long-press: manage sheet
+                            // Phone Automation — tap: manage sheet; long-press: mini indicator
                             if (onOpenPhone != null) {
                                 ActionIconButton(
                                     onClick = onOpenPhone,

@@ -78,8 +78,9 @@ private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
 /**
  * Phone Automation mini indicator — toolbar-driven floating pill.
  *
- * Entry: phone icon in the Ask-me-anything toolbar activates a mini session
- * (caller minimizes Friendly via moveTaskToBack). While the session is active
+ * Entry: explicit activate() from Phone sheet "Minimize with mini indicator"
+ * or long-press on the phone icon (never the primary phone tap). Caller
+ * minimizes Friendly via moveTaskToBack. While the session is active
  * and Friendly is backgrounded:
  *  1. Ongoing notification (OEM-safe backup; tap reopens app)
  *  2. System-overlay Idle/Running/Error pill when SYSTEM_ALERT_WINDOW is granted

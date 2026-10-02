@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,6 +70,7 @@ fun PhoneAutomationSheet(
     onDismissRequest: () -> Unit,
     onAppendPrompt: (String) -> Unit,
     onAttachScreenshot: (ByteArray) -> Unit,
+    onMinimizeWithMiniIndicator: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
@@ -264,6 +266,27 @@ fun PhoneAutomationSheet(
                         }
                     )
                 }
+            }
+
+            // Explicit mini indicator — never the primary phone-icon action
+            if (onMinimizeWithMiniIndicator != null) {
+                OutlinedButton(
+                    onClick = onMinimizeWithMiniIndicator,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.SmartPhone01,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.phone_mini_indicator_minimize_button))
+                }
+                Text(
+                    text = stringResource(R.string.phone_mini_indicator_minimize_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // Quick Actions

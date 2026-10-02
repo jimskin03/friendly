@@ -381,7 +381,7 @@ private fun ChatPageContent(
                             Uri.parse("package:${context.packageName}"),
                         )
                         runCatching { context.startActivity(intent) }
-                        // Stay in foreground so the user can grant overlay, then tap phone again.
+                        // Stay in foreground so the user can grant overlay, then use Minimize again.
                     }
                 ) {
                     Text(context.getString(R.string.phone_mini_indicator_overlay_continue))
@@ -493,10 +493,11 @@ private fun ChatPageContent(
                             showDesktopSheet = true
                         },
                         onOpenPhone = {
-                            activatePhoneMiniMode()
+                            showPhoneAutomationSheet = true
                         },
                         onLongOpenPhone = {
-                            showPhoneAutomationSheet = true
+                            // Explicit secondary action: long-press starts mini indicator.
+                            activatePhoneMiniMode()
                         },
                         state = inputState,
                         messageQueue = messageQueue,
@@ -769,7 +770,11 @@ private fun ChatPageContent(
                             inputState.addImages(uris)
                         }
                     }
-                }
+                },
+                onMinimizeWithMiniIndicator = {
+                    showPhoneAutomationSheet = false
+                    activatePhoneMiniMode()
+                },
             )
         }
 

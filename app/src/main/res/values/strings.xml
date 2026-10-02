@@ -26,7 +26,7 @@
   <string name="assistant_page_local_tools_phone_automation_title">Phone Automation</string>
   <string name="assistant_page_local_tools_phone_automation_desc">Allow AI to interact with phone UI: tap, swipe, type, launch apps, inspect screen</string>
   <string name="phone_mini_indicator_title">Phone Automation mini indicator</string>
-  <string name="phone_mini_indicator_desc">Allow the phone icon in the Ask-me-anything toolbar to minimize Friendly into a floating status pill over other apps. An ongoing notification is used as backup. Default: on.</string>
+  <string name="phone_mini_indicator_desc">When enabled, you can minimize Friendly into a floating Phone Automation status pill (from the Phone sheet or by long-pressing the phone icon). An ongoing notification is used as backup. Default: on.</string>
   <string name="phone_mini_indicator_running">Running</string>
   <string name="phone_mini_indicator_idle">Idle</string>
   <string name="phone_mini_indicator_error">Error</string>
@@ -38,6 +38,8 @@
   <string name="phone_mini_indicator_overlay_continue">Continue</string>
   <string name="phone_mini_indicator_overlay_denied">Overlay permission was not granted. The ongoing notification will still show Phone Automation status. You can enable the bubble later in system settings.</string>
   <string name="phone_mini_indicator_disabled_toast">Enable Phone Automation mini indicator in Preferences first</string>
+  <string name="phone_mini_indicator_minimize_button">Minimize with mini indicator</string>
+  <string name="phone_mini_indicator_minimize_hint">Keeps a floating status pill while Friendly is in the background. You can also long-press the phone icon.</string>
     <string name="desktop_action_snap">Snap to Chat</string>
     <string name="desktop_action_stop">Stop Stream</string>
   <string name="desktop_action_reconnect">Reconnect</string>
