@@ -1,10 +1,9 @@
 package me.rerere.rikkahub.ui.pages.chat.desktop
 
 import android.annotation.SuppressLint
-import android.content.Context
-import android.graphics.Bitmap
-import android.util.Base64
 import android.net.http.SslError
+import android.os.SystemClock
+import android.util.Base64
 import android.webkit.ConsoleMessage
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -13,47 +12,48 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,34 +63,41 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.dokar.sonner.ToastType
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Alert02
+import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Camera01
-import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.CheckmarkCircle02
-import me.rerere.hugeicons.stroke.Collapse
-import me.rerere.hugeicons.stroke.CommandLine
 import me.rerere.hugeicons.stroke.Computer
-import me.rerere.hugeicons.stroke.Expand
-import me.rerere.hugeicons.stroke.Globe
 import me.rerere.hugeicons.stroke.Keyboard
-import me.rerere.hugeicons.stroke.Menu01
+import me.rerere.hugeicons.stroke.KeyboardOff
+import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.MouseRightClick01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Stop
@@ -103,13 +110,141 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.remote.DesktopControlClient
 import me.rerere.rikkahub.data.remote.DesktopControlDefaults
 import me.rerere.rikkahub.ui.context.LocalToaster
+import kotlin.math.abs
+import kotlin.math.hypot
 
-enum class StreamDisplayMode {
-    VIEW,
-    INTERACTIVE
+/**
+ * Whole-screen trackpad. Finger travel is in physical pixels; noVNC mouse
+ * coordinates are CSS pixels, so deltas are converted with [density] and then
+ * boosted so one swipe can cross the remote desktop.
+ */
+private fun trackpadDelta(physicalDelta: Float, density: Float): Float {
+    val css = physicalDelta / density.coerceAtLeast(1f)
+    val mag = abs(css)
+    val scale = 1.35f + (mag / 18f).coerceAtMost(1.8f)
+    return css * scale
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+private fun WebView?.trackpad(call: String) {
+    this?.evaluateJavascript(
+        "window.FriendlyTrackpad&&FriendlyTrackpad.$call;",
+        null,
+    )
+}
+
+private suspend fun PointerInputScope.trackpadGestures(
+    density: Float,
+    onMove: (Float, Float) -> Unit,
+    onClick: (button: Int) -> Unit,
+    onDragStart: () -> Unit,
+    onDragEnd: () -> Unit,
+    onScroll: (Float, Float) -> Unit,
+    onInteraction: () -> Unit,
+) {
+    val slop = viewConfiguration.touchSlop
+    val longPressMs = viewConfiguration.longPressTimeoutMillis
+    awaitEachGesture {
+        val first = awaitFirstDown(requireUnconsumed = false)
+        onInteraction()
+        val origin = first.position
+        val downAt = first.uptimeMillis
+        var primaryId = first.id
+        var moved = false
+        var scrolling = false
+        var dragging = false
+        var longFired = false
+        var didScroll = false
+        var scrollX = 0f
+        var scrollY = 0f
+
+        while (true) {
+            val elapsed = SystemClock.uptimeMillis() - downAt
+            val waitForLongPress = !longFired && !moved && !scrolling && elapsed < longPressMs
+            val event = if (waitForLongPress) {
+                withTimeoutOrNull(longPressMs - elapsed) {
+                    awaitPointerEvent(PointerEventPass.Main)
+                }
+            } else {
+                awaitPointerEvent(PointerEventPass.Main)
+            }
+            if (event == null) {
+                longFired = true
+                continue
+            }
+
+            val pressed = event.changes.filter { it.pressed }
+            if (pressed.isEmpty()) break
+
+            if (pressed.size >= 2) {
+                scrolling = true
+                if (dragging) {
+                    dragging = false
+                    onDragEnd()
+                }
+                var dx = 0f
+                var dy = 0f
+                pressed.forEach { change ->
+                    dx += change.position.x - change.previousPosition.x
+                    dy += change.position.y - change.previousPosition.y
+                    change.consume()
+                }
+                val count = pressed.size.coerceAtLeast(1)
+                scrollX += dx / count
+                scrollY += dy / count
+                val step = 28f * density
+                if (abs(scrollX) >= step || abs(scrollY) >= step) {
+                    didScroll = true
+                    onScroll(scrollX, scrollY)
+                    scrollX = 0f
+                    scrollY = 0f
+                }
+                continue
+            }
+
+            val primary = pressed.firstOrNull { it.id == primaryId } ?: pressed.first().also {
+                primaryId = it.id
+            }
+            val travel = hypot(
+                primary.position.x - origin.x,
+                primary.position.y - origin.y,
+            )
+            if (!moved && travel > slop) moved = true
+            if (!longFired && !moved && SystemClock.uptimeMillis() - downAt >= longPressMs) {
+                longFired = true
+            }
+            if (!scrolling && moved) {
+                if (longFired && !dragging) {
+                    dragging = true
+                    onDragStart()
+                }
+                val dx = primary.position.x - primary.previousPosition.x
+                val dy = primary.position.y - primary.previousPosition.y
+                if (dx != 0f || dy != 0f) {
+                    onMove(trackpadDelta(dx, density), trackpadDelta(dy, density))
+                }
+            }
+            primary.consume()
+        }
+
+        when {
+            scrolling && !didScroll -> onClick(2)
+            dragging -> onDragEnd()
+            !moved && longFired -> onClick(2)
+            !moved && !scrolling -> onClick(0)
+        }
+    }
+}
+
+private suspend fun DesktopControlClient.applyRemoteEdit(previous: String, next: String) {
+    var index = 0
+    val limit = minOf(previous.length, next.length)
+    while (index < limit && previous[index] == next[index]) index++
+    repeat(previous.length - index) { hotkey(listOf("BackSpace")) }
+    val insert = next.substring(index)
+    if (insert.isNotEmpty()) typeText(insert)
+}
+
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun DesktopControlSheet(
     assistant: Assistant,
@@ -128,8 +263,10 @@ fun DesktopControlSheet(
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val density = LocalDensity.current.density
 
-    var showConfigDialog by remember {
+    var showConfig by remember {
         mutableStateOf(networkSetting.desktopControlApiToken.isBlank())
     }
     var configBaseUrl by remember(networkSetting.desktopControlBaseUrl) {
@@ -140,15 +277,40 @@ fun DesktopControlSheet(
     }
     var tokenVisible by remember { mutableStateOf(false) }
     var testingConnection by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var keyboardOpen by remember { mutableStateOf(false) }
+    var showHint by remember { mutableStateOf(true) }
 
-    var isFullScreen by remember { mutableStateOf(false) }
-    var displayMode by remember { mutableStateOf(StreamDisplayMode.VIEW) }
     var activeViewerUrl by remember(currentViewerUrl) { mutableStateOf(currentViewerUrl) }
     var lastLoadedViewerUrl by remember { mutableStateOf<String?>(null) }
     var isStartingStream by remember { mutableStateOf(false) }
     var isTakingSnapshot by remember { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var webViewLoading by remember { mutableStateOf(false) }
+
+    var draft by remember { mutableStateOf("") }
+    var sentDraft by remember { mutableStateOf("") }
+    var pendingType by remember { mutableStateOf<Job?>(null) }
+    val typeMutex = remember { Mutex() }
+    val focusRequester = remember { FocusRequester() }
+
+    val hasDesktopTools = assistant.localTools.contains(LocalToolOption.DesktopControl)
+    val streamLive = activeViewerUrl != null
+
+    fun createClient(baseUrl: String = configBaseUrl, token: String = configApiToken): DesktopControlClient {
+        return DesktopControlClient(
+            http = httpClient,
+            baseUrl = baseUrl.ifBlank { DesktopControlDefaults.BASE_URL },
+            apiToken = token,
+        )
+    }
+
+    fun moveCursor(dx: Float, dy: Float) {
+        webViewInstance.trackpad("moveBy(${dx.jsNum()},${dy.jsNum()})")
+    }
+
+    fun clickMouse(button: Int) {
+        webViewInstance.trackpad("click($button)")
+    }
 
     LaunchedEffect(activeViewerUrl, webViewInstance) {
         val target = activeViewerUrl
@@ -159,23 +321,23 @@ fun DesktopControlSheet(
         }
     }
 
-    // Quick action states
-    var showBrowserDialog by remember { mutableStateOf(false) }
-    var browserUrlInput by remember { mutableStateOf("https://github.com/jimskin03/friendly") }
-    var showTypeDialog by remember { mutableStateOf(false) }
-    var typeTextInput by remember { mutableStateOf("") }
-
-    val hasDesktopTools = assistant.localTools.contains(LocalToolOption.DesktopControl)
-
-    fun createClient(baseUrl: String = configBaseUrl, token: String = configApiToken): DesktopControlClient {
-        return DesktopControlClient(
-            http = httpClient,
-            baseUrl = baseUrl.ifBlank { DesktopControlDefaults.BASE_URL },
-            apiToken = token,
-        )
+    LaunchedEffect(streamLive) {
+        if (streamLive) {
+            showHint = true
+            delay(4500)
+            showHint = false
+        }
     }
 
-    // Ensure active stream session on entry (auto-start or refresh expired session)
+    LaunchedEffect(keyboardOpen) {
+        if (keyboardOpen) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        } else {
+            keyboardController?.hide()
+        }
+    }
+
     LaunchedEffect(networkSetting.desktopControlApiToken) {
         if (networkSetting.desktopControlApiToken.isNotBlank() && !isStartingStream) {
             isStartingStream = true
@@ -184,7 +346,11 @@ fun DesktopControlSheet(
                     baseUrl = networkSetting.desktopControlBaseUrl,
                     token = networkSetting.desktopControlApiToken,
                 )
-                val status = try { client.status() } catch (_: Exception) { null }
+                val status = try {
+                    client.status()
+                } catch (_: Exception) {
+                    null
+                }
                 if (status != null && status.active && !status.viewer_url.isNullOrBlank()) {
                     activeViewerUrl = status.viewer_url
                     onStreamStarted(status.viewer_url)
@@ -201,838 +367,797 @@ fun DesktopControlSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        shape = if (isFullScreen) RoundedCornerShape(0.dp) else RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (isFullScreen) Modifier.fillMaxSize() else Modifier)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Header Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Computer,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
+    fun flushTyping(pressEnter: Boolean) {
+        pendingType?.cancel()
+        val target = draft
+        scope.launch {
+            typeMutex.withLock {
+                try {
+                    val client = createClient(
+                        baseUrl = networkSetting.desktopControlBaseUrl,
+                        token = networkSetting.desktopControlApiToken,
                     )
-                    Column {
-                        Text(
-                            text = stringResource(R.string.desktop_control_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            isStartingStream -> Color(0xFFFFB300)
-                                            activeViewerUrl != null -> Color(0xFF4CAF50)
-                                            else -> Color(0xFF9E9E9E)
-                                        }
-                                    )
-                            )
-                            Text(
-                                text = when {
-                                    isStartingStream -> stringResource(R.string.desktop_status_connecting)
-                                    activeViewerUrl != null -> stringResource(R.string.desktop_status_active)
-                                    else -> stringResource(R.string.desktop_status_offline)
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    if (target != sentDraft) {
+                        client.applyRemoteEdit(sentDraft, target)
+                        sentDraft = target
                     }
+                    if (pressEnter) {
+                        client.hotkey(listOf("Return"))
+                        sentDraft = ""
+                        draft = ""
+                    }
+                } catch (e: Exception) {
+                    toaster.show(e.message ?: "Failed to type", ToastType.Error)
                 }
+            }
+        }
+    }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+    fun scheduleTyping(next: String) {
+        draft = next
+        pendingType?.cancel()
+        pendingType = scope.launch {
+            delay(220)
+            typeMutex.withLock {
+                val target = draft
+                val base = sentDraft
+                if (target == base) return@withLock
+                try {
+                    createClient(
+                        baseUrl = networkSetting.desktopControlBaseUrl,
+                        token = networkSetting.desktopControlApiToken,
+                    ).applyRemoteEdit(base, target)
+                    sentDraft = target
+                } catch (e: Exception) {
+                    toaster.show(e.message ?: "Failed to type", ToastType.Error)
+                }
+            }
+        }
+    }
+
+    fun toggleAssistantTools(enable: Boolean) {
+        val currentTools = assistant.localTools.toMutableList()
+        if (enable) {
+            if (!currentTools.contains(LocalToolOption.DesktopControl)) {
+                currentTools.add(LocalToolOption.DesktopControl)
+            }
+        } else {
+            currentTools.remove(LocalToolOption.DesktopControl)
+        }
+        onUpdateAssistant(assistant.copy(localTools = currentTools))
+    }
+
+    fun reconnect() {
+        scope.launch {
+            try {
+                val client = createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                )
+                val started = client.startStream(mode = "interactive")
+                lastLoadedViewerUrl = null
+                activeViewerUrl = started.viewer_url
+                onStreamStarted(started.viewer_url)
+                toaster.show("Reconnected to desktop", ToastType.Success)
+            } catch (e: Exception) {
+                lastLoadedViewerUrl = null
+                webViewInstance?.reload()
+                toaster.show(e.message ?: "Failed to reconnect", ToastType.Error)
+            }
+        }
+    }
+
+    fun stopStream() {
+        scope.launch {
+            try {
+                val client = createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                )
+                client.stopStream()
+                activeViewerUrl = null
+                onStreamStopped()
+                toaster.show("Desktop stream stopped", ToastType.Info)
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Failed to stop stream", ToastType.Error)
+            }
+        }
+    }
+
+    fun snapToChat() {
+        if (isTakingSnapshot) return
+        isTakingSnapshot = true
+        scope.launch {
+            try {
+                val client = createClient(
+                    baseUrl = networkSetting.desktopControlBaseUrl,
+                    token = networkSetting.desktopControlApiToken,
+                )
+                val response = client.screenshot()
+                val bytes = Base64.decode(response.image_b64, Base64.DEFAULT)
+                onAttachScreenshot(bytes)
+                toaster.show("Desktop screenshot attached to chat", ToastType.Success)
+            } catch (e: Exception) {
+                toaster.show(e.message ?: "Failed to capture snapshot", ToastType.Error)
+            } finally {
+                isTakingSnapshot = false
+            }
+        }
+    }
+
+    BackHandler(onBack = onDismissRequest)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(4f)
+            .background(Color.Black),
+    ) {
+            if (streamLive) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            webViewInstance = this
+                            setBackgroundColor(android.graphics.Color.BLACK)
+                            isVerticalScrollBarEnabled = false
+                            isHorizontalScrollBarEnabled = false
+                            overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                            WebView.setWebContentsDebuggingEnabled(true)
+                            @SuppressLint("SetJavaScriptEnabled")
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.databaseEnabled = true
+                            settings.allowContentAccess = true
+                            settings.loadWithOverviewMode = true
+                            settings.useWideViewPort = true
+                            settings.setSupportZoom(false)
+                            settings.builtInZoomControls = false
+                            settings.displayZoomControls = false
+                            settings.cacheMode = WebSettings.LOAD_DEFAULT
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            settings.mediaPlaybackRequiresUserGesture = false
+
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    view?.evaluateJavascript(TRACKPAD_INSTALL_JS, null)
+                                }
+
+                                override fun onReceivedSslError(
+                                    view: WebView?,
+                                    handler: SslErrorHandler?,
+                                    error: SslError?,
+                                ) {
+                                    handler?.proceed()
+                                }
+
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?,
+                                ) {
+                                    android.util.Log.w(
+                                        "DesktopControl",
+                                        "WebView error: ${error?.errorCode} ${error?.description}",
+                                    )
+                                }
+                            }
+
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                    android.util.Log.d(
+                                        "DesktopControl_noVNC",
+                                        "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} (${consoleMessage?.sourceId()})",
+                                    )
+                                    return true
+                                }
+                            }
+
+                            setOnLongClickListener { true }
+                            isLongClickable = false
+
+                            if (!activeViewerUrl.isNullOrBlank()) {
+                                lastLoadedViewerUrl = activeViewerUrl
+                                loadUrl(activeViewerUrl!!)
+                            }
+                        }
+                    },
+                    update = { webViewInstance = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(density) {
+                            trackpadGestures(
+                                density = density,
+                                onMove = ::moveCursor,
+                                onClick = ::clickMouse,
+                                onDragStart = { webViewInstance.trackpad("down(0)") },
+                                onDragEnd = { webViewInstance.trackpad("up(0)") },
+                                onScroll = { dx, dy ->
+                                    // Natural scroll: the page follows the fingers.
+                                    // Pass CSS pixels; the page turns each 50px into one wheel notch.
+                                    webViewInstance.trackpad(
+                                        "wheel(${(-dx / density).jsNum()},${(-dy / density).jsNum()})",
+                                    )
+                                },
+                                onInteraction = { showHint = false },
+                            )
+                        },
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
-                    // Fullscreen toggle
-                    IconButton(onClick = { isFullScreen = !isFullScreen }) {
-                        Icon(
-                            imageVector = if (isFullScreen) HugeIcons.Collapse else HugeIcons.Expand,
-                            contentDescription = if (isFullScreen) stringResource(R.string.desktop_action_exit_fullscreen) else stringResource(R.string.desktop_action_fullscreen),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (isStartingStream) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.desktop_status_connecting),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
                         )
-                    }
-
-                    // Settings toggle
-                    IconButton(onClick = { showConfigDialog = !showConfigDialog }) {
+                    } else {
                         Icon(
-                            imageVector = HugeIcons.Settings03,
-                            contentDescription = "Server Settings",
-                            tint = if (showConfigDialog) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            imageVector = HugeIcons.Computer,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = Color.Gray,
                         )
-                    }
-
-                    // Stop stream
-                    if (activeViewerUrl != null) {
-                        IconButton(
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.desktop_status_offline),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.LightGray,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
                             onClick = {
                                 scope.launch {
+                                    isStartingStream = true
                                     try {
                                         val client = createClient(
                                             baseUrl = networkSetting.desktopControlBaseUrl,
                                             token = networkSetting.desktopControlApiToken,
                                         )
-                                        client.stopStream()
-                                        activeViewerUrl = null
-                                        onStreamStopped()
-                                        toaster.show("Desktop stream stopped", ToastType.Info)
+                                        val started = client.startStream(mode = "interactive")
+                                        activeViewerUrl = started.viewer_url
+                                        onStreamStarted(started.viewer_url)
                                     } catch (e: Exception) {
-                                        toaster.show(e.message ?: "Failed to stop stream", ToastType.Error)
+                                        toaster.show(e.message ?: "Failed to start stream", ToastType.Error)
+                                    } finally {
+                                        isStartingStream = false
                                     }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = HugeIcons.Stop,
-                                contentDescription = stringResource(R.string.desktop_action_stop),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-
-                    // Close sheet (stream remains alive in background)
-                    IconButton(onClick = onDismissRequest) {
-                        Icon(
-                            imageVector = HugeIcons.Cancel01,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Connection Configuration Card (collapsible / shows if not configured)
-            AnimatedVisibility(visible = showConfigDialog || networkSetting.desktopControlApiToken.isBlank()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.desktop_config_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-
-                        OutlinedTextField(
-                            value = configBaseUrl,
-                            onValueChange = { configBaseUrl = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Control API Base URL") },
-                            placeholder = { Text(DesktopControlDefaults.BASE_URL) },
-                            supportingText = {
-                                Text("e.g. Tailscale IP: http://100.x.y.z:8787 or http://10.0.2.2:8787 (emulator)")
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        )
-
-                        OutlinedTextField(
-                            value = configApiToken,
-                            onValueChange = { configApiToken = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("API Bearer Token") },
-                            placeholder = { Text("Generated during setup") },
-                            visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                                    Icon(
-                                        imageVector = if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View,
-                                        contentDescription = null
-                                    )
                                 }
                             },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            enabled = !isStartingStream && networkSetting.desktopControlApiToken.isNotBlank(),
                         ) {
-                            OutlinedButton(
-                                onClick = {
-                                    testingConnection = true
-                                    scope.launch {
-                                        try {
-                                            val client = createClient(baseUrl = configBaseUrl, token = configApiToken)
-                                            val ok = client.health()
-                                            if (ok) {
-                                                toaster.show(context.getString(R.string.desktop_config_success), ToastType.Success)
-                                            } else {
-                                                toaster.show(context.getString(R.string.desktop_config_failed), ToastType.Error)
-                                            }
-                                        } catch (e: Exception) {
-                                            toaster.show(e.message ?: "Connection test failed", ToastType.Error)
-                                        } finally {
-                                            testingConnection = false
-                                        }
-                                    }
-                                },
-                                enabled = !testingConnection && configApiToken.isNotBlank(),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                if (testingConnection) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                }
-                                Text(stringResource(R.string.desktop_config_test))
-                            }
-
-                            Button(
-                                onClick = {
-                                    onUpdateNetworkSetting(
-                                        networkSetting.copy(
-                                            desktopControlBaseUrl = configBaseUrl.trim(),
-                                            desktopControlApiToken = configApiToken.trim(),
-                                        )
-                                    )
-                                    showConfigDialog = false
-                                    // Trigger stream start
-                                    scope.launch {
-                                        isStartingStream = true
-                                        try {
-                                            val client = createClient(baseUrl = configBaseUrl, token = configApiToken)
-                                            val started = client.startStream(mode = "interactive")
-                                            activeViewerUrl = started.viewer_url
-                                            onStreamStarted(started.viewer_url)
-                                            toaster.show("Connected to desktop", ToastType.Success)
-                                        } catch (e: Exception) {
-                                            toaster.show(e.message ?: "Failed to connect", ToastType.Error)
-                                        } finally {
-                                            isStartingStream = false
-                                        }
-                                    }
-                                },
-                                enabled = configApiToken.isNotBlank(),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Save & Connect")
-                            }
+                            Text(stringResource(R.string.desktop_action_start))
                         }
                     }
                 }
             }
 
-            // Stream Canvas / Embedded WebView
-            Card(
+            Row(
                 modifier = Modifier
+                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .then(
-                        if (isFullScreen) Modifier.weight(1f)
-                        else Modifier.aspectRatio(16f / 9.5f)
-                    ),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Black)
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    if (activeViewerUrl != null) {
-                        AndroidView(
-                            factory = { ctx ->
-                                WebView(ctx).apply {
-                                    webViewInstance = this
-                                    layoutParams = android.view.ViewGroup.LayoutParams(
-                                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                                    )
-                                    WebView.setWebContentsDebuggingEnabled(true)
-                                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                                    @SuppressLint("SetJavaScriptEnabled")
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    settings.databaseEnabled = true
-                                    settings.allowContentAccess = true
-                                    settings.loadWithOverviewMode = true
-                                    settings.useWideViewPort = true
-                                    settings.setSupportZoom(true)
-                                    settings.builtInZoomControls = false
-                                    settings.displayZoomControls = false
-                                    settings.cacheMode = WebSettings.LOAD_DEFAULT
-                                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                    settings.mediaPlaybackRequiresUserGesture = false
-
-                                    webViewClient = object : WebViewClient() {
-                                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                            webViewLoading = true
-                                        }
-
-                                        override fun onPageFinished(view: WebView?, url: String?) {
-                                            webViewLoading = false
-                                            view?.evaluateJavascript(
-                                                """
-                                                (function() {
-                                                    var style = document.createElement('style');
-                                                    style.innerHTML = 'html, body { position: fixed !important; top: 0; bottom: 0; left: 0; right: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; } #noVNC_container { position: absolute !important; top: 0; bottom: 0; left: 0; right: 0; width: 100% !important; height: 100% !important; display: flex !important; justify-content: center !important; align-items: center !important; } #noVNC_control_bar_anchor { display: none !important; } canvas { max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }';
-                                                    document.head.appendChild(style);
-                                                    if (typeof UI !== 'undefined' && UI.resize) {
-                                                        UI.resize();
-                                                    }
-                                                })();
-                                                """.trimIndent(),
-                                                null
-                                            )
-                                        }
-
-                                        override fun onReceivedSslError(
-                                            view: WebView?,
-                                            handler: SslErrorHandler?,
-                                            error: SslError?
-                                        ) {
-                                            // Allow Tailscale and local network SSL certificates
-                                            handler?.proceed()
-                                        }
-
-                                        override fun onReceivedError(
-                                            view: WebView?,
-                                            request: WebResourceRequest?,
-                                            error: WebResourceError?
-                                        ) {
-                                            android.util.Log.w("DesktopControl", "WebView error: ${error?.errorCode} ${error?.description}")
-                                        }
-                                    }
-
-                                    webChromeClient = object : WebChromeClient() {
-                                        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                                            android.util.Log.d("DesktopControl_noVNC", "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} (${consoleMessage?.sourceId()})")
-                                            return true
-                                        }
-                                    }
-
-                                    if (!activeViewerUrl.isNullOrBlank()) {
-                                        lastLoadedViewerUrl = activeViewerUrl
-                                        loadUrl(activeViewerUrl!!)
-                                    }
-                                }
+                FrostedIconButton(
+                    icon = HugeIcons.ArrowLeft01,
+                    contentDescription = stringResource(R.string.desktop_action_close),
+                    onClick = onDismissRequest,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                StatusChip(
+                    connecting = isStartingStream,
+                    live = streamLive,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Box {
+                    FrostedIconButton(
+                        icon = HugeIcons.MoreVertical,
+                        contentDescription = stringResource(R.string.desktop_action_menu),
+                        onClick = { menuOpen = true },
+                    )
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.desktop_action_snap)) },
+                            leadingIcon = { Icon(HugeIcons.Camera01, contentDescription = null) },
+                            enabled = !isTakingSnapshot && networkSetting.desktopControlApiToken.isNotBlank(),
+                            onClick = {
+                                menuOpen = false
+                                snapToChat()
                             },
-                            update = { view ->
-                                webViewInstance = view
-                            },
-                            modifier = Modifier.fillMaxSize()
                         )
-
-                        // In View Mode: overlay intercepts touches so scrolling/monitoring doesn't accidentally click on desktop
-                        if (displayMode == StreamDisplayMode.VIEW) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(
-                                            onTap = {
-                                                toaster.show("Switch to Interactive Mode above to click & drag", ToastType.Info)
-                                            }
-                                        )
-                                    }
-                            )
-                        }
-                    } else {
-                        // Offline placeholder
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            if (isStartingStream) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.height(12.dp))
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.desktop_action_reconnect)) },
+                            leadingIcon = { Icon(HugeIcons.Refresh01, contentDescription = null) },
+                            enabled = networkSetting.desktopControlApiToken.isNotBlank(),
+                            onClick = {
+                                menuOpen = false
+                                reconnect()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.desktop_menu_settings)) },
+                            leadingIcon = { Icon(HugeIcons.Settings03, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                showConfig = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
                                 Text(
-                                    text = "Starting Linux desktop stream...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = HugeIcons.Computer,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = Color.Gray
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Remote desktop is idle",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.LightGray
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Button(
-                                    onClick = {
-                                        scope.launch {
-                                            isStartingStream = true
-                                            try {
-                                                val client = createClient()
-                                                val started = client.startStream(mode = "interactive")
-                                                activeViewerUrl = started.viewer_url
-                                                onStreamStarted(started.viewer_url)
-                                            } catch (e: Exception) {
-                                                toaster.show(e.message ?: "Failed to start stream", ToastType.Error)
-                                            } finally {
-                                                isStartingStream = false
-                                            }
-                                        }
+                                    if (hasDesktopTools) {
+                                        stringResource(R.string.desktop_menu_assistant_on)
+                                    } else {
+                                        stringResource(R.string.desktop_menu_assistant_off)
                                     },
-                                    enabled = !isStartingStream && networkSetting.desktopControlApiToken.isNotBlank()
-                                ) {
-                                    Text("Start Live Stream")
-                                }
-                            }
-                        }
-                    }
-
-                    // Floating stream controls overlay (on top of canvas)
-                    if (activeViewerUrl != null) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp),
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            tonalElevation = 4.dp
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                // Mode indicator & switcher
-                                FilterChip(
-                                    selected = displayMode == StreamDisplayMode.INTERACTIVE,
-                                    onClick = {
-                                        displayMode = if (displayMode == StreamDisplayMode.VIEW) {
-                                            StreamDisplayMode.INTERACTIVE
-                                        } else {
-                                            StreamDisplayMode.VIEW
-                                        }
-                                        if (displayMode == StreamDisplayMode.INTERACTIVE) {
-                                            toaster.show(context.getString(R.string.desktop_mode_interactive_toast), ToastType.Success)
-                                        } else {
-                                            toaster.show(context.getString(R.string.desktop_mode_view_toast), ToastType.Info)
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            if (displayMode == StreamDisplayMode.INTERACTIVE) stringResource(R.string.desktop_mode_interactive)
-                                            else stringResource(R.string.desktop_mode_view),
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    }
                                 )
-
-                                // Reconnect / Reload button
-                                IconButton(
-                                    onClick = {
-                                        scope.launch {
-                                            try {
-                                                val client = createClient()
-                                                val started = client.startStream(mode = "interactive")
-                                                lastLoadedViewerUrl = null
-                                                activeViewerUrl = started.viewer_url
-                                                onStreamStarted(started.viewer_url)
-                                                toaster.show("Reconnected to desktop", ToastType.Success)
-                                            } catch (e: Exception) {
-                                                lastLoadedViewerUrl = null
-                                                webViewInstance?.reload()
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = HugeIcons.Refresh01,
-                                        contentDescription = stringResource(R.string.desktop_action_reconnect),
-                                        modifier = Modifier.size(16.dp)
+                            },
+                            leadingIcon = { Icon(HugeIcons.Computer, contentDescription = null) },
+                            onClick = {
+                                toggleAssistantTools(!hasDesktopTools)
+                                menuOpen = false
+                            },
+                        )
+                        if (streamLive) {
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(R.string.desktop_action_stop),
+                                        color = MaterialTheme.colorScheme.error,
                                     )
-                                }
-                            }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        HugeIcons.Stop,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    stopStream()
+                                },
+                            )
                         }
                     }
                 }
             }
 
-            // Desktop Guidance Hint Banner
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                AnimatedVisibility(
+                    visible = showHint && streamLive && !keyboardOpen && !showConfig,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
                 ) {
                     Text(
-                        text = stringResource(R.string.desktop_tip_banner),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        text = stringResource(R.string.desktop_trackpad_hint),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                     )
                 }
-            }
 
-            // Quick Actions: Row 1 (Snap to Chat & Type) + Row 2 (Menu, Browser, Terminal)
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Snap to Chat
-                    Button(
-                        onClick = {
-                            isTakingSnapshot = true
-                            scope.launch {
-                                try {
-                                    val client = createClient()
-                                    val response = client.screenshot()
-                                    val bytes = Base64.decode(response.image_b64, Base64.DEFAULT)
-                                    onAttachScreenshot(bytes)
-                                    toaster.show("Desktop screenshot attached to chat", ToastType.Success)
-                                } catch (e: Exception) {
-                                    toaster.show(e.message ?: "Failed to capture snapshot", ToastType.Error)
-                                } finally {
-                                    isTakingSnapshot = false
-                                }
-                            }
-                        },
-                        enabled = !isTakingSnapshot && networkSetting.desktopControlApiToken.isNotBlank(),
-                        modifier = Modifier.weight(1.4f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    ) {
-                        if (isTakingSnapshot) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                        } else {
-                            Icon(HugeIcons.Camera01, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-                        Text(stringResource(R.string.desktop_action_snap), fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    }
-
-                    // Type Text
-                    OutlinedButton(
-                        onClick = { showTypeDialog = !showTypeDialog },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(HugeIcons.Keyboard, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Type", maxLines = 1)
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Open Desktop Menu (Super / Right Click)
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                try {
-                                    val client = createClient()
-                                    client.launchApp("menu")
-                                    toaster.show("Opened desktop menu", ToastType.Info)
-                                } catch (e: Exception) {
-                                    toaster.show(e.message ?: "Failed to open menu", ToastType.Error)
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(HugeIcons.Menu01, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.desktop_action_menu), maxLines = 1)
-                    }
-
-                    // Open Browser Drawer
-                    OutlinedButton(
-                        onClick = { showBrowserDialog = !showBrowserDialog },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(HugeIcons.Globe, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Browser", maxLines = 1)
-                    }
-
-                    // Open Terminal
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                try {
-                                    val client = createClient()
-                                    client.launchApp("terminal")
-                                    toaster.show("Launched Terminal", ToastType.Success)
-                                } catch (e: Exception) {
-                                    toaster.show(e.message ?: "Failed to launch terminal", ToastType.Error)
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(HugeIcons.CommandLine, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.desktop_action_terminal), maxLines = 1)
-                    }
-                }
-            }
-
-            // Expandable Browser Launcher Drawer
-            AnimatedVisibility(visible = showBrowserDialog) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Quick 1-tap Launch Chromium button + Presets
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        try {
-                                            val client = createClient()
-                                            client.openBrowser("https://www.google.com")
-                                            toaster.show("Chromium launched", ToastType.Success)
-                                            showBrowserDialog = false
-                                        } catch (e: Exception) {
-                                            toaster.show(e.message ?: "Failed to open browser", ToastType.Error)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1.3f)
-                            ) {
-                                Icon(HugeIcons.Globe, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(stringResource(R.string.desktop_action_launch_browser), maxLines = 1)
-                            }
-
-                            listOf(
-                                "Google" to "https://www.google.com",
-                                "GitHub" to "https://github.com",
-                                "YouTube" to "https://www.youtube.com"
-                            ).forEach { (label, url) ->
-                                FilterChip(
-                                    selected = browserUrlInput == url,
-                                    onClick = {
-                                        browserUrlInput = url
-                                        scope.launch {
-                                            try {
-                                                val client = createClient()
-                                                client.openBrowser(url)
-                                                toaster.show("Launched $label", ToastType.Success)
-                                                showBrowserDialog = false
-                                            } catch (e: Exception) {
-                                                toaster.show(e.message ?: "Failed to open $label", ToastType.Error)
-                                            }
-                                        }
-                                    },
-                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
-                        }
-
-                        // Custom URL row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = browserUrlInput,
-                                onValueChange = { browserUrlInput = it },
-                                modifier = Modifier.weight(1f),
-                                label = { Text("Custom URL") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
-                            )
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        try {
-                                            val client = createClient()
-                                            client.openBrowser(browserUrlInput)
-                                            toaster.show("Launched $browserUrlInput", ToastType.Success)
-                                            showBrowserDialog = false
-                                        } catch (e: Exception) {
-                                            toaster.show(e.message ?: "Failed to open browser", ToastType.Error)
-                                        }
-                                    }
-                                },
-                                enabled = browserUrlInput.isNotBlank()
-                            ) {
-                                Text("Go")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Expandable Keystroke / Type Input
-            AnimatedVisibility(visible = showTypeDialog) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
+                if (streamLive && keyboardOpen) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         OutlinedTextField(
-                            value = typeTextInput,
-                            onValueChange = { typeTextInput = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("Type into active window") },
-                            singleLine = true
+                            value = draft,
+                            onValueChange = ::scheduleTyping,
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester),
+                            placeholder = { Text(stringResource(R.string.desktop_keyboard_placeholder)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { flushTyping(pressEnter = true) }),
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedContainerColor = Color.Black.copy(alpha = 0.72f),
+                                unfocusedContainerColor = Color.Black.copy(alpha = 0.72f),
+                                cursorColor = Color.White,
+                            ),
                         )
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    try {
-                                        val client = createClient()
-                                        client.typeText(typeTextInput)
-                                        toaster.show("Typed text sent", ToastType.Success)
-                                        typeTextInput = ""
-                                    } catch (e: Exception) {
-                                        toaster.show(e.message ?: "Failed to type", ToastType.Error)
-                                    }
-                                }
-                            },
-                            enabled = typeTextInput.isNotBlank()
-                        ) {
-                            Text("Send")
+                        TextButton(onClick = { flushTyping(pressEnter = true) }) {
+                            Text(stringResource(R.string.desktop_keyboard_enter))
                         }
+                        FrostedIconButton(
+                            icon = HugeIcons.KeyboardOff,
+                            contentDescription = stringResource(R.string.desktop_action_keyboard),
+                            onClick = { keyboardOpen = false },
+                        )
+                    }
+                } else if (streamLive) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        FrostedIconButton(
+                            icon = HugeIcons.MouseRightClick01,
+                            contentDescription = stringResource(R.string.desktop_action_right_click),
+                            onClick = { clickMouse(2) },
+                        )
+                        FrostedIconButton(
+                            icon = HugeIcons.Keyboard,
+                            contentDescription = stringResource(R.string.desktop_action_keyboard),
+                            onClick = { keyboardOpen = true },
+                        )
                     }
                 }
             }
 
-            // Quick Hotkeys Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "Keys:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                listOf("Ctrl+C" to listOf("ctrl", "c"),
-                       "Ctrl+V" to listOf("ctrl", "v"),
-                       "Super" to listOf("super"),
-                       "Alt+Tab" to listOf("alt", "Tab"),
-                       "Enter" to listOf("Return"),
-                       "Esc" to listOf("Escape")).forEach { (label, keys) ->
-                    FilterChip(
-                        selected = false,
-                        onClick = {
+            if (showConfig) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {
+                                if (networkSetting.desktopControlApiToken.isNotBlank()) {
+                                    showConfig = false
+                                }
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ConnectionCard(
+                        baseUrl = configBaseUrl,
+                        onBaseUrlChange = { configBaseUrl = it },
+                        apiToken = configApiToken,
+                        onApiTokenChange = { configApiToken = it },
+                        tokenVisible = tokenVisible,
+                        onToggleTokenVisible = { tokenVisible = !tokenVisible },
+                        testing = testingConnection,
+                        onTest = {
+                            testingConnection = true
                             scope.launch {
                                 try {
-                                    val client = createClient()
-                                    client.hotkey(keys)
-                                    toaster.show("Sent $label", ToastType.Info)
+                                    val client = createClient(baseUrl = configBaseUrl, token = configApiToken)
+                                    val ok = client.health()
+                                    toaster.show(
+                                        context.getString(
+                                            if (ok) R.string.desktop_config_success else R.string.desktop_config_failed,
+                                        ),
+                                        if (ok) ToastType.Success else ToastType.Error,
+                                    )
                                 } catch (e: Exception) {
-                                    toaster.show(e.message ?: "Failed", ToastType.Error)
+                                    toaster.show(e.message ?: "Connection test failed", ToastType.Error)
+                                } finally {
+                                    testingConnection = false
                                 }
                             }
                         },
-                        label = { Text(label, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace) }
+                        onSave = {
+                            onUpdateNetworkSetting(
+                                networkSetting.copy(
+                                    desktopControlBaseUrl = configBaseUrl.trim(),
+                                    desktopControlApiToken = configApiToken.trim(),
+                                ),
+                            )
+                            showConfig = false
+                            scope.launch {
+                                isStartingStream = true
+                                try {
+                                    val client = createClient(baseUrl = configBaseUrl, token = configApiToken)
+                                    val started = client.startStream(mode = "interactive")
+                                    lastLoadedViewerUrl = null
+                                    activeViewerUrl = started.viewer_url
+                                    onStreamStarted(started.viewer_url)
+                                    toaster.show("Connected to desktop", ToastType.Success)
+                                } catch (e: Exception) {
+                                    toaster.show(e.message ?: "Failed to connect", ToastType.Error)
+                                } finally {
+                                    isStartingStream = false
+                                }
+                            }
+                        },
                     )
                 }
             }
+    }
+}
 
-            // Assistant AI Desktop Tools Toggle Card
-            ElevatedCard(
+@Composable
+private fun StatusChip(connecting: Boolean, live: Boolean) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.Black.copy(alpha = 0.5f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(
+                    when {
+                        connecting -> Color(0xFFFFB300)
+                        live -> Color(0xFF4CAF50)
+                        else -> Color(0xFF9E9E9E)
+                    },
+                ),
+        )
+        Text(
+            text = when {
+                connecting -> stringResource(R.string.desktop_status_connecting)
+                live -> stringResource(R.string.desktop_screen_title)
+                else -> stringResource(R.string.desktop_status_offline)
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun FrostedIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.5f)),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun ConnectionCard(
+    baseUrl: String,
+    onBaseUrlChange: (String) -> Unit,
+    apiToken: String,
+    onApiTokenChange: (String) -> Unit,
+    tokenVisible: Boolean,
+    onToggleTokenVisible: () -> Unit,
+    testing: Boolean,
+    onTest: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.desktop_config_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            OutlinedTextField(
+                value = baseUrl,
+                onValueChange = onBaseUrlChange,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.desktop_tools_toggle_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = stringResource(R.string.desktop_tools_toggle_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                label = { Text("Control API Base URL") },
+                placeholder = { Text(DesktopControlDefaults.BASE_URL) },
+                supportingText = {
+                    Text("e.g. Tailscale IP: http://100.x.y.z:8787 or http://10.0.2.2:8787 (emulator)")
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            )
+            OutlinedTextField(
+                value = apiToken,
+                onValueChange = onApiTokenChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("API Bearer Token") },
+                placeholder = { Text("Generated during setup") },
+                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = onToggleTokenVisible) {
+                        Icon(
+                            imageVector = if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View,
+                            contentDescription = null,
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Switch(
-                        checked = hasDesktopTools,
-                        onCheckedChange = { enable ->
-                            val currentTools = assistant.localTools.toMutableList()
-                            if (enable) {
-                                if (!currentTools.contains(LocalToolOption.DesktopControl)) {
-                                    currentTools.add(LocalToolOption.DesktopControl)
-                                }
-                            } else {
-                                currentTools.remove(LocalToolOption.DesktopControl)
-                            }
-                            onUpdateAssistant(assistant.copy(localTools = currentTools))
-                        }
-                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = onTest,
+                    enabled = !testing && apiToken.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (testing) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(stringResource(R.string.desktop_config_test))
+                }
+                Button(
+                    onClick = onSave,
+                    enabled = apiToken.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Save & Connect")
                 }
             }
         }
     }
 }
+
+private fun Float.jsNum(): String = if (isFinite()) toString() else "0"
+
+private const val TRACKPAD_INSTALL_JS = """
+(function() {
+  if (window.FriendlyTrackpad) return;
+  function canvas() {
+    var list = document.querySelectorAll('canvas');
+    var best = null;
+    var bestArea = 0;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      var area = r.width * r.height;
+      if (area > bestArea) { bestArea = area; best = list[i]; }
+    }
+    return best;
+  }
+  function hideChrome() {
+    var style = document.getElementById('friendly-trackpad-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'friendly-trackpad-style';
+      style.textContent = 'html, body { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000; } #noVNC_container { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; } #noVNC_control_bar, #noVNC_control_bar_anchor { display: none !important; } canvas { max-width: 100% !important; max-height: 100% !important; }';
+      (document.head || document.documentElement).appendChild(style);
+    }
+  }
+  function cursorEl() {
+    var el = document.getElementById('friendly-cursor');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'friendly-cursor';
+      el.style.cssText = 'position:fixed;width:16px;height:16px;margin:-8px 0 0 -8px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.7);pointer-events:none;z-index:99999;';
+      (document.body || document.documentElement).appendChild(el);
+    }
+    return el;
+  }
+  window.FriendlyTrackpad = {
+    x: null,
+    y: null,
+    place: function() {
+      var c = canvas();
+      if (!c) return null;
+      var rect = c.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) return null;
+      if (this.x == null || this.y == null) {
+        this.x = rect.width / 2;
+        this.y = rect.height / 2;
+      }
+      this.x = Math.max(1, Math.min(rect.width - 2, this.x));
+      this.y = Math.max(1, Math.min(rect.height - 2, this.y));
+      var mark = cursorEl();
+      mark.style.left = (rect.left + this.x) + 'px';
+      mark.style.top = (rect.top + this.y) + 'px';
+      return { canvas: c, rect: rect };
+    },
+    dispatch: function(type, button, buttons) {
+      var placed = this.place();
+      if (!placed) return false;
+      var ev = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: placed.rect.left + this.x,
+        clientY: placed.rect.top + this.y,
+        button: button || 0,
+        buttons: buttons || 0
+      });
+      placed.canvas.dispatchEvent(ev);
+      return true;
+    },
+    moveBy: function(dx, dy) {
+      if (!this.place()) return false;
+      this.x += dx;
+      this.y += dy;
+      var buttons = this.held === 4 ? 2 : (this.held ? 1 : 0);
+      return this.dispatch('mousemove', 0, buttons);
+    },
+    down: function(button) {
+      var mask = button === 2 ? 2 : 1;
+      this.held = button === 2 ? 4 : 1;
+      return this.dispatch('mousedown', button || 0, mask);
+    },
+    up: function(button) {
+      var which = button || 0;
+      this.held = 0;
+      return this.dispatch('mouseup', which, 0);
+    },
+    click: function(button) {
+      var self = this;
+      this.down(button || 0);
+      setTimeout(function() { self.up(button || 0); }, 40);
+    },
+    wheel: function(dx, dy) {
+      var placed = this.place();
+      if (!placed) return false;
+      var steps = Math.round(Math.max(Math.abs(dx), Math.abs(dy)) / 50);
+      if (steps < 1) steps = 1;
+      if (steps > 8) steps = 8;
+      var sx = dx === 0 ? 0 : (dx < 0 ? -50 : 50);
+      var sy = dy === 0 ? 0 : (dy < 0 ? -50 : 50);
+      for (var i = 0; i < steps; i++) {
+        placed.canvas.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: placed.rect.left + this.x,
+          clientY: placed.rect.top + this.y,
+          deltaX: sx,
+          deltaY: sy,
+          deltaMode: 0
+        }));
+      }
+      return true;
+    }
+  };
+  hideChrome();
+  setTimeout(function() {
+    hideChrome();
+    if (window.FriendlyTrackpad) window.FriendlyTrackpad.moveBy(0, 0);
+  }, 600);
+})();
+"""

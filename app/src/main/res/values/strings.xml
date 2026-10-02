@@ -51,6 +51,17 @@
   <string name="desktop_tip_banner">💡 Tip: Ask Friendly in chat to browse the web or control the desktop, or use the quick actions below.</string>
   <string name="desktop_mode_view_toast">View Mode: Monitoring only (touches won\'t click)</string>
   <string name="desktop_mode_interactive_toast">Interactive Mode: Tap anywhere to click &amp; drag</string>
+  <string name="desktop_screen_title">Computer</string>
+  <string name="desktop_trackpad_hint">Drag to move · Tap to click · Hold to right-click · Two fingers to scroll</string>
+  <string name="desktop_action_start">Start</string>
+  <string name="desktop_action_keyboard">Keyboard</string>
+  <string name="desktop_action_right_click">Right click</string>
+  <string name="desktop_action_close">Close</string>
+  <string name="desktop_keyboard_placeholder">Type on the computer</string>
+  <string name="desktop_keyboard_enter">Enter</string>
+  <string name="desktop_menu_settings">Connection</string>
+  <string name="desktop_menu_assistant_on">Assistant control on</string>
+  <string name="desktop_menu_assistant_off">Assistant control off</string>
   <string name="assistant_page_local_tools_desktop_control_title">Desktop Control (Linux VM)</string>
   <string name="assistant_page_local_tools_desktop_control_desc">Allow AI to interact with remote desktop: click, type, hotkeys, launch browser, capture screen</string>
   <string name="asr_button_content_description">Speech Recognition</string>
