@@ -72,8 +72,10 @@ def open_url(url: str, settings: Settings | None = None) -> dict:
         "--disable-session-crashed-bubble",
         "--disable-infobars",
         f"--window-size={s.screen_width},{s.screen_height}",
-        url,
     ]
+    if hasattr(os, "geteuid") and os.geteuid() == 0 or os.path.exists("/.dockerenv"):
+        argv.append("--no-sandbox")
+    argv.append(url)
     logger.info("Opening browser: %s %s", binary, url)
     try:
         proc = subprocess.Popen(

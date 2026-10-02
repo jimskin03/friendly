@@ -38,6 +38,30 @@ class LocalTools(
     val phoneLaunchAppTool by lazy { buildPhoneLaunchAppTool(context) }
     val phoneScreenshotTool by lazy { buildPhoneScreenshotTool(org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.files.FilesManager>()) }
 
+    private fun getDesktopClient(): me.rerere.rikkahub.data.remote.DesktopControlClient? {
+        val settings = settingsStore.settingsFlow.value
+        val token = settings.networkSetting.desktopControlApiToken
+        if (token.isBlank()) return null
+        val baseUrl = settings.networkSetting.desktopControlBaseUrl.ifBlank {
+            me.rerere.rikkahub.data.remote.DesktopControlDefaults.BASE_URL
+        }
+        val http = org.koin.java.KoinJavaComponent.getKoin().get<io.ktor.client.HttpClient>()
+        return me.rerere.rikkahub.data.remote.DesktopControlClient(http, baseUrl, token)
+    }
+
+    val desktopScreenshotTool by lazy {
+        buildDesktopScreenshotTool(
+            ::getDesktopClient,
+            org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.files.FilesManager>()
+        )
+    }
+    val desktopClickTool by lazy { buildDesktopClickTool(::getDesktopClient) }
+    val desktopTypeTool by lazy { buildDesktopTypeTool(::getDesktopClient) }
+    val desktopHotkeyTool by lazy { buildDesktopHotkeyTool(::getDesktopClient) }
+    val desktopBrowserOpenTool by lazy { buildDesktopBrowserOpenTool(::getDesktopClient) }
+    val desktopStreamStartTool by lazy { buildDesktopStreamStartTool(::getDesktopClient) }
+    val desktopStreamStopTool by lazy { buildDesktopStreamStopTool(::getDesktopClient) }
+
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -73,6 +97,15 @@ class LocalTools(
             tools.add(phonePressKeyTool)
             tools.add(phoneLaunchAppTool)
             tools.add(phoneScreenshotTool)
+        }
+        if (options.contains(LocalToolOption.DesktopControl)) {
+            tools.add(desktopScreenshotTool)
+            tools.add(desktopClickTool)
+            tools.add(desktopTypeTool)
+            tools.add(desktopHotkeyTool)
+            tools.add(desktopBrowserOpenTool)
+            tools.add(desktopStreamStartTool)
+            tools.add(desktopStreamStopTool)
         }
         return tools
     }

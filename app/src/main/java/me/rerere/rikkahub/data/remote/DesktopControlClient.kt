@@ -53,6 +53,57 @@ data class StreamStatusResponse(
     val mode: String? = null,
 )
 
+@Serializable
+data class ScreenshotResponse(
+    val image_b64: String,
+    val mime: String = "image/png",
+)
+
+@Serializable
+data class ClickRequest(
+    val x: Int,
+    val y: Int,
+    val button: String = "left",
+)
+
+@Serializable
+data class TypeRequest(
+    val text: String,
+)
+
+@Serializable
+data class HotkeyRequest(
+    val keys: List<String>,
+)
+
+@Serializable
+data class BrowserOpenRequest(
+    val url: String,
+)
+
+@Serializable
+data class BrowserOpenResponse(
+    val ok: Boolean = true,
+    val url: String = "",
+    val pid: Int? = null,
+)
+
+@Serializable
+data class HealthResponse(
+    val ok: Boolean = false,
+    val service: String? = null,
+    val version: String? = null,
+)
+
+@Serializable
+data class DesktopStatusResponse(
+    val display: String = "",
+    val display_available: Boolean = false,
+    val width: Int = 1280,
+    val height: Int = 720,
+    val depth: Int = 24,
+)
+
 class DesktopControlException(
     message: String,
     val statusCode: Int? = null,
@@ -106,6 +157,101 @@ class DesktopControlClient(
         if (!response.status.isSuccess()) {
             throw DesktopControlException(
                 message = "stream/status failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
+
+    suspend fun health(): Boolean {
+        return try {
+            val response = http.get("${normalizedBaseUrl()}/health")
+            response.status.isSuccess()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun screenshot(): ScreenshotResponse {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/screenshot") {
+            auth()
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "screenshot failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
+
+    suspend fun click(x: Int, y: Int, button: String = "left"): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/click") {
+            auth()
+            setBody(JsonInstant.encodeToString(ClickRequest(x = x, y = y, button = button)))
+        }
+        if (!response.status.isSuccess()) {
+            val text = response.bodyAsText()
+            throw DesktopControlException(
+                message = "click failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun typeText(text: String): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/type") {
+            auth()
+            setBody(JsonInstant.encodeToString(TypeRequest(text = text)))
+        }
+        if (!response.status.isSuccess()) {
+            val err = response.bodyAsText()
+            throw DesktopControlException(
+                message = "type failed: ${response.status} $err",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun hotkey(keys: List<String>): Boolean {
+        val response = http.post("${normalizedBaseUrl()}/v1/actions/hotkey") {
+            auth()
+            setBody(JsonInstant.encodeToString(HotkeyRequest(keys = keys)))
+        }
+        if (!response.status.isSuccess()) {
+            val err = response.bodyAsText()
+            throw DesktopControlException(
+                message = "hotkey failed: ${response.status} $err",
+                statusCode = response.status.value,
+            )
+        }
+        return true
+    }
+
+    suspend fun openBrowser(url: String): BrowserOpenResponse {
+        val response = http.post("${normalizedBaseUrl()}/v1/browser/open") {
+            auth()
+            setBody(JsonInstant.encodeToString(BrowserOpenRequest(url = url)))
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "browser/open failed: ${response.status} $text",
+                statusCode = response.status.value,
+            )
+        }
+        return JsonInstant.decodeFromString(text)
+    }
+
+    suspend fun desktopStatus(): DesktopStatusResponse {
+        val response = http.get("${normalizedBaseUrl()}/v1/desktop/status") { auth() }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw DesktopControlException(
+                message = "desktop/status failed: ${response.status} $text",
                 statusCode = response.status.value,
             )
         }

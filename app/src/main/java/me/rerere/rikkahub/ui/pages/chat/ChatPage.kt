@@ -100,6 +100,8 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import io.ktor.client.HttpClient
 import me.rerere.rikkahub.data.remote.DesktopControlClient
 import me.rerere.rikkahub.data.remote.DesktopControlDefaults
+import me.rerere.rikkahub.ui.pages.chat.desktop.DesktopActiveBanner
+import me.rerere.rikkahub.ui.pages.chat.desktop.DesktopControlSheet
 import me.rerere.rikkahub.ui.pages.chat.phone.PhoneAutomationSheet
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.service.ChatError
@@ -279,7 +281,8 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
     val httpClient: HttpClient = koinInject()
-    var openingComputer by remember { mutableStateOf(false) }
+    var showDesktopSheet by remember { mutableStateOf(false) }
+    var desktopStreamUrl by remember { mutableStateOf<String?>(null) }
     var showPhoneAutomationSheet by remember { mutableStateOf(false) }
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val assistant = setting.getCurrentAssistant()
@@ -367,43 +370,57 @@ private fun ChatPageContent(
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    DesktopActiveBanner(
+                        visible = desktopStreamUrl != null && !showDesktopSheet,
+                        onOpenDesktop = { showDesktopSheet = true },
+                        onSnapToChat = {
+                            val token = setting.networkSetting.desktopControlApiToken
+                            if (token.isNotBlank()) {
+                                scope.launch {
+                                    try {
+                                        val baseUrl = setting.networkSetting.desktopControlBaseUrl.ifBlank { DesktopControlDefaults.BASE_URL }
+                                        val client = DesktopControlClient(httpClient, baseUrl, token)
+                                        val res = client.screenshot()
+                                        val bytes = android.util.Base64.decode(res.image_b64, android.util.Base64.DEFAULT)
+                                        val filesManager: FilesManager = org.koin.java.KoinJavaComponent.getKoin().get()
+                                        val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
+                                        if (uris.isNotEmpty()) {
+                                            inputState.addImages(uris)
+                                            toaster.show("Screenshot attached to chat", ToastType.Success)
+                                        }
+                                    } catch (e: Exception) {
+                                        toaster.show(e.message ?: "Failed to snap desktop", ToastType.Error)
+                                    }
+                                }
+                            }
+                        },
+                        onStopStream = {
+                            val token = setting.networkSetting.desktopControlApiToken
+                            if (token.isNotBlank()) {
+                                scope.launch {
+                                    try {
+                                        val baseUrl = setting.networkSetting.desktopControlBaseUrl.ifBlank { DesktopControlDefaults.BASE_URL }
+                                        val client = DesktopControlClient(httpClient, baseUrl, token)
+                                        client.stopStream()
+                                        desktopStreamUrl = null
+                                        toaster.show("Desktop stream stopped", ToastType.Info)
+                                    } catch (e: Exception) {
+                                        toaster.show(e.message ?: "Failed to stop desktop stream", ToastType.Error)
+                                    }
+                                }
+                            } else {
+                                desktopStreamUrl = null
+                            }
+                        }
+                    )
+
                     ChatInput(
                         includeNavigationBarPadding = conversation.messageNodes.isNotEmpty() || isFolderChat,
                         onStartVoiceMode = onStartVoiceMode,
                         voiceState = voiceState,
                         onStopVoiceMode = vm.voiceSession::stop,
                         onOpenComputer = {
-                            if (!openingComputer) {
-                                val baseUrl = setting.networkSetting.desktopControlBaseUrl
-                                    .ifBlank { DesktopControlDefaults.BASE_URL }
-                                val token = setting.networkSetting.desktopControlApiToken
-                                if (token.isBlank()) {
-                                    toaster.show(
-                                        message = "Set Desktop API token in Settings → Preferences → Network",
-                                        type = ToastType.Warning,
-                                    )
-                                } else {
-                                    openingComputer = true
-                                    scope.launch {
-                                        try {
-                                            val client = DesktopControlClient(
-                                                http = httpClient,
-                                                baseUrl = baseUrl,
-                                                apiToken = token,
-                                            )
-                                            val started = client.startStream(mode = "view")
-                                            context.openUrl(started.viewer_url)
-                                        } catch (e: Exception) {
-                                            toaster.show(
-                                                message = e.message ?: "Failed to open desktop",
-                                                type = ToastType.Error,
-                                            )
-                                        } finally {
-                                            openingComputer = false
-                                        }
-                                    }
-                                }
-                            }
+                            showDesktopSheet = true
                         },
                         onOpenPhone = {
                             showPhoneAutomationSheet = true
@@ -679,6 +696,54 @@ private fun ChatPageContent(
                             inputState.addImages(uris)
                         }
                     }
+                }
+            )
+        }
+
+        if (showDesktopSheet) {
+            val filesManager: FilesManager = koinInject()
+            DesktopControlSheet(
+                assistant = assistant,
+                onUpdateAssistant = { updatedAssistant ->
+                    vm.updateSettings(
+                        setting.copy(
+                            assistants = setting.assistants.map {
+                                if (it.id == updatedAssistant.id) updatedAssistant else it
+                            }
+                        )
+                    )
+                },
+                networkSetting = setting.networkSetting,
+                onUpdateNetworkSetting = { updatedNetworkSetting ->
+                    vm.updateSettings(
+                        setting.copy(networkSetting = updatedNetworkSetting)
+                    )
+                },
+                onDismissRequest = { showDesktopSheet = false },
+                onAppendPrompt = { prompt ->
+                    val current = inputState.textContent.text.toString()
+                    if (current.isNotBlank()) {
+                        inputState.setMessageText("$current\n\n$prompt")
+                    } else {
+                        inputState.setMessageText(prompt)
+                    }
+                },
+                onAttachScreenshot = { bytes ->
+                    scope.launch {
+                        val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
+                        if (uris.isNotEmpty()) {
+                            inputState.addImages(uris)
+                        }
+                    }
+                },
+                httpClient = httpClient,
+                isStreaming = desktopStreamUrl != null,
+                currentViewerUrl = desktopStreamUrl,
+                onStreamStarted = { url ->
+                    desktopStreamUrl = url
+                },
+                onStreamStopped = {
+                    desktopStreamUrl = null
                 }
             )
         }

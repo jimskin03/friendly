@@ -105,6 +105,13 @@ object ToolUIRegistry {
         PhonePressKeyToolUI,
         PhoneLaunchAppToolUI,
         PhoneScreenshotToolUI,
+        DesktopScreenshotToolUI,
+        DesktopClickToolUI,
+        DesktopTypeToolUI,
+        DesktopHotkeyToolUI,
+        DesktopBrowserOpenToolUI,
+        DesktopStreamStartToolUI,
+        DesktopStreamStopToolUI,
     ).associateBy { it.toolName }
 
 

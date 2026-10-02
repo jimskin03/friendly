@@ -266,6 +266,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_desktop_control_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_desktop_control_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.DesktopControl),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.DesktopControl, it) }
+                    )
+                }
+            )
         }
     }
 }

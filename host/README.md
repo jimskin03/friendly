@@ -9,8 +9,7 @@ Headless remote-desktop host for the [Friendly](https://github.com/jimskin03/fri
 
 This tree is a **standalone host** (`friendly-host/`). It can later sit as `friendly/host/` in a monorepo; the layout matches the plan either way.
 
-Related docs:
-
+- [`SETUP_UBUNTU.md`](SETUP_UBUNTU.md) — **Complete headless Ubuntu setup guide (turnkey installer, systemd, Tailscale)**
 - [`docs/architecture.md`](docs/architecture.md) — defaults summary / pointer
 - `/workspace/friendly-assistant-plan.md` — phased plan
 - `/workspace/assistant-remote-desktop-architecture.md` — full architecture
