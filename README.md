@@ -44,19 +44,20 @@ You choose the models, search backends, and whether phone automation or Computer
 
 More assets live under [`docs/img/`](docs/img/) and [`docs/screenshots/`](docs/screenshots/). Drop additional Play Store frames into `docs/screenshots/` (see that folder’s README).
 
-Inline demo (GitHub attachment):
+Inline demo:
 
 <div align="center">
   <video
-    src="https://github.com/user-attachments/assets/d07b5935-95a5-4b52-8544-d5f4db1e69df"
+    src="docs/video/friendly-demo.mp4"
     width="280"
     controls
     playsinline
     preload="metadata"
-    title="Friendly 2.0 screen recording"
+    title="Friendly 2.0 promotional demo"
   >
-    Friendly 2.0 screen recording
+    Friendly 2.0 promotional demo
   </video>
+  <p><a href="docs/video/friendly-demo.mp4">▶ Watch the 20-second Friendly 2.0 showcase (MP4)</a></p>
 </div>
 
 ---
