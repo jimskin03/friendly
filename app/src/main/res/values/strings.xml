@@ -1401,4 +1401,25 @@
   <string name="chart_mode_table">Table</string>
   <string name="chart_series">Series</string>
   <string name="chart_series_name">Series %1$d</string>
+  <string name="apps_page_title">Apps</string>
+  <string name="apps_home_card_subtitle">Installed web apps</string>
+  <string name="apps_page_empty">No apps installed</string>
+  <string name="apps_page_add">Add App</string>
+  <string name="apps_page_name">Name</string>
+  <string name="apps_page_name_hint">Optional. Uses the site host if empty.</string>
+  <string name="apps_page_url">Start URL</string>
+  <string name="apps_page_url_https_only">Only https URLs can be installed.</string>
+  <string name="apps_page_add_confirm">Add</string>
+  <string name="apps_page_remove">Remove</string>
+  <string name="apps_page_remove_title">Remove app</string>
+  <string name="apps_page_remove_message">Remove %1$s from Friendly?</string>
+  <string name="apps_page_missing">This app is no longer installed.</string>
+  <string name="setting_home_actions">Home actions</string>
+  <string name="setting_home_actions_desc">The four shortcuts under Folders. Each one puts a prompt in the chat box or launches an installed app.</string>
+  <string name="home_action_slot">Shortcut %1$d</string>
+  <string name="home_action_label">Label</string>
+  <string name="home_action_prompt">Prompt</string>
+  <string name="home_action_launch_app">Launch app</string>
+  <string name="home_action_prompt_text">Text placed in the chat box</string>
+  <string name="home_action_no_apps">Install an app from the home screen before choosing Launch app.</string>
 </resources>

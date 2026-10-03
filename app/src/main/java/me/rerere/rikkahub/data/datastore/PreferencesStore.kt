@@ -19,6 +19,8 @@ import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
@@ -44,6 +46,11 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.HomeAction
+import me.rerere.rikkahub.data.model.InstalledWebApp
+import me.rerere.rikkahub.data.model.defaultHomeActions
+import me.rerere.rikkahub.data.model.defaultInstalledWebApps
+import me.rerere.rikkahub.data.model.normalizeHomeActions
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -177,6 +184,9 @@ class SettingsStore(
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
+        val INSTALLED_WEB_APPS = stringPreferencesKey("installed_web_apps")
+        val INSTALLED_WEB_APPS_SEEDED = booleanPreferencesKey("installed_web_apps_seeded")
+        val HOME_ACTIONS = stringPreferencesKey("home_actions")
 
 
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -249,6 +259,9 @@ class SettingsStore(
                 preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
                 preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
                 preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+                preferences[INSTALLED_WEB_APPS] = JsonInstant.encodeToString(settings.installedWebApps)
+                preferences[INSTALLED_WEB_APPS_SEEDED] = settings.installedWebAppsSeeded
+                preferences[HOME_ACTIONS] = JsonInstant.encodeToString(settings.homeActions)
                 preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
                 preferences[WEB_SERVER_PORT] = settings.webServerPort
                 preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
@@ -389,6 +402,14 @@ class SettingsStore(
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                installedWebApps = preferences[INSTALLED_WEB_APPS]?.let { raw ->
+                    runCatching { JsonInstant.decodeFromString<List<InstalledWebApp>>(raw) }.getOrDefault(emptyList())
+                } ?: emptyList(),
+                installedWebAppsSeeded = preferences[INSTALLED_WEB_APPS_SEEDED] == true,
+                homeActions = preferences[HOME_ACTIONS]?.let { raw ->
+                    runCatching { normalizeHomeActions(JsonInstant.decodeFromString<List<HomeAction>>(raw)) }
+                        .getOrDefault(defaultHomeActions())
+                } ?: defaultHomeActions(),
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
@@ -493,6 +514,8 @@ class SettingsStore(
                 modeInjections = settings.modeInjections.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
+                installedWebApps = settings.installedWebApps.distinctBy { it.id },
+                homeActions = normalizeHomeActions(settings.homeActions),
             )
         }
         .onEach {
@@ -502,6 +525,22 @@ class SettingsStore(
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
         .toMutableStateFlow(scope, Settings.dummy())
+
+    init {
+        scope.launch {
+            settingsFlow.first { !it.init }
+            update { latest ->
+                if (latest.init || latest.installedWebAppsSeeded) {
+                    latest
+                } else {
+                    latest.copy(
+                        installedWebApps = latest.installedWebApps.ifEmpty { defaultInstalledWebApps() },
+                        installedWebAppsSeeded = true,
+                    )
+                }
+            }
+        }
+    }
 
     suspend fun update(settings: Settings) {
         if(settings.init) {
@@ -711,6 +750,9 @@ data class Settings(
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val installedWebApps: List<InstalledWebApp> = emptyList(),
+    val installedWebAppsSeeded: Boolean = false,
+    val homeActions: List<HomeAction> = defaultHomeActions(),
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,

@@ -49,25 +49,26 @@ import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.FolderAdd
+import me.rerere.hugeicons.stroke.Grid
 import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.FolderLabel
+import me.rerere.rikkahub.data.model.HomeAction
+import me.rerere.rikkahub.data.model.HomeActionKind
+import me.rerere.rikkahub.data.model.normalizeHomeActions
 import me.rerere.rikkahub.ui.components.ui.FolderBadge
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalSettings
 import java.util.Calendar
 import kotlin.uuid.Uuid
-
-data class AssistantStarter(
-    val label: String,
-    val prompt: String,
-    val icon: ImageVector = HugeIcons.Sparkles,
-)
 
 private data class TemplateFolder(
     val name: String,
@@ -125,15 +126,27 @@ fun AssistantHome(
             onOpenActivity = onOpenActivity,
         )
 
-        // Folders Section (new-folder + favorite controls live near header)
-        FoldersSection(
-            folders = folders,
-            onSelectFolder = onSelectFolder,
-            onSeeAllFolders = onSeeAllFolders,
-            onNewFolder = onNewFolder,
-            onOpenFavorite = onOpenFavorite,
-            onQuickCreateFolder = onQuickCreateFolder,
-        )
+        // Folders and Apps share one row. Folders keeps its list; Apps opens installed web apps.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            FoldersSection(
+                folders = folders,
+                onSelectFolder = onSelectFolder,
+                onSeeAllFolders = onSeeAllFolders,
+                onNewFolder = onNewFolder,
+                onOpenFavorite = onOpenFavorite,
+                onQuickCreateFolder = onQuickCreateFolder,
+                modifier = Modifier.weight(1f),
+            )
+            AppsHomeCard(
+                modifier = Modifier.weight(1f),
+            )
+        }
 
         // Quick Action Starters
         ActionStartersRow(
@@ -432,11 +445,10 @@ private fun FoldersSection(
     onNewFolder: () -> Unit,
     onOpenFavorite: () -> Unit,
     onQuickCreateFolder: (name: String, labelId: String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+        modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         color = Color(0x221E293B),
         border = BorderStroke(1.dp, Color(0x1FFFFFFF)),
@@ -445,18 +457,18 @@ private fun FoldersSection(
             modifier = Modifier.padding(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Folders Header — new-folder + favorite sit near See all
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = "Folders",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -552,9 +564,9 @@ private fun FolderRowItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         FolderBadge(
             label = label,
@@ -603,31 +615,71 @@ private fun FolderRowItem(
 }
 
 @Composable
+private fun AppsHomeCard(modifier: Modifier = Modifier) {
+    val navController = LocalNavController.current
+    val settings = LocalSettings.current
+    Surface(
+        onClick = { navController.navigate(Screen.Apps) },
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0x221E293B),
+        border = BorderStroke(1.dp, Color(0x1FFFFFFF)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Grid,
+                    contentDescription = null,
+                    tint = Color(0xFFCBD5E1),
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = stringResource(R.string.apps_page_title),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = stringResource(R.string.apps_home_card_subtitle),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF94A3B8),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!settings.init) {
+                settings.installedWebApps.take(4).forEach { app ->
+                    Text(
+                        text = app.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ActionStartersRow(
     onStarterClick: (String) -> Unit,
 ) {
-    val starters = listOf(
-        AssistantStarter(
-            label = "Plan my day",
-            prompt = "Help me plan my day with a clear schedule and priorities.",
-            icon = HugeIcons.Sparkles,
-        ),
-        AssistantStarter(
-            label = "Summarize",
-            prompt = "Please summarize the following text or documents:",
-            icon = HugeIcons.File02,
-        ),
-        AssistantStarter(
-            label = "Look up",
-            prompt = "Look up detailed information about ",
-            icon = HugeIcons.Search01,
-        ),
-        AssistantStarter(
-            label = "Brainstorm",
-            prompt = "Brainstorm creative and effective ideas for ",
-            icon = HugeIcons.Idea01,
-        ),
-    )
+    val navController = LocalNavController.current
+    val settings = LocalSettings.current
+    val actions = if (settings.init) {
+        normalizeHomeActions(emptyList())
+    } else {
+        normalizeHomeActions(settings.homeActions)
+    }
 
     Row(
         modifier = Modifier
@@ -635,9 +687,22 @@ private fun ActionStartersRow(
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        starters.forEach { starter ->
+        val promptFallback = stringResource(R.string.home_action_prompt)
+        val launchFallback = stringResource(R.string.home_action_launch_app)
+        actions.forEach { action ->
             Surface(
-                onClick = { onStarterClick(starter.prompt) },
+                onClick = {
+                    when (action.kind) {
+                        HomeActionKind.PROMPT -> {
+                            if (action.prompt.isNotBlank()) onStarterClick(action.prompt)
+                        }
+                        HomeActionKind.LAUNCH_APP -> {
+                            if (action.appId.isNotBlank()) {
+                                navController.navigate(Screen.WebApp(action.appId))
+                            }
+                        }
+                    }
+                },
                 shape = RoundedCornerShape(16.dp),
                 color = Color(0x221E293B),
                 border = BorderStroke(1.dp, Color(0x1FFFFFFF)),
@@ -649,13 +714,16 @@ private fun ActionStartersRow(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(
-                        imageVector = starter.icon,
+                        imageVector = homeActionIcon(action),
                         contentDescription = null,
                         tint = Color(0xFFCBD5E1),
                         modifier = Modifier.size(18.dp),
                     )
+                    val chipLabel = action.label.ifBlank {
+                        if (action.kind == HomeActionKind.LAUNCH_APP) launchFallback else promptFallback
+                    }
                     Text(
-                        text = starter.label,
+                        text = chipLabel,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                         color = Color(0xFFE2E8F0),
                         maxLines = 1,
@@ -665,6 +733,16 @@ private fun ActionStartersRow(
                 }
             }
         }
+    }
+}
+
+private fun homeActionIcon(action: HomeAction): ImageVector {
+    if (action.kind == HomeActionKind.LAUNCH_APP) return HugeIcons.Grid
+    return when (action.label) {
+        "Summarize" -> HugeIcons.File02
+        "Look up" -> HugeIcons.Search01
+        "Brainstorm" -> HugeIcons.Idea01
+        else -> HugeIcons.Sparkles
     }
 }
 

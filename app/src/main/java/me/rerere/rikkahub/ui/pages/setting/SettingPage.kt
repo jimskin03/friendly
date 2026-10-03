@@ -53,6 +53,7 @@ import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
@@ -167,6 +168,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Settings03, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_preferences_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_preferences)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingHomeActions) },
+                        leadingContent = { Icon(HugeIcons.Sparkles, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_home_actions_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_home_actions)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Assistant) },

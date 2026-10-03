@@ -75,6 +75,8 @@ import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
 import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
+import me.rerere.rikkahub.ui.pages.apps.AppsPage
+import me.rerere.rikkahub.ui.pages.apps.WebAppPage
 import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
@@ -112,6 +114,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
+import me.rerere.rikkahub.ui.pages.setting.SettingHomeActionsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
@@ -401,12 +404,24 @@ class RouteActivity : ComponentActivity() {
                                 SettingPage()
                             }
 
+                            entry<Screen.SettingHomeActions> {
+                                SettingHomeActionsPage()
+                            }
+
                             entry<Screen.Backup> {
                                 BackupPage()
                             }
 
                             entry<Screen.WebView> { key ->
                                 WebViewPage(key.url, key.contentId)
+                            }
+
+                            entry<Screen.Apps> {
+                                AppsPage()
+                            }
+
+                            entry<Screen.WebApp> { key ->
+                                WebAppPage(key.id)
                             }
 
                             entry<Screen.SettingTheme> {
@@ -646,6 +661,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Setting : Screen
+
+    @Serializable
+    data object SettingHomeActions : Screen
+
+    @Serializable
+    data object Apps : Screen
+
+    @Serializable
+    data class WebApp(val id: String) : Screen
 
     @Serializable
     data object Backup : Screen
