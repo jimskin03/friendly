@@ -77,6 +77,8 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
       - name: Prepare build files
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           # 解码base64编码的keystore文件
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
@@ -84,8 +86,14 @@ jobs:
           # 写入签名配置到local.properties
           echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
 
-          # 写入Google Services配置
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          # Firebase is optional. An empty or non-JSON secret must not create a file, or
+          # processReleaseGoogleServices fails with "Malformed root json".
+          if [ -n "$GOOGLE_SERVICES_JSON" ] && printf '%s\n' "$GOOGLE_SERVICES_JSON" | python3 -c 'import json,sys; json.load(sys.stdin)' ; then
+            printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          else
+            rm -f app/google-services.json
+            echo "Skipping Firebase: GOOGLE_SERVICES_JSON missing or not valid JSON"
+          fi
 
       - name: Gradle Build
         run: |

@@ -41,20 +41,18 @@ class McpConnectionKeyTest {
     }
 
     @Test
-    fun `oauth token affects connection key unless manual authorization header wins`() {
-        val oauth = McpOAuthState(enabled = true, accessToken = "oauth-token")
+    fun `oauth access token replaces a manual authorization header`() {
+        val oauth = McpOAuthState(enabled = true, accessToken = "authkit-jwt")
         val withOAuth = base.copy(commonOptions = base.commonOptions.copy(oauth = oauth))
         assertNotEquals(base.connectionKey(), withOAuth.connectionKey())
 
         val manualAuth = base.copy(
             commonOptions = base.commonOptions.copy(
-                headers = listOf("Authorization" to "Bearer manual"),
+                headers = listOf("Authorization" to "Bearer ak_not_a_jwt", "X-Trace" to "1"),
                 oauth = oauth,
             )
         )
-        val manualAuthWithoutOAuth = manualAuth.copy(
-            commonOptions = manualAuth.commonOptions.copy(oauth = null)
-        )
-        assertEquals(manualAuthWithoutOAuth.connectionKey(), manualAuth.connectionKey())
+        val headers = manualAuth.connectionKey().headers
+        assertEquals(listOf("X-Trace" to "1", "Authorization" to "Bearer authkit-jwt"), headers)
     }
 }
