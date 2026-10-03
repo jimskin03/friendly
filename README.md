@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/icon.png" alt="Friendly app icon" width="100" />
+  <img src="docs/brand.png" alt="Friendly app icon" width="100" />
   <h1>Friendly 2.0</h1>
   <p><strong>Your Android AI assistant that chats, acts on your phone, and controls a self-hosted Linux desktop.</strong></p>
   <p>
