@@ -353,9 +353,7 @@ class PhoneCallController(
 
         if (status == CellularCallStatus.Ringing && previous != CellularCallStatus.Ringing) {
             answerAttemptedForRing = false
-            if (callAccessEnabled()) {
-                showIncomingNotification(shownNumber)
-            }
+            showIncomingNotification(shownNumber)
         } else if (status != CellularCallStatus.Ringing) {
             NotificationUtil.cancel(app, INCOMING_NOTIFICATION_ID)
             answerAttemptedForRing = false
