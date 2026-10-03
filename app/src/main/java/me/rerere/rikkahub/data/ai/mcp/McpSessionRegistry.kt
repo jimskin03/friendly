@@ -510,15 +510,11 @@ private fun hasSameConnectionParameters(
 ): Boolean = left != null && right != null && left.connectionKey() == right.connectionKey()
 
 private fun McpServerConfig.resolvedHeaders(): List<Pair<String, String>> {
-
     val base = commonOptions.headers.filter { it.first.isNotBlank() }
     val token = commonOptions.oauth?.takeIf { it.enabled }?.accessToken
-    val hasAuthorization = base.any { it.first.equals("Authorization", ignoreCase = true) }
-    return if (!token.isNullOrBlank() && !hasAuthorization) {
-        base + ("Authorization" to "Bearer $token")
-    } else {
-        base
-    }
+    if (token.isNullOrBlank()) return base
+    val withoutAuthorization = base.filterNot { it.first.equals("Authorization", ignoreCase = true) }
+    return withoutAuthorization + ("Authorization" to "Bearer $token")
 }
 
 private fun mergeTools(storedTools: List<McpTool>, serverTools: List<Tool>): List<McpTool> {

@@ -166,5 +166,14 @@ internal class McpOAuthDiscoveryClient(
             val url = serverUrl.toHttpUrlOrNull() ?: return serverUrl
             return url.newBuilder().fragment(null).build().toString()
         }
+
+        /**
+         * RFC 8707 resource indicator. AuthKit binds the JWT audience to the protected-resource
+         * metadata value, not to a trailing-slash or query variant of the URL the user typed.
+         */
+        fun oauthResourceIndicator(serverUrl: String, metadataResource: String?): String {
+            val declared = metadataResource?.trim()?.takeIf { it.isNotEmpty() } ?: return canonicalResource(serverUrl)
+            return declared.toHttpUrlOrNull()?.newBuilder()?.fragment(null)?.build()?.toString() ?: declared
+        }
     }
 }

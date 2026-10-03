@@ -111,7 +111,13 @@ internal class McpOAuthCoordinator(
                         clientId = clientId,
                         clientSecret = oauth.clientSecret,
                         refreshToken = oauth.refreshToken,
-                        resources = listOf(McpOAuthDiscoveryClient.canonicalResource(config.serverUrl)),
+                        resources = listOf(
+                            McpOAuthDiscoveryClient.oauthResourceIndicator(
+                                config.serverUrl,
+                                runCatching { discoveryClient.discoverProtectedResource(config.serverUrl).resource }
+                                    .getOrNull(),
+                            ),
+                        ),
                         scope = oauth.scope,
                     )
                 )
@@ -167,7 +173,10 @@ internal class McpOAuthCoordinator(
 
         val pkce = oauthClient.generatePkce()
         val state = oauthClient.generateState()
-        val resource = McpOAuthDiscoveryClient.canonicalResource(serverUrl)
+        val resource = McpOAuthDiscoveryClient.oauthResourceIndicator(
+            serverUrl,
+            protectedResource.resource,
+        )
         val callbackSession = callbackServer.openSession(context, state)
         try {
             val redirectUri = callbackSession.redirectUri
@@ -291,10 +300,7 @@ internal class McpOAuthCoordinator(
 }
 
 internal fun looksLikeMcpAuthFailure(error: Throwable): Boolean {
-    val message = generateSequence(error) { it.cause }
-        .mapNotNull { it.message }
-        .joinToString(" ")
-        .lowercase()
+    val message = mcpAuthFailureText(error)
     return message.contains("401") ||
         message.contains("403") ||
         message.contains("unauthorized") ||
@@ -302,8 +308,30 @@ internal fun looksLikeMcpAuthFailure(error: Throwable): Boolean {
         message.contains("insufficient_scope") ||
         message.contains("invalid_token") ||
         message.contains("invalid access token") ||
-        message.contains("missing or invalid")
+        message.contains("missing or invalid") ||
+        message.contains("authorization required") ||
+        message.contains("bearer token rejected") ||
+        message.contains("not a valid authkit jwt") ||
+        message.contains("not a valid jwt")
 }
+
+/**
+ * Composio Connect rejects API keys and other non-JWT bearers with this shape.
+ * A manual Authorization header must not hide that rejection.
+ */
+internal fun bearerRejectedAsNonOauthToken(error: Throwable): Boolean {
+    val message = mcpAuthFailureText(error)
+    return message.contains("bearer token rejected") ||
+        message.contains("not a valid authkit jwt") ||
+        message.contains("not a valid jwt") ||
+        message.contains("not a valid oauth")
+}
+
+private fun mcpAuthFailureText(error: Throwable): String =
+    generateSequence(error) { it.cause }
+        .mapNotNull { it.message }
+        .joinToString(" ")
+        .lowercase()
 
 /**
  * @return true or false when the decision does not need a metadata probe; null to probe.
@@ -316,6 +344,7 @@ internal fun shouldRequestMcpAuthorization(
     error: Throwable,
     protectedResourceDiscovered: Boolean,
 ): Boolean? {
+    if (bearerRejectedAsNonOauthToken(error)) return true
     if (hasAccessToken) return looksLikeMcpAuthFailure(error)
     if (looksLikeMcpAuthFailure(error) && oauthEnabled) return true
     if (hasManualAuthorizationHeader) return false

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.mcp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -334,15 +335,15 @@ class McpOAuthAttemptFenceTest {
                 memory.set(updated)
                 true
             },
-            persistMcpOAuth = { id, oauth, shouldWrite ->
+            persistMcpOAuth = persist@{ id, oauth, shouldWrite ->
                 persistCalls.incrementAndGet()
-                if (!shouldWrite()) return@persistMcpOAuth false
+                if (!shouldWrite()) return@persist false
                 if (pausePersist && gatedPersist.compareAndSet(false, true)) {
                     persistEntered.complete(Unit)
                     releasePersist.await()
                 }
                 coroutineContext.ensureActive()
-                if (!shouldWrite()) return@persistMcpOAuth false
+                if (!shouldWrite()) return@persist false
                 synchronized(diskLock) {
                     val servers = diskMcp.get()
                     var found = false
@@ -354,7 +355,7 @@ class McpOAuthAttemptFenceTest {
                             server.clone(commonOptions = server.commonOptions.copy(oauth = oauth))
                         }
                     }
-                    if (!found) return@persistMcpOAuth false
+                    if (!found) return@persist false
                     diskMcp.set(updated)
                     if (oauth?.accessToken != null) {
                         diskWrites.set(diskWrites.get() + oauth.accessToken)
