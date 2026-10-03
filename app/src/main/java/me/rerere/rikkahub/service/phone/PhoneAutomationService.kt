@@ -500,13 +500,15 @@ class PhoneAutomationService : AccessibilityService() {
         }
 
         /**
-         * Launches an app by matching its package name or label name.
+         * Launches an app by package id or home-screen name.
+         * "Google Maps" matches the app labeled Maps, because every word has to
+         * show up in the label or the package, and the closest label wins.
          */
         fun launchApp(context: Context, query: String): Pair<Boolean, String> {
             val pm = context.packageManager
             val trimmed = query.trim().lowercase()
+            if (trimmed.isEmpty()) return false to "App not found matching '$query'"
 
-            // 1. Try direct package launch
             val directIntent = pm.getLaunchIntentForPackage(query.trim())
             if (directIntent != null) {
                 directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -514,16 +516,32 @@ class PhoneAutomationService : AccessibilityService() {
                 return true to "Launched app with package: $query"
             }
 
-            // 2. Search installed launchable applications
+            val words = trimmed.split(Regex("[^a-z0-9]+")).filter { it.length >= 2 }
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
-            val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-            val matched = resolveInfos.firstOrNull {
-                val label = it.loadLabel(pm).toString().lowercase()
-                val pkg = it.activityInfo.packageName.lowercase()
-                label == trimmed || label.contains(trimmed) || pkg.contains(trimmed)
-            }
+            val matched = pm.queryIntentActivities(mainIntent, 0)
+                .map { info ->
+                    val label = info.loadLabel(pm).toString().lowercase()
+                    val pkgWords = info.activityInfo.packageName.lowercase().replace('.', ' ')
+                    val score = when {
+                        label == trimmed -> 1000
+                        trimmed.length >= 2 && label.contains(trimmed) -> 800
+                        words.isNotEmpty() && words.all { label.contains(it) } -> 700
+                        words.isNotEmpty() && words.all { word ->
+                            label.contains(word) || pkgWords.contains(word)
+                        } -> 600
+                        else -> 0
+                    }
+                    Triple(score, label, info)
+                }
+                .filter { it.first > 0 }
+                .maxWithOrNull(
+                    compareBy<Triple<Int, String, android.content.pm.ResolveInfo>> { it.first }
+                        .thenBy { if (words.any { word -> word == it.second }) 1 else 0 }
+                        .thenByDescending { it.second.length },
+                )
+                ?.third
 
             if (matched != null) {
                 val launchIntent = pm.getLaunchIntentForPackage(matched.activityInfo.packageName)
