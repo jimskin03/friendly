@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
+import me.rerere.rikkahub.service.phone.PhoneAutomationStep
 import me.rerere.rikkahub.service.phone.PhoneCallController
 import java.io.ByteArrayOutputStream
 
@@ -493,9 +494,10 @@ private fun callActionJson(result: me.rerere.rikkahub.service.phone.PhoneCallAct
 
 internal fun Tool.withPhoneAutomationTracking(): Tool {
     val originalExecute = execute
+    val step = phoneAutomationStepFor(name)
     return copy(
         execute = { args ->
-            PhoneAutomationService.reportWorkStarted()
+            PhoneAutomationService.reportWorkStarted(step)
             try {
                 val result = originalExecute(args)
                 val text = result.filterIsInstance<UIMessagePart.Text>().joinToString(separator = "") { it.text }
@@ -509,4 +511,18 @@ internal fun Tool.withPhoneAutomationTracking(): Tool {
             }
         }
     )
+}
+
+private fun phoneAutomationStepFor(name: String): PhoneAutomationStep = when (name) {
+    "phone_launch_app" -> PhoneAutomationStep.LaunchApp
+    "phone_screenshot" -> PhoneAutomationStep.Screenshot
+    "phone_inspect_screen" -> PhoneAutomationStep.Inspect
+    "phone_click" -> PhoneAutomationStep.Click
+    "phone_swipe" -> PhoneAutomationStep.Swipe
+    "phone_type_text" -> PhoneAutomationStep.Type
+    "phone_press_key" -> PhoneAutomationStep.PressKey
+    "place_call" -> PhoneAutomationStep.PlaceCall
+    "end_call" -> PhoneAutomationStep.EndCall
+    "read_call_state" -> PhoneAutomationStep.ReadCall
+    else -> PhoneAutomationStep.Other
 }

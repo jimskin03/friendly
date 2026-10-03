@@ -78,6 +78,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -220,6 +221,10 @@ class ChatService(
     fun cleanup() = runCatching { sessionManager.cleanup() }
 
     private fun onSessionGenerationFinished(session: ConversationSession, cause: Throwable?) {
+        PhoneAutomationService.reportGenerationFinished(
+            aborted = cause != null && cause !is CancellationException,
+            cancelled = cause is CancellationException,
+        )
         if (cause != null) session.messageQueue.pause()
         if (session.state.value.currentMessages.any { message ->
                 message.parts.any { it is UIMessagePart.Tool && it.isPending }

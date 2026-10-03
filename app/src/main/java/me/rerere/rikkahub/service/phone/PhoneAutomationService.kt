@@ -61,6 +61,28 @@ enum class PhoneAutomationWorkStatus {
     Error,
 }
 
+enum class PhoneAutomationStep {
+    None,
+    LaunchApp,
+    Screenshot,
+    Inspect,
+    Click,
+    Swipe,
+    Type,
+    PressKey,
+    PlaceCall,
+    EndCall,
+    ReadCall,
+    Other,
+}
+
+data class PhoneAutomationActivity(
+    val toolRunning: Boolean = false,
+    val step: PhoneAutomationStep = PhoneAutomationStep.None,
+    val holdingForGeneration: Boolean = false,
+    val failed: Boolean = false,
+)
+
 class PhoneAutomationService : AccessibilityService() {
 
     override fun onServiceConnected() {
@@ -68,6 +90,7 @@ class PhoneAutomationService : AccessibilityService() {
         instance = this
         _isConnected.value = true
         _workStatus.value = PhoneAutomationWorkStatus.Idle
+        _activity.value = PhoneAutomationActivity()
         Log.i(TAG, "PhoneAutomationService connected and active")
     }
 
@@ -86,6 +109,7 @@ class PhoneAutomationService : AccessibilityService() {
         }
         _isConnected.value = false
         _workStatus.value = PhoneAutomationWorkStatus.Idle
+        _activity.value = PhoneAutomationActivity()
         Log.i(TAG, "PhoneAutomationService destroyed")
     }
 
@@ -378,35 +402,75 @@ class PhoneAutomationService : AccessibilityService() {
         private val _workStatus = MutableStateFlow(PhoneAutomationWorkStatus.Idle)
         val workStatus: StateFlow<PhoneAutomationWorkStatus> = _workStatus.asStateFlow()
 
+        private val _activity = MutableStateFlow(PhoneAutomationActivity())
+        val activity: StateFlow<PhoneAutomationActivity> = _activity.asStateFlow()
+
         /** Conversation to reopen when the mini indicator is tapped (best-effort). */
         @Volatile
         var lastConversationId: String? = null
 
         fun isRunning(): Boolean = instance != null
 
-        fun reportWorkStarted(conversationId: String? = null) {
-            if (conversationId != null) {
-                lastConversationId = conversationId
-            }
+        /** No-arg starts [PhoneAutomationStep.Other]. Phone tools pass a real step. */
+        fun reportWorkStarted(step: PhoneAutomationStep = PhoneAutomationStep.Other) {
+            _activity.value = PhoneAutomationActivity(
+                toolRunning = true,
+                step = step,
+                holdingForGeneration = true,
+                failed = false,
+            )
             _workStatus.value = PhoneAutomationWorkStatus.Running
         }
 
+        /**
+         * Tool returned. Keeps the reply "in progress" for the pill.
+         * [workStatus] goes Idle so the gap is not a hard error; [activity.failed]
+         * is only shown once generation ends.
+         */
         fun reportWorkFinished(success: Boolean) {
-            _workStatus.value = if (success) {
-                PhoneAutomationWorkStatus.Idle
-            } else {
+            _activity.value = PhoneAutomationActivity(
+                toolRunning = false,
+                step = PhoneAutomationStep.None,
+                holdingForGeneration = true,
+                failed = !success,
+            )
+            _workStatus.value = PhoneAutomationWorkStatus.Idle
+        }
+
+        /**
+         * Reply that used a phone tool has ended.
+         * [aborted] is a non-cancellation failure of generation.
+         * [cancelled] (user [kotlinx.coroutines.CancellationException]) returns to idle
+         * and does not surface "Didn't finish", even if the last tool failed.
+         */
+        fun reportGenerationFinished(aborted: Boolean, cancelled: Boolean = false) {
+            val previous = _activity.value
+            if (!previous.holdingForGeneration && !previous.toolRunning) return
+            val failed = !cancelled && (previous.failed || aborted)
+            _activity.value = PhoneAutomationActivity(
+                toolRunning = false,
+                step = PhoneAutomationStep.None,
+                holdingForGeneration = false,
+                failed = failed,
+            )
+            _workStatus.value = if (failed) {
                 PhoneAutomationWorkStatus.Error
+            } else {
+                PhoneAutomationWorkStatus.Idle
             }
         }
 
         suspend fun <T> trackWork(conversationId: String? = null, block: suspend () -> T): T {
-            reportWorkStarted(conversationId)
+            if (conversationId != null) {
+                lastConversationId = conversationId
+            }
+            _workStatus.value = PhoneAutomationWorkStatus.Running
             return try {
                 val result = block()
-                reportWorkFinished(success = true)
+                _workStatus.value = PhoneAutomationWorkStatus.Idle
                 result
             } catch (e: Exception) {
-                reportWorkFinished(success = false)
+                _workStatus.value = PhoneAutomationWorkStatus.Error
                 throw e
             }
         }

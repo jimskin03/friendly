@@ -97,14 +97,16 @@ private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
  * indicator" or a long-press on the phone icon (the caller may moveTaskToBack).
  * When the preference is on, the session also starts on its own if a cellular
  * call is ringing or off-hook, an outbound ACTION_CALL has not yet gone live
- * and then idle, or Phone Automation work is running. Auto-show does not
+ * and then idle, a phone tool is running, the reply that used one is still
+ * generating, or other Phone Automation work is Running. Auto-show does not
  * minimize Friendly and does not ask for overlay permission. Without
  * SYSTEM_ALERT_WINDOW, the ongoing notification (id 2003) is the backup.
  *
- * Dragging the bubble to the close zone while a call or Running work is still
+ * Dragging the bubble to the close zone while a call or that work is still
  * live suppresses auto-show until that live condition is fully quiet (not
- * ringing, not off-hook, no outbound, work not Running). The next live event
- * may auto-show again. Manual activate() clears the suppress flag.
+ * ringing, not off-hook, no outbound, no phone-tool step, not holding for
+ * the reply, work not Running). The next live event may auto-show again.
+ * Manual activate() clears the suppress flag.
  *
  * While the session is active:
  *  1. Ongoing notification while Friendly is backgrounded (OEM-safe backup; tap reopens app).
@@ -149,9 +151,10 @@ class PhoneAutomationMiniIndicatorManager(
     val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
 
     /**
-     * User dragged the bubble away while a call or Running work was still live.
-     * Stays set until that live condition is fully quiet so we do not recreate
-     * the bubble on the next status tick.
+     * User dragged the bubble away while a call or phone-automation work was
+     * still live, including the gap while a reply that used a phone tool is
+     * still generating. Stays set until that live condition is fully quiet
+     * so we do not recreate the bubble on the next status tick.
      */
     @Volatile
     private var suppressAutoShow: Boolean = false
@@ -218,19 +221,21 @@ class PhoneAutomationMiniIndicatorManager(
                         call = call,
                     )
                 },
+                PhoneAutomationService.activity,
                 voicePhase,
-            ) { input, voice ->
+            ) { input, activity, voice ->
                 IndicatorState(
                     enabled = input.enabled,
                     sessionActive = input.sessionActive,
                     workStatus = input.workStatus,
                     appForeground = input.appForeground,
                     canDrawOverlays = Settings.canDrawOverlays(app),
-                    live = isAutoShowLive(input.call, input.workStatus),
+                    live = isAutoShowLive(input.call, input.workStatus, activity),
                     statusLine = formatMiniLiveLine(
                         app,
                         resolveMiniLive(
                             work = input.workStatus,
+                            activity = activity,
                             call = input.call,
                             voice = voice,
                             sessionActive = input.sessionActive,
@@ -269,7 +274,12 @@ class PhoneAutomationMiniIndicatorManager(
     /** End the mini session and tear down overlay + notification. */
     fun dismiss() {
         if (!_sessionActive.value) return
-        if (isAutoShowLive(phoneCallController.snapshot.value, PhoneAutomationService.workStatus.value)) {
+        if (isAutoShowLive(
+                phoneCallController.snapshot.value,
+                PhoneAutomationService.workStatus.value,
+                PhoneAutomationService.activity.value,
+            )
+        ) {
             suppressAutoShow = true
             Log.i(TAG, "Mini session dismissed during live call/work; auto-show suppressed")
         }
@@ -484,12 +494,14 @@ class PhoneAutomationMiniIndicatorManager(
                 compose {
                     RikkahubTheme {
                         val work by PhoneAutomationService.workStatus.collectAsState()
+                        val activity by PhoneAutomationService.activity.collectAsState()
                         val call by phoneCallController.snapshot.collectAsState()
                         val voice by voicePhase.collectAsState()
                         val session by sessionActive.collectAsState()
                         MiniIndicatorBubble(
                             status = miniIndicatorStatus(
                                 work = work,
+                                activity = activity,
                                 call = call,
                                 voice = voice,
                                 sessionActive = session,
@@ -575,9 +587,14 @@ private data class MiniIndicatorStatus(
     val pulse: Boolean,
 )
 
-private fun isAutoShowLive(call: CellularCallSnapshot, work: PhoneAutomationWorkStatus): Boolean {
+private fun isAutoShowLive(
+    call: CellularCallSnapshot,
+    work: PhoneAutomationWorkStatus,
+    activity: PhoneAutomationActivity,
+): Boolean {
     if (call.status == CellularCallStatus.Ringing || call.status == CellularCallStatus.Offhook) return true
     if (!call.outboundNumber.isNullOrBlank()) return true
+    if (activity.toolRunning || activity.holdingForGeneration) return true
     return work == PhoneAutomationWorkStatus.Running
 }
 
@@ -587,12 +604,29 @@ private fun knownCallNumber(call: CellularCallSnapshot): String? =
 private fun labeledNumber(number: String?, plainRes: Int, withNumberRes: Int): Pair<Int, String?> =
     if (number.isNullOrBlank()) plainRes to null else withNumberRes to number
 
+private fun stepStatusRes(step: PhoneAutomationStep): Int = when (step) {
+    PhoneAutomationStep.LaunchApp -> R.string.phone_mini_status_launching
+    PhoneAutomationStep.Screenshot -> R.string.phone_mini_status_screenshot
+    PhoneAutomationStep.Inspect -> R.string.phone_mini_status_inspect
+    PhoneAutomationStep.Click -> R.string.phone_mini_status_tapping
+    PhoneAutomationStep.Swipe -> R.string.phone_mini_status_swiping
+    PhoneAutomationStep.Type -> R.string.phone_mini_status_typing
+    PhoneAutomationStep.PressKey -> R.string.phone_mini_status_press_key
+    PhoneAutomationStep.PlaceCall -> R.string.phone_mini_status_calling
+    PhoneAutomationStep.EndCall -> R.string.phone_mini_status_ending_call
+    PhoneAutomationStep.ReadCall -> R.string.phone_mini_status_checking_call
+    PhoneAutomationStep.None,
+    PhoneAutomationStep.Other -> R.string.phone_mini_status_working
+}
+
 /**
- * First match wins. Voice is ignored when Off, and voice Error never produces a line.
- * Listening / Speaking are only returned when a mini session is already active.
+ * First match wins. Cellular lines beat a phone-tool step. Voice is ignored when Off,
+ * and voice Error never produces a line. Listening / Speaking are only returned when
+ * a mini session is already active.
  */
 private fun resolveMiniLive(
     work: PhoneAutomationWorkStatus,
+    activity: PhoneAutomationActivity,
     call: CellularCallSnapshot,
     voice: VoicePhase,
     sessionActive: Boolean,
@@ -626,7 +660,15 @@ private fun resolveMiniLive(
             )
             MiniLiveResolution(MiniLiveKind.Calling, res, arg)
         }
-        work == PhoneAutomationWorkStatus.Error -> MiniLiveResolution(
+        activity.toolRunning -> MiniLiveResolution(
+            MiniLiveKind.Working,
+            stepStatusRes(activity.step),
+        )
+        activity.holdingForGeneration -> MiniLiveResolution(
+            MiniLiveKind.Working,
+            R.string.phone_mini_status_working,
+        )
+        activity.failed || work == PhoneAutomationWorkStatus.Error -> MiniLiveResolution(
             MiniLiveKind.Failed,
             R.string.phone_mini_status_failed,
         )
@@ -659,11 +701,12 @@ private fun formatMiniLiveLine(app: Application, resolved: MiniLiveResolution): 
 @Composable
 private fun miniIndicatorStatus(
     work: PhoneAutomationWorkStatus,
+    activity: PhoneAutomationActivity,
     call: CellularCallSnapshot,
     voice: VoicePhase,
     sessionActive: Boolean,
 ): MiniIndicatorStatus {
-    val resolved = resolveMiniLive(work, call, voice, sessionActive)
+    val resolved = resolveMiniLive(work, activity, call, voice, sessionActive)
     val label = resolved.labelRes?.let { res ->
         val arg = resolved.numberArg
         if (arg != null) stringResource(res, arg) else stringResource(res)

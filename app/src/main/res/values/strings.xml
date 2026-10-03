@@ -49,6 +49,15 @@
   <string name="phone_mini_status_listening">Listening</string>
   <string name="phone_mini_status_speaking">Speaking</string>
   <string name="phone_mini_status_failed">Didn\'t finish</string>
+  <string name="phone_mini_status_launching">Launching app</string>
+  <string name="phone_mini_status_screenshot">Taking screenshot</string>
+  <string name="phone_mini_status_inspect">Inspecting screen</string>
+  <string name="phone_mini_status_tapping">Tapping</string>
+  <string name="phone_mini_status_swiping">Swiping</string>
+  <string name="phone_mini_status_typing">Typing</string>
+  <string name="phone_mini_status_press_key">Pressing a key</string>
+  <string name="phone_mini_status_ending_call">Ending call</string>
+  <string name="phone_mini_status_checking_call">Checking the call</string>
   <string name="phone_call_incoming_title">Incoming call</string>
   <string name="phone_call_incoming_body">%1$s — open the phone app to answer. Silent auto-answer is not reliable.</string>
   <string name="phone_call_number_hidden">Number hidden by Android</string>
