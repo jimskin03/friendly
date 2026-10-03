@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/brand.png" alt="Friendly app icon" width="100" />
   <h1>Friendly 2.0</h1>
-  <p><strong>Your Android AI assistant that chats, acts on your phone, and controls a self-hosted Linux desktop.</strong></p>
+  <p><strong>Your Android AI Catsistant that chats, acts on your phone, and controls a self-hosted Linux desktop.</strong></p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
     <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84.svg" alt="Android 8+" />
