@@ -1331,7 +1331,6 @@
   <string name="chat_page_voice_transcribing">Finalizing transcription…</string>
   <string name="chat_page_voice_speaking">Reading aloud; listening will resume afterward</string>
   <string name="chat_page_voice_paused">Paused</string>
-  <string name="chat_page_voice_call_hold">Call in progress — listening resumes when the call ends</string>
   <string name="chat_page_voice_retry">Retry</string>
   <string name="chat_page_voice_end">End</string>
   <string name="chat_page_voice_configure_asr">Configure ASR in speech settings first</string>

@@ -14,8 +14,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,8 +79,6 @@ class PhoneCallController(
     val snapshot: StateFlow<CellularCallSnapshot> = _snapshot.asStateFlow()
 
     private var listenerRegistered = false
-    private var outgoingClaim = false
-    private var claimJob: Job? = null
     private var answerAttemptedForRing = false
 
     @Suppress("DEPRECATION")
@@ -111,8 +107,6 @@ class PhoneCallController(
             if (_snapshot.value.status != CellularCallStatus.Unknown) {
                 publishSnapshot(CellularCallStatus.Unknown, number = null)
             }
-            outgoingClaim = false
-            publishHold()
             return
         }
         if (listenerRegistered) return
@@ -158,7 +152,6 @@ class PhoneCallController(
                 val intent = Intent(if (granted) Intent.ACTION_CALL else Intent.ACTION_DIAL, uri).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                if (granted) beginOutgoingClaim()
                 try {
                     app.startActivity(intent)
                     PhoneCallActionResult(
@@ -167,7 +160,7 @@ class PhoneCallController(
                         mode = if (granted) "action_call" else "action_dial",
                         detail = if (granted) {
                             "Started a cellular call to ${parsed.number} with the system phone app. " +
-                                "Voice STT pauses while the call is off-hook and resumes when it is idle. " +
+                                "Voice input remains active while the cellular call is in progress. " +
                                 "WhatsApp and other VoIP apps are not used."
                         } else {
                             "CALL_PHONE is not granted, so the system dialer was opened with ${parsed.number} filled in. " +
@@ -175,7 +168,6 @@ class PhoneCallController(
                         },
                     )
                 } catch (e: Exception) {
-                    if (granted) clearOutgoingClaim()
                     val notified = postActionNotification(
                         title = app.getString(R.string.phone_call_place_notification_title),
                         text = app.getString(R.string.phone_call_place_notification_body, parsed.number),
@@ -215,7 +207,6 @@ class PhoneCallController(
         val telecom = tryTelecomEnd()
         attempts += "telecom_end_call:$telecom"
         if (telecom == "ok") {
-            clearOutgoingClaim()
             return@withContext PhoneCallActionResult(
                 success = true,
                 action = "end_call",
@@ -371,11 +362,7 @@ class PhoneCallController(
         val previous = _snapshot.value.status
         val shownNumber = number?.takeIf { it.isNotBlank() }
             ?: _snapshot.value.number?.takeIf { status != CellularCallStatus.Idle }
-        if (status == CellularCallStatus.Idle) {
-            clearOutgoingClaim()
-        }
         publishSnapshot(status, shownNumber)
-        publishHold()
         Log.i(TAG, "Call state $previous -> $status")
 
         if (status == CellularCallStatus.Ringing && previous != CellularCallStatus.Ringing) {
@@ -488,31 +475,6 @@ class PhoneCallController(
         return pkg.contains("dialer") || pkg.contains("incall") || pkg.contains("telecom")
     }
 
-    private fun beginOutgoingClaim() {
-        outgoingClaim = true
-        publishHold()
-        claimJob?.cancel()
-        claimJob = appScope.launch {
-            delay(OUTGOING_CLAIM_MS)
-            if (_snapshot.value.status != CellularCallStatus.Offhook) {
-                outgoingClaim = false
-                publishHold()
-            }
-        }
-    }
-
-    private fun clearOutgoingClaim() {
-        claimJob?.cancel()
-        claimJob = null
-        outgoingClaim = false
-        publishHold()
-    }
-
-    private fun publishHold() {
-        val hold = _snapshot.value.status == CellularCallStatus.Offhook || outgoingClaim
-        PhoneCallSignals.micHold.value = hold
-    }
-
     private fun publishSnapshot(status: CellularCallStatus, number: String?) {
         val settings = settingsStore.settingsFlow.value.displaySetting
         _snapshot.value = CellularCallSnapshot(
@@ -579,7 +541,6 @@ class PhoneCallController(
         private const val REQUEST_OPEN_DIALER = 41
         private const val REQUEST_ANSWER = 42
         private const val REQUEST_PLACE = 43
-        private const val OUTGOING_CLAIM_MS = 20_000L
 
         private val emergencyNumbers = setOf(
             "112", "911", "999", "000", "110", "119", "118", "190", "192", "193",

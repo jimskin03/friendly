@@ -49,7 +49,6 @@ internal fun VoiceModeRow(
                             stringResource(R.string.chat_page_voice_listening_queued) else stringResource(R.string.chat_page_voice_listening)
                         VoicePhase.Transcribing -> stringResource(R.string.chat_page_voice_transcribing)
                         VoicePhase.Speaking -> stringResource(R.string.chat_page_voice_speaking)
-                        VoicePhase.CallHold -> stringResource(R.string.chat_page_voice_call_hold)
                         VoicePhase.Error -> stringResource(R.string.chat_page_voice_paused)
                     },
                     style = MaterialTheme.typography.bodySmall,
