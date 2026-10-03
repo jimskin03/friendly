@@ -412,7 +412,7 @@ internal fun buildPlaceCallTool(phoneCallController: PhoneCallController): Tool 
     description = """
         Place a cellular phone call to a phone number using the system Phone app.
         Requires the Phone call access setting and CALL_PHONE. Does not call WhatsApp or other chat apps.
-        Refuses emergency numbers. While the call is off-hook, voice speech-to-text pauses and resumes when idle.
+        Refuses emergency numbers. Voice speech-to-text stays on during the call.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

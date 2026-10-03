@@ -37,11 +37,11 @@
   <string name="phone_mini_indicator_overlay_continue">Continue</string>
   <string name="phone_mini_indicator_overlay_denied">Overlay permission was not granted. The ongoing notification will still show Phone Automation status. You can enable the bubble later in system settings.</string>
   <string name="phone_mini_indicator_disabled_toast">Enable Phone Automation mini indicator in Preferences first</string>
-  <string name="phone_mini_indicator_minimize_button">Minimize with mini indicator</string>
+  <string name="phone_mini_indicator_minimize_button">Minimize to background</string>
   <string name="phone_mini_indicator_minimize_hint">Keeps a floating rabbit status indicator while Friendly is in the background. You can also long-press the phone icon.</string>
   <string name="phone_call_access_title">Phone call access</string>
   <string name="phone_call_access_desc">Opt-in cellular calls for this assistant: place a call, read call state, and try to hang up. WhatsApp is not included. Silent auto-answer is not reliable on Android 10+.</string>
-  <string name="phone_call_access_sheet_desc">Lets the assistant place cellular calls with the system Phone app, read idle/ringing/off-hook, and try to hang up. Requires CALL_PHONE and READ_PHONE_STATE. Android only allows silent answer or hang-up for the default dialer, so Friendly opens the dialer or taps the phone UI when accessibility is on. Voice listening stays on; speech-to-text pauses during an active call and resumes after.</string>
+  <string name="phone_call_access_sheet_desc">Lets the assistant place cellular calls with the system Phone app, read idle/ringing/off-hook, and try to hang up. Requires CALL_PHONE and READ_PHONE_STATE. Android only allows silent answer or hang-up for the default dialer, so Friendly opens the dialer or taps the phone UI when accessibility is on. Voice listening stays on during the call.</string>
   <string name="phone_call_auto_answer_title">Attempt to answer incoming calls</string>
   <string name="phone_call_auto_answer_desc">Best effort only. Tries the system answer API, then an accessibility tap, then opens the dialer. Off by default. Not silent and not reliable.</string>
   <string name="phone_call_grant_permissions">Grant call permissions</string>

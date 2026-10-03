@@ -776,7 +776,6 @@ private fun ChatPageContent(
         }
 
         if (showPhoneAutomationSheet) {
-            val filesManager: FilesManager = koinInject()
             PhoneAutomationSheet(
                 assistant = assistant,
                 onUpdateAssistant = { updatedAssistant ->
@@ -789,22 +788,6 @@ private fun ChatPageContent(
                     )
                 },
                 onDismissRequest = { showPhoneAutomationSheet = false },
-                onAppendPrompt = { prompt ->
-                    val current = inputState.textContent.text.toString()
-                    if (current.isNotBlank()) {
-                        inputState.setMessageText("$current\n\n$prompt")
-                    } else {
-                        inputState.setMessageText(prompt)
-                    }
-                },
-                onAttachScreenshot = { bytes ->
-                    scope.launch {
-                        val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
-                        if (uris.isNotEmpty()) {
-                            inputState.addImages(uris)
-                        }
-                    }
-                },
                 onMinimizeWithMiniIndicator = {
                     activatePhoneMiniMode()
                     showPhoneAutomationSheet = false

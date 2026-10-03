@@ -1,14 +1,11 @@
 package me.rerere.rikkahub.ui.pages.chat.phone
 
 import android.content.Intent
-import android.graphics.Bitmap
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,9 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,15 +47,12 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.CheckmarkCircle02
-import me.rerere.hugeicons.stroke.GlobalSearch
-import me.rerere.hugeicons.stroke.Image01
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.ui.context.LocalToaster
-import java.io.ByteArrayOutputStream
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,14 +65,12 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionReadPhoneState
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import org.koin.compose.koinInject
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhoneAutomationSheet(
     assistant: Assistant,
     onUpdateAssistant: (Assistant) -> Unit,
     onDismissRequest: () -> Unit,
-    onAppendPrompt: (String) -> Unit,
-    onAttachScreenshot: (ByteArray) -> Unit,
     onMinimizeWithMiniIndicator: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -414,158 +404,6 @@ fun PhoneAutomationSheet(
                 )
             }
 
-            // Quick Actions
-            Text(
-                text = "Quick Actions",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Inspect Screen
-                ElevatedCard(
-                    onClick = {
-                        val service = PhoneAutomationService.instance
-                        if (service == null) {
-                            toaster.show(
-                                message = "Enable Accessibility service first",
-                                type = ToastType.Warning
-                            )
-                            return@ElevatedCard
-                        }
-                        val inspection = service.inspectScreen()
-                        val prompt = buildString {
-                            appendLine("Current Phone Screen Analysis:")
-                            appendLine("App Package: ${inspection.packageName}")
-                            appendLine("Window: ${inspection.windowTitle}")
-                            appendLine("Interactive Elements (${inspection.interactiveElements.size}):")
-                            inspection.interactiveElements.take(15).forEach { node ->
-                                val label = node.text.ifBlank { node.description }
-                                appendLine("- [${node.className}] \"$label\" (Center: ${node.centerX}, ${node.centerY})")
-                            }
-                            appendLine("\nPlease suggest what actions can be taken on this screen.")
-                        }
-                        onAppendPrompt(prompt)
-                        onDismissRequest()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.GlobalSearch,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.phone_action_inspect_screen),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = stringResource(R.string.phone_action_inspect_screen_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Take Screenshot
-                ElevatedCard(
-                    onClick = {
-                        val service = PhoneAutomationService.instance
-                        if (service == null) {
-                            toaster.show(
-                                message = "Enable Accessibility service first",
-                                type = ToastType.Warning
-                            )
-                            return@ElevatedCard
-                        }
-                        scope.launch {
-                            val bitmap = service.takeScreenshot()
-                            if (bitmap != null) {
-                                val stream = ByteArrayOutputStream()
-                                bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream)
-                                onAttachScreenshot(stream.toByteArray())
-                                onAppendPrompt("Please analyze this phone screenshot and help me.")
-                                onDismissRequest()
-                            } else {
-                                toaster.show(
-                                    message = "Failed to capture screenshot (Android 11+ required)",
-                                    type = ToastType.Error
-                                )
-                            }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Image01,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.phone_action_take_screenshot),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = stringResource(R.string.phone_action_take_screenshot_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Sample Automation Prompts
-            Text(
-                text = "Example Automation Prompts",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            // Clickable whenever phone tools are on and accessibility is allowed
-            val promptsEnabled = hasPhoneTools && isEnabled
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val prompts = listOf(
-                    "Open YouTube and search for relaxing music",
-                    "Open Settings and check battery status",
-                    "Open Google Maps and find coffee shops near me",
-                    "Inspect screen and tap the next button",
-                    "Take a screenshot and summarize what is displayed"
-                )
-                prompts.forEach { promptText ->
-                    SuggestionChip(
-                        onClick = {
-                            onAppendPrompt(promptText)
-                            onDismissRequest()
-                        },
-                        enabled = promptsEnabled,
-                        label = {
-                            Text(
-                                text = promptText,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    )
-                }
-            }
         }
     }
 }
