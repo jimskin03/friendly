@@ -11,7 +11,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/hero-night.jpg" alt="Friendly 2.0 product showcase" width="100%" />
+  <img src="docs/screenshots/hero-features.jpg" alt="Friendly 2.0 product showcase" width="100%" />
 </p>
 
 <p align="center">
