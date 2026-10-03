@@ -618,54 +618,102 @@ private fun FolderRowItem(
 private fun AppsHomeCard(modifier: Modifier = Modifier) {
     val navController = LocalNavController.current
     val settings = LocalSettings.current
-    Surface(
-        onClick = { navController.navigate(Screen.Apps) },
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0x221E293B),
-        border = BorderStroke(1.dp, Color(0x1FFFFFFF)),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    val favorites = if (settings.init) emptyList() else settings.installedWebApps.filter { it.favorite }.take(4)
+    if (favorites.isEmpty()) {
+        Surface(
+            onClick = { navController.navigate(Screen.Apps) },
+            modifier = modifier,
+            shape = RoundedCornerShape(20.dp),
+            color = Color(0x221E293B),
+            border = BorderStroke(1.dp, Color(0x1FFFFFFF)),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(
-                    imageVector = HugeIcons.Grid,
-                    contentDescription = null,
-                    tint = Color(0xFFCBD5E1),
-                    modifier = Modifier.size(18.dp),
-                )
+                AppsHomeTitle()
                 Text(
-                    text = stringResource(R.string.apps_page_title),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White,
-                    maxLines = 1,
+                    text = stringResource(R.string.apps_home_card_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF94A3B8),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = stringResource(R.string.apps_home_card_subtitle),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF94A3B8),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (!settings.init) {
-                settings.installedWebApps.take(4).forEach { app ->
-                    Text(
-                        text = app.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+        }
+    } else {
+        Surface(
+            modifier = modifier,
+            shape = RoundedCornerShape(20.dp),
+            color = Color(0x221E293B),
+            border = BorderStroke(1.dp, Color(0x1FFFFFFF)),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { navController.navigate(Screen.Apps) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AppsHomeTitle()
+                }
+                favorites.forEach { app ->
+                    val label = FolderLabel.entries
+                        .firstOrNull { it.id.equals(app.iconId, ignoreCase = true) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { navController.navigate(Screen.WebApp(app.id.toString())) }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (label != null) {
+                            FolderBadge(
+                                label = label,
+                                size = 28.dp,
+                                iconSize = 14.dp,
+                                shapeRadius = 8.dp,
+                            )
+                        }
+                        Text(
+                            text = app.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AppsHomeTitle() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = HugeIcons.Grid,
+            contentDescription = null,
+            tint = Color(0xFFCBD5E1),
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = stringResource(R.string.apps_page_title),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

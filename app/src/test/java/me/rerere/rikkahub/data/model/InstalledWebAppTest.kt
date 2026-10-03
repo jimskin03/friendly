@@ -1,8 +1,11 @@
 package me.rerere.rikkahub.data.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class InstalledWebAppTest {
     @Test
@@ -46,5 +49,14 @@ class InstalledWebAppTest {
         assertEquals("Plan my day", actions[0].label)
         assertEquals("Brainstorm", actions[3].label)
         assertEquals(HomeActionKind.PROMPT, actions[0].kind)
+    }
+
+    @Test
+    fun `fifth favorite is rejected`() {
+        val apps = List(4) { InstalledWebApp(id = Uuid.random(), favorite = true) } +
+            InstalledWebApp(name = "Extra")
+        assertFalse(canFavoriteWebApp(apps, apps.last().id, favorite = true))
+        assertTrue(canFavoriteWebApp(apps, apps.first().id, favorite = true))
+        assertTrue(canFavoriteWebApp(apps, apps.last().id, favorite = false))
     }
 }

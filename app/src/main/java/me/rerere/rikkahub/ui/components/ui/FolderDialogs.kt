@@ -75,7 +75,7 @@ fun FolderBadge(
 
 @Composable
 fun FolderLabelPicker(
-    selected: FolderLabel,
+    selected: FolderLabel?,
     onSelect: (FolderLabel) -> Unit,
     modifier: Modifier = Modifier,
 ) {

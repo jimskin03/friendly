@@ -5,6 +5,15 @@ import java.net.URI
 import kotlin.uuid.Uuid
 
 @Serializable
+enum class WebAppLaunchMode {
+    COMPACT,
+    FULLSIZE,
+    FULLSCREEN,
+}
+
+const val MAX_FAVORITE_WEB_APPS = 4
+
+@Serializable
 data class InstalledWebApp(
     val id: Uuid = Uuid.random(),
     val name: String = "",
@@ -12,7 +21,18 @@ data class InstalledWebApp(
     val createdAt: Long = 0L,
     val description: String = "",
     val category: String = "",
+    val launchMode: WebAppLaunchMode = WebAppLaunchMode.COMPACT,
+    /** FolderLabel id. Empty until the user assigns one of the folder icons. */
+    val iconId: String = "",
+    val favorite: Boolean = false,
 )
+
+fun canFavoriteWebApp(apps: List<InstalledWebApp>, id: Uuid, favorite: Boolean): Boolean {
+    if (!favorite) return true
+    val current = apps.firstOrNull { it.id == id } ?: return false
+    if (current.favorite) return true
+    return apps.count { it.favorite } < MAX_FAVORITE_WEB_APPS
+}
 
 private val FINANCE_APP_ID = Uuid.parse("6f0c1a2e-7b14-4d21-9c55-1a0e7b2d4f61")
 private val BOOKMARKS_APP_ID = Uuid.parse("2c9e5b71-0a34-4f88-b6d1-7e4a9c0d3b52")

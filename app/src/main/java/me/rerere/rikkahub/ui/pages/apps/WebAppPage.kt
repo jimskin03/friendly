@@ -1,6 +1,17 @@
 package me.rerere.rikkahub.ui.pages.apps
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import me.rerere.hugeicons.stroke.ArrowLeft01
+import me.rerere.rikkahub.data.model.InstalledWebApp
+import me.rerere.rikkahub.data.model.WebAppLaunchMode
+import me.rerere.rikkahub.ui.components.webview.WebViewState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -90,6 +101,45 @@ fun WebAppPage(
             }
         }
     } else {
+        when (app.launchMode) {
+            WebAppLaunchMode.COMPACT -> CompactWebApp(
+                app = app,
+                state = state,
+                showMenu = showMenu,
+                onShowMenu = { showMenu = it },
+                onRemove = { showRemoveConfirm = true },
+            )
+            WebAppLaunchMode.FULLSIZE -> FullsizeWebApp(state = state)
+            WebAppLaunchMode.FULLSCREEN -> FullscreenWebApp(state = state)
+        }
+        RikkaConfirmDialog(
+            show = showRemoveConfirm,
+            title = stringResource(R.string.apps_page_remove_title),
+            confirmText = stringResource(R.string.apps_page_remove),
+            dismissText = stringResource(R.string.cancel),
+            onConfirm = {
+                showRemoveConfirm = false
+                val removingId = app.id
+                scope.launch {
+                    vm.removeApp(removingId)
+                    navController.popBackStack()
+                }
+            },
+            onDismiss = { showRemoveConfirm = false },
+        ) {
+            Text(stringResource(R.string.apps_page_remove_message, app.name))
+        }
+    }
+}
+
+@Composable
+private fun CompactWebApp(
+    app: InstalledWebApp,
+    state: WebViewState,
+    showMenu: Boolean,
+    onShowMenu: (Boolean) -> Unit,
+    onRemove: () -> Unit,
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -103,21 +153,21 @@ fun WebAppPage(
                 },
                 navigationIcon = { BackButton() },
                 actions = {
-                    IconButton(onClick = { showMenu = true }) {
+                    IconButton(onClick = { onShowMenu(true) }) {
                         Icon(
                             HugeIcons.MoreVertical,
                             contentDescription = stringResource(R.string.apps_page_remove),
                         )
                         DropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
+                            onDismissRequest = { onShowMenu(false) },
                         ) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.apps_page_remove)) },
                                 leadingIcon = { Icon(HugeIcons.Delete01, contentDescription = null) },
                                 onClick = {
-                                    showMenu = false
-                                    showRemoveConfirm = true
+                                    onShowMenu(false)
+                                    onRemove()
                                 },
                             )
                         }
@@ -133,23 +183,43 @@ fun WebAppPage(
                 .padding(innerPadding),
         )
     }
+}
 
-    RikkaConfirmDialog(
-        show = showRemoveConfirm,
-        title = stringResource(R.string.apps_page_remove_title),
-        confirmText = stringResource(R.string.apps_page_remove),
-        dismissText = stringResource(R.string.cancel),
-        onConfirm = {
-            showRemoveConfirm = false
-            val removingId = app.id
-            scope.launch {
-                vm.removeApp(removingId)
-                navController.popBackStack()
-            }
-        },
-        onDismiss = { showRemoveConfirm = false },
-    ) {
-        Text(stringResource(R.string.apps_page_remove_message, app.name))
+@Composable
+private fun FullsizeWebApp(state: WebViewState) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        BackButton(modifier = Modifier.padding(8.dp))
+        WebView(
+            state = state,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxSize(),
+        )
     }
+}
+
+@Composable
+private fun FullscreenWebApp(state: WebViewState) {
+    val navController = LocalNavController.current
+    Box(modifier = Modifier.fillMaxSize()) {
+        WebView(
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+        )
+        IconButton(
+            onClick = { navController.popBackStack() },
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(8.dp)
+                .align(Alignment.TopStart)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.45f)),
+        ) {
+            Icon(
+                HugeIcons.ArrowLeft01,
+                contentDescription = stringResource(R.string.back),
+                tint = Color.White,
+            )
+        }
     }
 }
