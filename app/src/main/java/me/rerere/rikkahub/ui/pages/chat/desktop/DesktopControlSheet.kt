@@ -1093,11 +1093,6 @@ fun DesktopControlSheet(
                             contentDescription = stringResource(R.string.desktop_action_terminal),
                             onClick = { launchDesktopApp("terminal") },
                         )
-                        FrostedIconButton(
-                            icon = HugeIcons.Cancel01,
-                            contentDescription = stringResource(R.string.desktop_action_close_window),
-                            onClick = { closeFocusedWindow() },
-                        )
                     }
                 }
             }
