@@ -411,7 +411,7 @@ internal fun buildPlaceCallTool(phoneCallController: PhoneCallController): Tool 
     name = "place_call",
     description = """
         Place a cellular phone call to a phone number using the system Phone app.
-        Requires the Phone call access setting and CALL_PHONE. Does not call WhatsApp or other chat apps.
+        Uses the system Phone app and CALL_PHONE. Does not call WhatsApp or other chat apps.
         Refuses emergency numbers. Voice speech-to-text stays on during the call.
     """.trimIndent().replace("\n", " "),
     parameters = {

@@ -834,8 +834,8 @@ data class DisplaySetting(
     val volumeKeyScrollRatio: Float = 1.0f,
     /** Show ongoing notification (+ optional overlay bubble) while Phone Automation is active and Friendly is backgrounded. Default ON. */
     val enablePhoneAutomationMiniIndicator: Boolean = true,
-    /** Opt-in cellular place/end/state tools. Default off. Does not include WhatsApp. */
-    val enablePhoneCallAccess: Boolean = false,
+    /** Cellular place/end/state tools are always on. Kept so older settings still decode. Does not include WhatsApp. */
+    val enablePhoneCallAccess: Boolean = true,
     /**
      * When on, a ringing cellular call tries Telecom accept and an accessibility Answer tap.
      * Not reliable on Android 10+ unless this app is the default dialer. Default off.

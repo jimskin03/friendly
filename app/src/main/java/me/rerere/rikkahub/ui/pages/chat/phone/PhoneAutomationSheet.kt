@@ -31,7 +31,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dokar.sonner.ToastType
-import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert02
 import me.rerere.hugeicons.stroke.Cancel01
@@ -54,9 +52,6 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.ui.context.LocalToaster
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.phone.PhoneCallController
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionAnswerPhoneCalls
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCallPhone
@@ -75,11 +70,7 @@ fun PhoneAutomationSheet(
 ) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
-    val scope = rememberCoroutineScope()
-    val settingsStore = koinInject<SettingsStore>()
     val phoneCallController = koinInject<PhoneCallController>()
-    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
-    val callAccess = settings.displaySetting.enablePhoneCallAccess
     val callPermissions = rememberPermissionState(
         permissions = setOf(
             PermissionCallPhone,
@@ -90,6 +81,9 @@ fun PhoneAutomationSheet(
     PermissionManager(callPermissions)
     LaunchedEffect(callPermissions.allPermissionsGranted) {
         phoneCallController.syncListener()
+        if (!callPermissions.allRequiredPermissionsGranted) {
+            callPermissions.requestPermissions()
+        }
     }
 
     val isRunning = PhoneAutomationService.isRunning()
@@ -285,68 +279,6 @@ fun PhoneAutomationSheet(
             }
 
 
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.phone_call_access_title),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Text(
-                                text = stringResource(R.string.phone_call_access_sheet_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Switch(
-                            checked = callAccess,
-                            onCheckedChange = { enabled ->
-                                scope.launch {
-                                    settingsStore.update { current ->
-                                        current.copy(
-                                            displaySetting = current.displaySetting.copy(
-                                                enablePhoneCallAccess = enabled,
-                                            )
-                                        )
-                                    }
-                                }
-                                if (enabled && !callPermissions.allRequiredPermissionsGranted) {
-                                    callPermissions.requestPermissions()
-                                }
-                                phoneCallController.syncListener()
-                            },
-                        )
-                    }
-                    if (!callPermissions.allRequiredPermissionsGranted) {
-                        Text(
-                            text = stringResource(R.string.phone_call_permissions_missing),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        OutlinedButton(
-                            onClick = { callPermissions.requestPermissions() },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.phone_call_grant_permissions))
-                        }
-                    }
-                }
-            }
 
             // Explicit mini indicator — never the primary phone-icon action
             if (onMinimizeWithMiniIndicator != null) {

@@ -33,13 +33,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.service.phone.PhoneCallController
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionAnswerPhoneCalls
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionCallPhone
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionReadPhoneState
-import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
-import org.koin.compose.koinInject
 import me.rerere.rikkahub.data.datastore.BackgroundEffectType
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -54,15 +47,6 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val phoneCallController = koinInject<PhoneCallController>()
-    val callPermissions = rememberPermissionState(
-        permissions = setOf(
-            PermissionCallPhone,
-            PermissionReadPhoneState,
-            PermissionAnswerPhoneCalls,
-        )
-    )
-    PermissionManager(callPermissions)
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
     var ttsPlaybackSpeed by remember(settings.defaultTTSPlaybackSpeed) {
         mutableFloatStateOf(settings.defaultTTSPlaybackSpeed)
@@ -469,24 +453,6 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                                     updateDisplaySetting(
                                         displaySetting.copy(enablePhoneAutomationMiniIndicator = enabled)
                                     )
-                                }
-                            )
-                        },
-                    )
-                    item(
-                        headlineContent = { Text(stringResource(R.string.phone_call_access_title)) },
-                        supportingContent = { Text(stringResource(R.string.phone_call_access_desc)) },
-                        trailingContent = {
-                            Switch(
-                                checked = displaySetting.enablePhoneCallAccess,
-                                onCheckedChange = { enabled ->
-                                    updateDisplaySetting(
-                                        displaySetting.copy(enablePhoneCallAccess = enabled)
-                                    )
-                                    if (enabled && !callPermissions.allRequiredPermissionsGranted) {
-                                        callPermissions.requestPermissions()
-                                    }
-                                    phoneCallController.syncListener()
                                 }
                             )
                         },

@@ -100,7 +100,6 @@ class PhoneCallController(
     }
 
     fun syncListener() {
-        val settings = settingsStore.settingsFlow.value.displaySetting
         val readGranted = hasPermission(Manifest.permission.READ_PHONE_STATE)
         publishSnapshot(status = _snapshot.value.status, number = _snapshot.value.number)
         if (!readGranted) {
@@ -121,7 +120,7 @@ class PhoneCallController(
                 telephony.listen(legacyListener, PhoneStateListener.LISTEN_CALL_STATE)
             }
             listenerRegistered = true
-            Log.i(TAG, "Telephony call-state listener registered (callAccess=${settings.enablePhoneCallAccess})")
+            Log.i(TAG, "Telephony call-state listener registered")
         } catch (e: SecurityException) {
             Log.w(TAG, "Unable to register telephony listener", e)
             listenerRegistered = false
@@ -129,13 +128,6 @@ class PhoneCallController(
     }
 
     suspend fun placeCall(rawNumber: String): PhoneCallActionResult = withContext(Dispatchers.Main) {
-        if (!callAccessEnabled()) {
-            return@withContext PhoneCallActionResult(
-                success = false,
-                action = "place_call",
-                detail = "Phone call access is off. Enable it under Phone Automation or Preferences.",
-            )
-        }
         when (val parsed = parseNumber(rawNumber)) {
             is ParsedNumber.Emergency -> PhoneCallActionResult(
                 success = false,
@@ -189,13 +181,6 @@ class PhoneCallController(
     }
 
     suspend fun endCall(): PhoneCallActionResult = withContext(Dispatchers.Main) {
-        if (!callAccessEnabled()) {
-            return@withContext PhoneCallActionResult(
-                success = false,
-                action = "end_call",
-                detail = "Phone call access is off. Enable it under Phone Automation or Preferences.",
-            )
-        }
         val status = _snapshot.value.status
         if (status == CellularCallStatus.Idle) {
             return@withContext PhoneCallActionResult(
@@ -463,9 +448,8 @@ class PhoneCallController(
     }
 
     private fun publishSnapshot(status: CellularCallStatus, number: String?) {
-        val settings = settingsStore.settingsFlow.value.displaySetting
         _snapshot.value = CellularCallSnapshot(
-            accessEnabled = settings.enablePhoneCallAccess,
+            accessEnabled = true,
             autoAnswerAttempt = false,
             status = status,
             number = number,
@@ -478,9 +462,6 @@ class PhoneCallController(
             limitation = LIMITATION,
         )
     }
-
-    private fun callAccessEnabled(): Boolean =
-        settingsStore.settingsFlow.value.displaySetting.enablePhoneCallAccess
 
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED

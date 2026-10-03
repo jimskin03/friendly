@@ -39,11 +39,6 @@
   <string name="phone_mini_indicator_disabled_toast">Enable Phone Automation mini indicator in Preferences first</string>
   <string name="phone_mini_indicator_minimize_button">Minimize to background</string>
   <string name="phone_mini_indicator_minimize_hint">Keeps a floating rabbit status indicator while Friendly is in the background. You can also long-press the phone icon.</string>
-  <string name="phone_call_access_title">Phone call access</string>
-  <string name="phone_call_access_desc">Opt-in cellular calls for this assistant: place a call, read call state, and try to hang up. WhatsApp is not included.</string>
-  <string name="phone_call_access_sheet_desc">Lets the assistant place cellular calls with the system Phone app, read idle/ringing/off-hook, and try to hang up. Requires CALL_PHONE and READ_PHONE_STATE. Android only allows silent answer or hang-up for the default dialer, so Friendly opens the dialer or taps the phone UI when accessibility is on. Voice listening stays on during the call.</string>
-  <string name="phone_call_grant_permissions">Grant call permissions</string>
-  <string name="phone_call_permissions_missing">Call permissions are not fully granted yet.</string>
   <string name="phone_call_incoming_title">Incoming call</string>
   <string name="phone_call_incoming_body">%1$s — open the phone app to answer. Silent auto-answer is not reliable.</string>
   <string name="phone_call_number_hidden">Number hidden by Android</string>
@@ -51,7 +46,7 @@
   <string name="phone_call_place_notification_title">Tap to continue call</string>
   <string name="phone_call_place_notification_body">Android blocked opening the dialer for %1$s. Tap to continue.</string>
   <string name="permission_call_phone">Phone calls</string>
-  <string name="permission_call_phone_desc">Allow Friendly to place cellular calls when you turn on Phone call access</string>
+  <string name="permission_call_phone_desc">Allow Friendly to place cellular calls</string>
   <string name="permission_read_phone_state">Phone state</string>
   <string name="permission_read_phone_state_desc">Allow Friendly to see whether a cellular call is ringing, active, or idle</string>
   <string name="permission_answer_phone_calls">Answer calls</string>
