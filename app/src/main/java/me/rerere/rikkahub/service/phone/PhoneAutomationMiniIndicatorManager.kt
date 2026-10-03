@@ -12,6 +12,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -510,7 +511,6 @@ private fun MiniIndicatorBubble(
             )
         )
     }
-    val markTint = if (dark) Color.White.copy(alpha = 0.92f) else Color(0xFF1C1C1E)
     val ledRing = if (dark) Color(0xFF1C1C1E) else Color.White
     val running = status == PhoneAutomationWorkStatus.Running
     val transition = rememberInfiniteTransition(label = "mini_led_pulse")
@@ -570,11 +570,13 @@ private fun MiniIndicatorBubble(
                     )
                 ),
         )
-        Icon(
-            painter = painterResource(R.drawable.small_icon),
+        Image(
+            painter = painterResource(R.drawable.ic_brand_neon),
             contentDescription = null,
-            tint = markTint,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp)
+                .clip(CircleShape),
         )
         // Polished status LED (Idle green / Running primary+pulse / Error)
         Box(

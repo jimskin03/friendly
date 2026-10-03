@@ -370,12 +370,6 @@ class PhoneCallController(
             answerAttemptedForRing = false
             if (callAccessEnabled()) {
                 showIncomingNotification(shownNumber)
-                if (settingsStore.settingsFlow.value.displaySetting.enablePhoneCallAutoAnswerAttempt &&
-                    !answerAttemptedForRing
-                ) {
-                    answerAttemptedForRing = true
-                    appScope.launch(Dispatchers.Main) { attemptAnswer() }
-                }
             }
         } else if (status != CellularCallStatus.Ringing) {
             NotificationUtil.cancel(app, INCOMING_NOTIFICATION_ID)
@@ -387,9 +381,6 @@ class PhoneCallController(
         val who = number ?: app.getString(R.string.phone_call_number_hidden)
         val openDialerIntent = Intent(app, PhoneCallActionReceiver::class.java).apply {
             action = PhoneCallActionReceiver.ACTION_OPEN_DIALER
-        }
-        val answerIntent = Intent(app, PhoneCallActionReceiver::class.java).apply {
-            action = PhoneCallActionReceiver.ACTION_ANSWER
         }
         val notification = NotificationCompat.Builder(app, PHONE_CALL_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_rikkahub)
@@ -403,11 +394,6 @@ class PhoneCallController(
                 0,
                 app.getString(R.string.phone_call_action_open_dialer),
                 broadcastPendingIntent(openDialerIntent, REQUEST_OPEN_DIALER),
-            )
-            .addAction(
-                0,
-                app.getString(R.string.phone_call_action_attempt_answer),
-                broadcastPendingIntent(answerIntent, REQUEST_ANSWER),
             )
             .build()
         if (!NotificationUtil.hasNotificationPermission(app)) {
@@ -480,7 +466,7 @@ class PhoneCallController(
         val settings = settingsStore.settingsFlow.value.displaySetting
         _snapshot.value = CellularCallSnapshot(
             accessEnabled = settings.enablePhoneCallAccess,
-            autoAnswerAttempt = settings.enablePhoneCallAutoAnswerAttempt,
+            autoAnswerAttempt = false,
             status = status,
             number = number,
             callPhoneGranted = hasPermission(Manifest.permission.CALL_PHONE),

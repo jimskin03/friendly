@@ -80,7 +80,6 @@ fun PhoneAutomationSheet(
     val phoneCallController = koinInject<PhoneCallController>()
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val callAccess = settings.displaySetting.enablePhoneCallAccess
-    val autoAnswer = settings.displaySetting.enablePhoneCallAutoAnswerAttempt
     val callPermissions = rememberPermissionState(
         permissions = setOf(
             PermissionCallPhone,
@@ -346,40 +345,6 @@ fun PhoneAutomationSheet(
                             Text(stringResource(R.string.phone_call_grant_permissions))
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.phone_call_auto_answer_title),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Text(
-                                text = stringResource(R.string.phone_call_auto_answer_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Switch(
-                            checked = autoAnswer,
-                            enabled = callAccess,
-                            onCheckedChange = { enabled ->
-                                scope.launch {
-                                    settingsStore.update { current ->
-                                        current.copy(
-                                            displaySetting = current.displaySetting.copy(
-                                                enablePhoneCallAutoAnswerAttempt = enabled,
-                                            )
-                                        )
-                                    }
-                                }
-                            },
-                        )
-                    }
                 }
             }
 
@@ -397,11 +362,6 @@ fun PhoneAutomationSheet(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.phone_mini_indicator_minimize_button))
                 }
-                Text(
-                    text = stringResource(R.string.phone_mini_indicator_minimize_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
         }
