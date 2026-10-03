@@ -1,6 +1,16 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.alpha
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.service.ChatService
+import org.koin.compose.koinInject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -283,6 +293,25 @@ private fun ShortcutCards(
     onOpenSearch: () -> Unit,
     onOpenActivity: () -> Unit,
 ) {
+    val chatService = koinInject<ChatService>()
+    val runningIds by chatService.runningConversationIds().collectAsStateWithLifecycle(emptySet())
+    val queryRunning = runningIds.isNotEmpty()
+    val flash = rememberInfiniteTransition(label = "activityFlash")
+    val flashAlpha by flash.animateFloat(
+        initialValue = 1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 4000
+                1f at 0
+                1f at 2600
+                0.15f at 3200
+                1f at 4000
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "activityFlashAlpha",
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -364,7 +393,9 @@ private fun ShortcutCards(
                         imageVector = HugeIcons.Zap,
                         contentDescription = null,
                         tint = Color(0xFF818CF8),
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .alpha(if (queryRunning) flashAlpha else 1f),
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {

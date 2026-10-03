@@ -5,6 +5,12 @@ import me.rerere.hugeicons.stroke.Pin
 import me.rerere.hugeicons.stroke.PinOff
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Delete01
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -42,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,7 +65,9 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
+import me.rerere.rikkahub.service.ChatService
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @Composable
 fun HistoryPage(vm: HistoryVM = koinViewModel()) {
@@ -66,6 +77,8 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
     var showDeleteAllDialog by remember { mutableStateOf(false) }
 
     val conversations by vm.conversations.collectAsStateWithLifecycle()
+    val chatService = koinInject<ChatService>()
+    val runningIds by chatService.runningConversationIds().collectAsStateWithLifecycle(emptySet())
 
     Scaffold(
         topBar = {
@@ -110,6 +123,7 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
             items(conversations, key = { it.id }) { conversation ->
                 SwipeableConversationItem(
                     conversation = conversation,
+                    running = conversation.id in runningIds,
                     onClick = {
                         navigateToChatPage(navController, conversation.id)
                     },
@@ -167,6 +181,7 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
 private fun SwipeableConversationItem(
     conversation: Conversation,
     modifier: Modifier = Modifier,
+    running: Boolean = false,
     onDelete: () -> Unit = {},
     onTogglePin: () -> Unit = {},
     onClick: () -> Unit = {},
@@ -214,6 +229,7 @@ private fun SwipeableConversationItem(
     ) {
         ConversationItem(
             conversation = conversation,
+            running = running,
             onTogglePin = onTogglePin,
             onClick = onClick
         )
@@ -224,6 +240,7 @@ private fun SwipeableConversationItem(
 private fun ConversationItem(
     conversation: Conversation,
     modifier: Modifier = Modifier,
+    running: Boolean = false,
     onTogglePin: () -> Unit = {},
     onClick: () -> Unit = {},
 ) {
@@ -239,6 +256,9 @@ private fun ConversationItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    if (running) {
+                        RunningDot()
+                    }
                     if (conversation.isPinned) {
                         Icon(
                             imageVector = HugeIcons.Pin,
@@ -274,3 +294,24 @@ private fun ConversationItem(
         )
     }
 }
+
+@Composable
+private fun RunningDot() {
+    val transition = rememberInfiniteTransition(label = "runningQuery")
+    val alpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "runningQueryAlpha",
+    )
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF818CF8).copy(alpha = alpha)),
+    )
+}
+

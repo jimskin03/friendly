@@ -20,7 +20,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -1077,6 +1079,11 @@ class ChatService(
     fun hasGeneratingConversationInFolder(folderId: Uuid): Boolean {
         return sessionManager.snapshot().any { it.isGenerating && it.state.value.folderId == folderId }
     }
+
+    fun runningConversationIds(): Flow<Set<Uuid>> =
+        sessionManager.getConversationJobs().map { jobs ->
+            jobs.filterValues { it?.isActive == true }.keys
+        }.distinctUntilChanged()
 
 
     suspend fun deleteFolder(folderId: Uuid) {
