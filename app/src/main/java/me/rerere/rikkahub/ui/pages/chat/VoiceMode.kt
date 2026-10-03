@@ -32,6 +32,7 @@ import me.rerere.asr.providers.WhisperASRController
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.service.VoiceCaptureForegroundService
 import me.rerere.rikkahub.service.phone.PhoneAutomationMiniIndicatorManager
+import me.rerere.rikkahub.service.phone.PhoneCallSignals
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
@@ -126,7 +127,8 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
             else -> voice.start(
                 createAsr = { createVoiceAsr(context, client, checkNotNull(provider)) },
                 speak = if (settings.displaySetting.replyWithVoice && tts.isAvailable.value) {
-                    { reply ->
+                    speak@{ reply ->
+                        if (PhoneCallSignals.shouldYieldMic()) return@speak
                         var text = reply
                         if (settings.displaySetting.ttsOnlyReadQuoted) {
                             text = text.extractQuotedContentAsText() ?: text
@@ -203,8 +205,18 @@ private fun createVoiceAsr(context: Context, client: OkHttpClient, provider: ASR
         .build()
     return object : ASRController by delegate {
         override fun start(onTranscriptChange: (String) -> Unit) {
-            check(audioManager.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                "Unable to acquire audio focus for the microphone. Try again later."
+            if (PhoneCallSignals.shouldYieldMic()) {
+                throw IllegalStateException(PhoneCallSignals.CALL_AUDIO_HELD)
+            }
+            val granted = audioManager.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            if (!granted) {
+                throw IllegalStateException(
+                    if (PhoneCallSignals.shouldYieldMic()) {
+                        PhoneCallSignals.CALL_AUDIO_HELD
+                    } else {
+                        "Unable to acquire audio focus for the microphone. Try again later."
+                    }
+                )
             }
             delegate.start(onTranscriptChange)
         }

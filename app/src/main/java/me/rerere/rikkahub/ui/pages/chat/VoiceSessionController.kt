@@ -8,7 +8,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,8 +17,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
 import me.rerere.asr.ASRController
+import me.rerere.rikkahub.service.phone.PhoneCallSignals
 import me.rerere.asr.ASRStatus
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.MessageQueuePausedException
@@ -27,7 +29,7 @@ import me.rerere.rikkahub.service.MessageQueuePausedException
 private const val SPEECH_THRESHOLD = 0.4f
 private const val CLIENT_SILENCE_MS = 800L
 
-enum class VoicePhase { Off, Connecting, Listening, Transcribing, Speaking, Error }
+enum class VoicePhase { Off, Connecting, Listening, Transcribing, Speaking, CallHold, Error }
 
 data class VoiceSessionState(
     val phase: VoicePhase = VoicePhase.Off,
@@ -112,6 +114,15 @@ class VoiceSessionController(
 
         try {
             while (isActive) {
+                // Cellular off-hook owns the mic. Keep this session (and the mini indicator) alive.
+                if (PhoneCallSignals.micHold.value) {
+                    capture?.cancelAndJoin()
+                    capture = null
+                    asr = null
+                    mutableState.update { it.copy(phase = VoicePhase.CallHold) }
+                    PhoneCallSignals.micHold.first { !it }
+                    continue
+                }
                 // Finish any sentence already in progress before giving TTS the microphone pause.
                 if (speak != null && replies.isNotEmpty() && !turnOpen(asr)) {
                     capture?.cancelAndJoin()
@@ -167,8 +178,48 @@ class VoiceSessionController(
         return (snapshot.amplitudes.lastOrNull() ?: 0f) >= SPEECH_THRESHOLD
     }
 
+    private class CallMicYield : Exception()
+
     private suspend fun listen(asr: ASRController): String {
-        return if (serverVad) listenServer(asr) else listenClient(asr)
+        if (PhoneCallSignals.shouldYieldMic()) {
+            mutableState.update { it.copy(phase = VoicePhase.CallHold) }
+            PhoneCallSignals.micHold.first { !it }
+            return ""
+        }
+        return try {
+            raceCallHold { if (serverVad) listenServer(asr) else listenClient(asr) }
+        } catch (e: CallMicYield) {
+            mutableState.update { it.copy(phase = VoicePhase.CallHold) }
+            PhoneCallSignals.micHold.first { !it }
+            ""
+        } catch (e: IllegalStateException) {
+            if (!isCallAudioYield(e)) throw e
+            mutableState.update { it.copy(phase = VoicePhase.CallHold) }
+            PhoneCallSignals.micHold.first { !it }
+            ""
+        }
+    }
+
+    private suspend fun <T> raceCallHold(block: suspend () -> T): T = coroutineScope {
+        val work = async { block() }
+        val watch = launch {
+            PhoneCallSignals.micHold.first { it }
+            work.cancel()
+        }
+        try {
+            work.await()
+        } catch (e: CancellationException) {
+            if (PhoneCallSignals.shouldYieldMic()) throw CallMicYield()
+            throw e
+        } finally {
+            watch.cancel()
+        }
+    }
+
+    private fun isCallAudioYield(error: Throwable): Boolean {
+        val message = error.message.orEmpty()
+        return message.contains(PhoneCallSignals.CALL_AUDIO_HELD) ||
+            (PhoneCallSignals.shouldYieldMic() && message.contains("audio focus", ignoreCase = true))
     }
 
     private suspend fun listenClient(asr: ASRController): String {

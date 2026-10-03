@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
+import me.rerere.rikkahub.service.phone.PhoneCallController
 import java.io.ByteArrayOutputStream
 
 internal fun buildPhoneInspectScreenTool(): Tool = Tool(
@@ -404,6 +405,91 @@ internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
     }
 )
 
+
+
+internal fun buildPlaceCallTool(phoneCallController: PhoneCallController): Tool = Tool(
+    name = "place_call",
+    description = """
+        Place a cellular phone call to a phone number using the system Phone app.
+        Requires the Phone call access setting and CALL_PHONE. Does not call WhatsApp or other chat apps.
+        Refuses emergency numbers. While the call is off-hook, voice speech-to-text pauses and resumes when idle.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("number", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Phone number to call, digits with optional leading +")
+                })
+            },
+            required = listOf("number")
+        )
+    },
+    execute = { args ->
+        val number = args.jsonObject["number"]?.jsonPrimitive?.contentOrNull ?: error("number is required")
+        val result = phoneCallController.placeCall(number)
+        listOf(UIMessagePart.Text(callActionJson(result)))
+    }
+)
+
+internal fun buildEndCallTool(phoneCallController: PhoneCallController): Tool = Tool(
+    name = "end_call",
+    description = """
+        Try to hang up the current cellular call. Silent hang-up usually fails unless this app is the default dialer.
+        Falls back to tapping End in the phone UI via accessibility, then opens the dialer. Not for WhatsApp.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {}, required = emptyList())
+    },
+    execute = {
+        val result = phoneCallController.endCall()
+        listOf(UIMessagePart.Text(callActionJson(result)))
+    }
+)
+
+internal fun buildReadCallStateTool(phoneCallController: PhoneCallController): Tool = Tool(
+    name = "read_call_state",
+    description = """
+        Read the cellular call state (idle, ringing, offhook) and whether call permissions are granted.
+        The phone number is often hidden by Android. Does not report WhatsApp or other VoIP calls.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {}, required = emptyList())
+    },
+    execute = {
+        val snap = phoneCallController.currentSnapshot()
+        val payload = buildJsonObject {
+            put("access_enabled", snap.accessEnabled)
+            put("auto_answer_attempt", snap.autoAnswerAttempt)
+            put("status", snap.status.name.lowercase())
+            if (!snap.number.isNullOrBlank()) put("number", snap.number)
+            put("call_phone_granted", snap.callPhoneGranted)
+            put("read_phone_state_granted", snap.readPhoneStateGranted)
+            put("answer_phone_calls_granted", snap.answerPhoneCallsGranted)
+            put("accessibility_active", snap.accessibilityActive)
+            put("silent_answer_reliable", snap.silentAnswerReliable)
+            put("silent_hangup_reliable", snap.silentHangupReliable)
+            put("voice_stt", "Mini-indicator voice mode stays running. STT pauses only while the cellular call is off-hook, then resumes.")
+            put("limitation", snap.limitation)
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+private fun callActionJson(result: me.rerere.rikkahub.service.phone.PhoneCallActionResult): String {
+    return buildJsonObject {
+        put("success", result.success)
+        put("action", result.action)
+        put("detail", result.detail)
+        if (result.mode != null) put("mode", result.mode)
+        if (result.attempts.isNotEmpty()) {
+            put("attempts", buildJsonArray { result.attempts.forEach { add(it) } })
+        }
+        put("whatsapp", "not_supported")
+        put("silent_answer_reliable", false)
+        put("silent_hangup_reliable", false)
+    }.toString()
+}
 
 internal fun Tool.withPhoneAutomationTracking(): Tool {
     val originalExecute = execute

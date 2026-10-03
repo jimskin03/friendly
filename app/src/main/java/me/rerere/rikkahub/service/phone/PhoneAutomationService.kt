@@ -51,6 +51,10 @@ data class ScreenInspectionResult(
 )
 
 
+enum class PhoneCallUiAction { Answer, End }
+
+data class CallControlPoint(val x: Float, val y: Float)
+
 enum class PhoneAutomationWorkStatus {
     Idle,
     Running,
@@ -257,6 +261,72 @@ class PhoneAutomationService : AccessibilityService() {
             else -> return false
         }
         return performGlobalAction(globalAction)
+    }
+
+    /**
+     * Best-effort tap of an in-call Answer / End control. Returns false when no
+     * matching visible control is found. Not reliable across OEM dialers.
+     */
+    fun performCallUiAction(action: PhoneCallUiAction): Boolean {
+        val target = findCallControlNode(action) ?: return false
+        if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        var parent = target.parent
+        while (parent != null) {
+            if (parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
+            parent = parent.parent
+        }
+        return false
+    }
+
+    fun findCallControl(action: PhoneCallUiAction): CallControlPoint? {
+        val target = findCallControlNode(action) ?: return null
+        val rect = Rect()
+        target.getBoundsInScreen(rect)
+        if (rect.width() <= 0 || rect.height() <= 0) return null
+        return CallControlPoint(rect.centerX().toFloat(), rect.centerY().toFloat())
+    }
+
+    private fun findCallControlNode(action: PhoneCallUiAction): AccessibilityNodeInfo? {
+        val labels = when (action) {
+            PhoneCallUiAction.Answer -> listOf("answer", "accept", "接听", "接聽", "jawab")
+            PhoneCallUiAction.End -> listOf(
+                "end call", "endcall", "hang up", "hangup", "disconnect",
+                "挂断", "掛斷", "结束通话", "結束通話",
+            )
+        }
+        val idHints = when (action) {
+            PhoneCallUiAction.Answer -> listOf("answer", "accept")
+            PhoneCallUiAction.End -> listOf("end_call", "endcall", "endbutton", "hangup", "disconnect")
+        }
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        rootInActiveWindow?.let { roots.add(it) }
+        windows?.forEach { window -> window.root?.let { roots.add(it) } }
+        for (root in roots) {
+            findMatchingCallNode(root, labels, idHints)?.let { return it }
+        }
+        return null
+    }
+
+    private fun findMatchingCallNode(
+        node: AccessibilityNodeInfo?,
+        labels: List<String>,
+        idHints: List<String>,
+    ): AccessibilityNodeInfo? {
+        if (node == null || !node.isVisibleToUser) return null
+        val text = node.text?.toString().orEmpty().trim().lowercase()
+        val desc = node.contentDescription?.toString().orEmpty().trim().lowercase()
+        val viewId = node.viewIdResourceName.orEmpty().lowercase()
+        val labelHit = labels.any { label ->
+            text == label || desc == label || text.contains(label) || desc.contains(label)
+        }
+        val idHit = idHints.any { hint -> viewId.contains(hint) }
+        if ((labelHit || idHit) && (node.isClickable || node.isEnabled)) return node
+        for (i in 0 until node.childCount) {
+            findMatchingCallNode(node.getChild(i), labels, idHints)?.let { return it }
+        }
+        return null
     }
 
     /**

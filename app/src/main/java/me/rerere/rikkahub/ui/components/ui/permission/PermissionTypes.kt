@@ -71,3 +71,25 @@ val PermissionLocalNetwork = PermissionInfo(
     usage = { Text(stringResource(R.string.permission_local_network_desc)) },
     required = true
 )
+
+val PermissionCallPhone = PermissionInfo(
+    permission = Manifest.permission.CALL_PHONE,
+    displayName = { Text(stringResource(R.string.permission_call_phone)) },
+    usage = { Text(stringResource(R.string.permission_call_phone_desc)) },
+    required = true
+)
+
+val PermissionReadPhoneState = PermissionInfo(
+    permission = Manifest.permission.READ_PHONE_STATE,
+    displayName = { Text(stringResource(R.string.permission_read_phone_state)) },
+    usage = { Text(stringResource(R.string.permission_read_phone_state_desc)) },
+    required = true
+)
+
+val PermissionAnswerPhoneCalls = PermissionInfo(
+    permission = Manifest.permission.ANSWER_PHONE_CALLS,
+    displayName = { Text(stringResource(R.string.permission_answer_phone_calls)) },
+    usage = { Text(stringResource(R.string.permission_answer_phone_calls_desc)) },
+    required = false
+)
+

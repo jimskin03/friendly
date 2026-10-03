@@ -33,7 +33,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get())
     }
 
     single {
@@ -87,6 +87,14 @@ val appModule = module {
             context = get(),
             appScope = get(),
             eventBus = get(),
+            settingsStore = get(),
+        )
+    }
+
+    single(createdAtStart = true) {
+        me.rerere.rikkahub.service.phone.PhoneCallController(
+            app = get(),
+            appScope = get(),
             settingsStore = get(),
         )
     }

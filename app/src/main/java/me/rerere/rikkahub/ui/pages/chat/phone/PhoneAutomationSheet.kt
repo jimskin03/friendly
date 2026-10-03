@@ -61,6 +61,17 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.ui.context.LocalToaster
 import java.io.ByteArrayOutputStream
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.service.phone.PhoneCallController
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionAnswerPhoneCalls
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionCallPhone
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionReadPhoneState
+import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -75,6 +86,22 @@ fun PhoneAutomationSheet(
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
+    val settingsStore = koinInject<SettingsStore>()
+    val phoneCallController = koinInject<PhoneCallController>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val callAccess = settings.displaySetting.enablePhoneCallAccess
+    val autoAnswer = settings.displaySetting.enablePhoneCallAutoAnswerAttempt
+    val callPermissions = rememberPermissionState(
+        permissions = setOf(
+            PermissionCallPhone,
+            PermissionReadPhoneState,
+            PermissionAnswerPhoneCalls,
+        )
+    )
+    PermissionManager(callPermissions)
+    LaunchedEffect(callPermissions.allPermissionsGranted) {
+        phoneCallController.syncListener()
+    }
 
     val isRunning = PhoneAutomationService.isRunning()
     val isEnabled = PhoneAutomationService.isAccessibilityEnabled(context)
@@ -265,6 +292,104 @@ fun PhoneAutomationSheet(
                             onUpdateAssistant(assistant.copy(localTools = updatedTools))
                         }
                     )
+                }
+            }
+
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.phone_call_access_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                text = stringResource(R.string.phone_call_access_sheet_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = callAccess,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    settingsStore.update { current ->
+                                        current.copy(
+                                            displaySetting = current.displaySetting.copy(
+                                                enablePhoneCallAccess = enabled,
+                                            )
+                                        )
+                                    }
+                                }
+                                if (enabled && !callPermissions.allRequiredPermissionsGranted) {
+                                    callPermissions.requestPermissions()
+                                }
+                                phoneCallController.syncListener()
+                            },
+                        )
+                    }
+                    if (!callPermissions.allRequiredPermissionsGranted) {
+                        Text(
+                            text = stringResource(R.string.phone_call_permissions_missing),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        OutlinedButton(
+                            onClick = { callPermissions.requestPermissions() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.phone_call_grant_permissions))
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.phone_call_auto_answer_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                text = stringResource(R.string.phone_call_auto_answer_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = autoAnswer,
+                            enabled = callAccess,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    settingsStore.update { current ->
+                                        current.copy(
+                                            displaySetting = current.displaySetting.copy(
+                                                enablePhoneCallAutoAnswerAttempt = enabled,
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
 

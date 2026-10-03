@@ -23,6 +23,10 @@
     tools:ignore="ProtectedPermissions" />
   <uses-permission android:name="android.permission.READ_CALENDAR" />
   <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+  <uses-permission android:name="android.permission.CALL_PHONE" />
+  <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+  <!-- Best-effort answer/end on API 26–28. Android 10+ still limits these to the default dialer. -->
+  <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
   <uses-feature
     android:name="android.hardware.camera"
@@ -30,10 +34,21 @@
   <uses-feature
     android:name="android.hardware.camera.autofocus"
     android:required="false" />
+  <uses-feature
+    android:name="android.hardware.telephony"
+    android:required="false" />
 
   <queries>
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.DIAL" />
+      <data android:scheme="tel" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.CALL" />
+      <data android:scheme="tel" />
     </intent>
     <!-- For resolving app names in screen time -->
     <intent>
@@ -122,6 +137,10 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="local web server for LLM chat UI" />
     </service>
+
+    <receiver
+      android:name=".service.phone.PhoneCallActionReceiver"
+      android:exported="false" />
 
     <service
       android:name=".service.phone.PhoneAutomationService"

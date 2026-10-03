@@ -11,6 +11,7 @@ class LocalTools(
     private val eventBus: AppEventBus,
     private val ttsManager: TTSManager,
     private val settingsStore: SettingsStore,
+    private val phoneCallController: me.rerere.rikkahub.service.phone.PhoneCallController,
 ) {
     val javascriptTool by lazy { buildJavascriptTool() }
 
@@ -37,6 +38,9 @@ class LocalTools(
     val phonePressKeyTool by lazy { buildPhonePressKeyTool() }
     val phoneLaunchAppTool by lazy { buildPhoneLaunchAppTool(context) }
     val phoneScreenshotTool by lazy { buildPhoneScreenshotTool(org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.files.FilesManager>()) }
+    val placeCallTool by lazy { buildPlaceCallTool(phoneCallController) }
+    val endCallTool by lazy { buildEndCallTool(phoneCallController) }
+    val readCallStateTool by lazy { buildReadCallStateTool(phoneCallController) }
 
     private fun getDesktopClient(): me.rerere.rikkahub.data.remote.DesktopControlClient? {
         val settings = settingsStore.settingsFlow.value
@@ -97,6 +101,9 @@ class LocalTools(
             tools.add(phonePressKeyTool.withPhoneAutomationTracking())
             tools.add(phoneLaunchAppTool.withPhoneAutomationTracking())
             tools.add(phoneScreenshotTool.withPhoneAutomationTracking())
+            tools.add(placeCallTool.withPhoneAutomationTracking())
+            tools.add(endCallTool.withPhoneAutomationTracking())
+            tools.add(readCallStateTool.withPhoneAutomationTracking())
         }
         if (options.contains(LocalToolOption.DesktopControl)) {
             tools.add(desktopScreenshotTool)
