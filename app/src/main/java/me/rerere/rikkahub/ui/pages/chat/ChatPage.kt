@@ -81,6 +81,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
@@ -173,6 +174,16 @@ fun ChatPage(
     val startVoiceMode = rememberVoiceModeStarter(vm, setting)
 
     val inputState = vm.inputState
+    val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager = koinInject()
+    LaunchedEffect(phoneMiniIndicator, vm) {
+        try {
+            vm.voiceSession.state.collect { voiceState ->
+                phoneMiniIndicator.reportVoicePhase(voiceState.phase)
+            }
+        } finally {
+            phoneMiniIndicator.reportVoicePhase(VoicePhase.Off)
+        }
+    }
 
     LaunchedEffect(id, folderId) {
         if (folderId != null) {

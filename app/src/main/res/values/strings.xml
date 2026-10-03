@@ -26,7 +26,7 @@
   <string name="assistant_page_local_tools_phone_automation_title">Phone Automation</string>
   <string name="assistant_page_local_tools_phone_automation_desc">Allow AI to interact with phone UI: tap, swipe, type, launch apps, inspect screen</string>
   <string name="phone_mini_indicator_title">Phone Automation mini indicator</string>
-  <string name="phone_mini_indicator_desc">When enabled, you can minimize Friendly into a floating status indicator (from the Phone sheet or by long-pressing the phone icon). An ongoing notification is used as backup. Default: on.</string>
+  <string name="phone_mini_indicator_desc">When enabled, you can minimize Friendly into a floating status indicator (from the Phone sheet or by long-pressing the phone icon). The indicator also appears on its own during a call or while the agent is working, and shows the live status. An ongoing notification is used as backup. Default: on.</string>
   <string name="phone_mini_indicator_running">Running</string>
   <string name="phone_mini_indicator_idle">Idle</string>
   <string name="phone_mini_indicator_error">Error</string>
@@ -39,6 +39,16 @@
   <string name="phone_mini_indicator_disabled_toast">Enable Phone Automation mini indicator in Preferences first</string>
   <string name="phone_mini_indicator_minimize_button">Minimize to background</string>
   <string name="phone_mini_indicator_minimize_hint">Keeps a floating rabbit status indicator while Friendly is in the background. You can also long-press the phone icon.</string>
+  <string name="phone_mini_status_calling">Calling</string>
+  <string name="phone_mini_status_ringing">Ringing</string>
+  <string name="phone_mini_status_on_call">On call</string>
+  <string name="phone_mini_status_on_call_number">On call · %1$s</string>
+  <string name="phone_mini_status_calling_number">Calling · %1$s</string>
+  <string name="phone_mini_status_ringing_number">Ringing · %1$s</string>
+  <string name="phone_mini_status_working">Working</string>
+  <string name="phone_mini_status_listening">Listening</string>
+  <string name="phone_mini_status_speaking">Speaking</string>
+  <string name="phone_mini_status_failed">Didn\'t finish</string>
   <string name="phone_call_incoming_title">Incoming call</string>
   <string name="phone_call_incoming_body">%1$s — open the phone app to answer. Silent auto-answer is not reliable.</string>
   <string name="phone_call_number_hidden">Number hidden by Android</string>

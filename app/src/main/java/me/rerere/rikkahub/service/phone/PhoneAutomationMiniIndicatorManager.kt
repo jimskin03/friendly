@@ -16,13 +16,19 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,7 +43,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.pages.chat.VoicePhase
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
@@ -80,18 +89,34 @@ private const val FLOATING_TAG = "phone_automation_mini_indicator"
 private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
 
 /**
- * Phone Automation mini indicator — compact premium glass rabbit mark.
+ * Phone Automation mini indicator — compact premium glass cat mark that grows
+ * into a short frosted status pill while a call, outbound dial, or the agent
+ * is active.
  *
- * Entry: explicit activate() from Phone sheet "Minimize with mini indicator"
- * or long-press on the phone icon (never the primary phone tap). Caller
- * minimizes Friendly via moveTaskToBack. While the session is active:
- *  1. Ongoing notification while Friendly is backgrounded (OEM-safe backup; tap reopens app)
- *  2. System-overlay rabbit face with Idle/Running/Error LED whenever SYSTEM_ALERT_WINDOW
- *     is granted (shown immediately on activate so it cannot race ProcessLifecycle ON_STOP /
- *     moveTaskToBack)
+ * Entry is explicit activate() from the Phone sheet "Minimize with mini
+ * indicator" or a long-press on the phone icon (the caller may moveTaskToBack).
+ * When the preference is on, the session also starts on its own if a cellular
+ * call is ringing or off-hook, an outbound ACTION_CALL has not yet gone live
+ * and then idle, or Phone Automation work is running. Auto-show does not
+ * minimize Friendly and does not ask for overlay permission. Without
+ * SYSTEM_ALERT_WINDOW, the ongoing notification (id 2003) is the backup.
+ *
+ * Dragging the bubble to the close zone while a call or Running work is still
+ * live suppresses auto-show until that live condition is fully quiet (not
+ * ringing, not off-hook, no outbound, work not Running). The next live event
+ * may auto-show again. Manual activate() clears the suppress flag.
+ *
+ * While the session is active:
+ *  1. Ongoing notification while Friendly is backgrounded (OEM-safe backup; tap reopens app).
+ *     The body uses the same live status line as the pill.
+ *  2. System-overlay cat with that live line and LED whenever SYSTEM_ALERT_WINDOW
+ *     is granted (shown immediately so it cannot race ProcessLifecycle ON_STOP).
  *
  * Single tap → bring Friendly back (last chat / last place).
  * Drag toward the bottom → X close zone; drop dismisses the mini session.
+ *
+ * Voice phase is reported by the chat screen (not injected). It can change the
+ * line only while a mini session is already active; voice alone does not auto-show.
  *
  * While the mini session is active, continuous voice STT is allowed to keep
  * running across ProcessLifecycle ON_STOP (see VoiceMode + VoiceCaptureForegroundService).
@@ -100,11 +125,20 @@ class PhoneAutomationMiniIndicatorManager(
     private val app: Application,
     appScope: AppScope,
     private val settingsStore: SettingsStore,
+    private val phoneCallController: PhoneCallController,
 ) {
     companion object {
         const val NOTIFICATION_ID = 2003
         const val EXTRA_FOCUS_INPUT = "focusInput"
         const val EXTRA_CONVERSATION_ID = "conversationId"
+
+        private val _voicePhase = MutableStateFlow(VoicePhase.Off)
+        val voicePhase: StateFlow<VoicePhase> = _voicePhase.asStateFlow()
+    }
+
+    /** Chat screen reports the current voice phase. Not a reason to auto-show. */
+    fun reportVoicePhase(phase: VoicePhase) {
+        _voicePhase.value = phase
     }
 
     private var control: FxControl? = null
@@ -113,6 +147,14 @@ class PhoneAutomationMiniIndicatorManager(
 
     private val _sessionActive = MutableStateFlow(false)
     val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
+
+    /**
+     * User dragged the bubble away while a call or Running work was still live.
+     * Stays set until that live condition is fully quiet so we do not recreate
+     * the bubble on the next status tick.
+     */
+    @Volatile
+    private var suppressAutoShow: Boolean = false
 
     private val _focusInputRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val focusInputRequests: SharedFlow<Unit> = _focusInputRequests.asSharedFlow()
@@ -161,32 +203,65 @@ class PhoneAutomationMiniIndicatorManager(
 
         appScope.launch(Dispatchers.Main.immediate) {
             combine(
-                settingsStore.settingsFlow,
-                _sessionActive,
-                PhoneAutomationService.workStatus,
-                isAppForeground,
-            ) { settings, session, workStatus, foreground ->
+                combine(
+                    settingsStore.settingsFlow,
+                    _sessionActive,
+                    PhoneAutomationService.workStatus,
+                    isAppForeground,
+                    phoneCallController.snapshot,
+                ) { settings, session, workStatus, foreground, call ->
+                    MiniSyncInput(
+                        enabled = settings.displaySetting.enablePhoneAutomationMiniIndicator,
+                        sessionActive = session,
+                        workStatus = workStatus,
+                        appForeground = foreground,
+                        call = call,
+                    )
+                },
+                voicePhase,
+            ) { input, voice ->
                 IndicatorState(
-                    enabled = settings.displaySetting.enablePhoneAutomationMiniIndicator,
-                    sessionActive = session,
-                    workStatus = workStatus,
-                    appForeground = foreground,
+                    enabled = input.enabled,
+                    sessionActive = input.sessionActive,
+                    workStatus = input.workStatus,
+                    appForeground = input.appForeground,
                     canDrawOverlays = Settings.canDrawOverlays(app),
+                    live = isAutoShowLive(input.call, input.workStatus),
+                    statusLine = formatMiniLiveLine(
+                        app,
+                        resolveMiniLive(
+                            work = input.workStatus,
+                            call = input.call,
+                            voice = voice,
+                            sessionActive = input.sessionActive,
+                        ),
+                    ),
                 )
             }
                 .distinctUntilChanged()
                 .collectLatest { state ->
-                    syncIndicators(state)
+                    if (!state.live) {
+                        suppressAutoShow = false
+                    }
+                    val shouldAuto = state.enabled && state.live && !suppressAutoShow && !state.sessionActive
+                    if (shouldAuto) {
+                        _sessionActive.value = true
+                        Log.i(TAG, "Mini session auto-shown (overlay=${Settings.canDrawOverlays(app)})")
+                    }
+                    syncIndicators(
+                        if (shouldAuto) state.copy(sessionActive = true) else state,
+                    )
                 }
         }
     }
 
-    /** Start a mini session (caller should minimize Friendly after this). */
+    /** Start a mini session (caller may minimize Friendly after this). Clears auto-show suppress. */
     fun activate() {
         if (!settingsStore.settingsFlow.value.displaySetting.enablePhoneAutomationMiniIndicator) {
             Log.i(TAG, "activate ignored — mini indicator disabled in Preferences")
             return
         }
+        suppressAutoShow = false
         _sessionActive.value = true
         Log.i(TAG, "Mini session activated (overlay=${Settings.canDrawOverlays(app)})")
     }
@@ -194,6 +269,10 @@ class PhoneAutomationMiniIndicatorManager(
     /** End the mini session and tear down overlay + notification. */
     fun dismiss() {
         if (!_sessionActive.value) return
+        if (isAutoShowLive(phoneCallController.snapshot.value, PhoneAutomationService.workStatus.value)) {
+            suppressAutoShow = true
+            Log.i(TAG, "Mini session dismissed during live call/work; auto-show suppressed")
+        }
         _sessionActive.value = false
         // Mini closed → background mic session is no longer authorized.
         VoiceCaptureForegroundService.release(app)
@@ -208,13 +287,15 @@ class PhoneAutomationMiniIndicatorManager(
         val workStatus: PhoneAutomationWorkStatus,
         val appForeground: Boolean,
         val canDrawOverlays: Boolean,
+        val live: Boolean,
+        val statusLine: String?,
     ) {
         /** Ongoing notification only while Friendly is backgrounded. */
         val shouldShowStatus: Boolean
             get() = enabled && sessionActive && !appForeground
 
         /**
-         * Floating rabbit whenever the mini session is active and overlay permission
+         * Floating cat whenever the mini session is active and overlay permission
          * is granted — including briefly while still foreground so activate() +
          * moveTaskToBack cannot race ProcessLifecycle ON_STOP and leave the indicator missing.
          */
@@ -227,8 +308,8 @@ class PhoneAutomationMiniIndicatorManager(
             TAG,
             "sync enabled=${state.enabled} session=${state.sessionActive} " +
                 "foreground=${state.appForeground} overlay=${state.canDrawOverlays} " +
-                "status=${state.workStatus} showStatus=${state.shouldShowStatus} " +
-                "showOverlay=${state.shouldShowOverlay}",
+                "status=${state.workStatus} live=${state.live} line=${state.statusLine} " +
+                "showStatus=${state.shouldShowStatus} showOverlay=${state.shouldShowOverlay}",
         )
 
         // Settings toggled off while session active → end session.
@@ -249,7 +330,7 @@ class PhoneAutomationMiniIndicatorManager(
         }
 
         if (state.shouldShowStatus) {
-            showOrUpdateNotification(state.workStatus)
+            showOrUpdateNotification(state.statusLine)
         } else {
             hideNotification()
         }
@@ -271,15 +352,9 @@ class PhoneAutomationMiniIndicatorManager(
         notificationVisible = false
     }
 
-    private fun showOrUpdateNotification(status: PhoneAutomationWorkStatus) {
-        val statusText = when (status) {
-            PhoneAutomationWorkStatus.Running ->
-                app.getString(R.string.phone_mini_indicator_running)
-            PhoneAutomationWorkStatus.Error ->
-                app.getString(R.string.phone_mini_indicator_error)
-            PhoneAutomationWorkStatus.Idle ->
-                app.getString(R.string.phone_mini_indicator_idle)
-        }
+    private fun showOrUpdateNotification(statusLine: String?) {
+        val statusText = statusLine?.takeIf { it.isNotBlank() }
+            ?: app.getString(R.string.phone_mini_indicator_idle)
         val posted = app.sendNotification(
             channelId = PHONE_AUTOMATION_NOTIFICATION_CHANNEL_ID,
             notificationId = NOTIFICATION_ID,
@@ -408,9 +483,17 @@ class PhoneAutomationMiniIndicatorManager(
                 }
                 compose {
                     RikkahubTheme {
-                        val status by PhoneAutomationService.workStatus.collectAsState()
+                        val work by PhoneAutomationService.workStatus.collectAsState()
+                        val call by phoneCallController.snapshot.collectAsState()
+                        val voice by voicePhase.collectAsState()
+                        val session by sessionActive.collectAsState()
                         MiniIndicatorBubble(
-                            status = status,
+                            status = miniIndicatorStatus(
+                                work = work,
+                                call = call,
+                                voice = voice,
+                                sessionActive = session,
+                            ),
                             onBackToApp = { bringFriendlyToFront(focusInput = false) },
                         )
                     }
@@ -460,25 +543,157 @@ private fun CloseZonePill() {
     }
 }
 
+private data class MiniSyncInput(
+    val enabled: Boolean,
+    val sessionActive: Boolean,
+    val workStatus: PhoneAutomationWorkStatus,
+    val appForeground: Boolean,
+    val call: CellularCallSnapshot,
+)
+
+private enum class MiniLiveKind {
+    OnCall,
+    Ringing,
+    Calling,
+    Failed,
+    Working,
+    Listening,
+    Speaking,
+    Idle,
+}
+
+private data class MiniLiveResolution(
+    val kind: MiniLiveKind,
+    val labelRes: Int? = null,
+    val numberArg: String? = null,
+)
+
+private data class MiniIndicatorStatus(
+    val kind: MiniLiveKind,
+    val label: String?,
+    val ledColor: Color,
+    val pulse: Boolean,
+)
+
+private fun isAutoShowLive(call: CellularCallSnapshot, work: PhoneAutomationWorkStatus): Boolean {
+    if (call.status == CellularCallStatus.Ringing || call.status == CellularCallStatus.Offhook) return true
+    if (!call.outboundNumber.isNullOrBlank()) return true
+    return work == PhoneAutomationWorkStatus.Running
+}
+
+private fun knownCallNumber(call: CellularCallSnapshot): String? =
+    call.number?.takeIf { it.isNotBlank() } ?: call.outboundNumber?.takeIf { it.isNotBlank() }
+
+private fun labeledNumber(number: String?, plainRes: Int, withNumberRes: Int): Pair<Int, String?> =
+    if (number.isNullOrBlank()) plainRes to null else withNumberRes to number
+
+/**
+ * First match wins. Voice is ignored when Off, and voice Error never produces a line.
+ * Listening / Speaking are only returned when a mini session is already active.
+ */
+private fun resolveMiniLive(
+    work: PhoneAutomationWorkStatus,
+    call: CellularCallSnapshot,
+    voice: VoicePhase,
+    sessionActive: Boolean,
+): MiniLiveResolution {
+    val number = knownCallNumber(call)
+    val outbound = call.outboundNumber?.takeIf { it.isNotBlank() }
+    return when {
+        call.status == CellularCallStatus.Offhook -> {
+            val (res, arg) = labeledNumber(
+                number,
+                R.string.phone_mini_status_on_call,
+                R.string.phone_mini_status_on_call_number,
+            )
+            MiniLiveResolution(MiniLiveKind.OnCall, res, arg)
+        }
+        call.status == CellularCallStatus.Ringing -> {
+            val (res, arg) = labeledNumber(
+                number,
+                R.string.phone_mini_status_ringing,
+                R.string.phone_mini_status_ringing_number,
+            )
+            MiniLiveResolution(MiniLiveKind.Ringing, res, arg)
+        }
+        outbound != null &&
+            call.status != CellularCallStatus.Ringing &&
+            call.status != CellularCallStatus.Offhook -> {
+            val (res, arg) = labeledNumber(
+                outbound,
+                R.string.phone_mini_status_calling,
+                R.string.phone_mini_status_calling_number,
+            )
+            MiniLiveResolution(MiniLiveKind.Calling, res, arg)
+        }
+        work == PhoneAutomationWorkStatus.Error -> MiniLiveResolution(
+            MiniLiveKind.Failed,
+            R.string.phone_mini_status_failed,
+        )
+        work == PhoneAutomationWorkStatus.Running -> MiniLiveResolution(
+            MiniLiveKind.Working,
+            R.string.phone_mini_status_working,
+        )
+        sessionActive && voice != VoicePhase.Off && (
+            voice == VoicePhase.Listening ||
+                voice == VoicePhase.Transcribing ||
+                voice == VoicePhase.Connecting
+            ) -> MiniLiveResolution(
+            MiniLiveKind.Listening,
+            R.string.phone_mini_status_listening,
+        )
+        sessionActive && voice == VoicePhase.Speaking -> MiniLiveResolution(
+            MiniLiveKind.Speaking,
+            R.string.phone_mini_status_speaking,
+        )
+        else -> MiniLiveResolution(MiniLiveKind.Idle)
+    }
+}
+
+private fun formatMiniLiveLine(app: Application, resolved: MiniLiveResolution): String? {
+    val res = resolved.labelRes ?: return null
+    val arg = resolved.numberArg
+    return if (arg != null) app.getString(res, arg) else app.getString(res)
+}
+
+@Composable
+private fun miniIndicatorStatus(
+    work: PhoneAutomationWorkStatus,
+    call: CellularCallSnapshot,
+    voice: VoicePhase,
+    sessionActive: Boolean,
+): MiniIndicatorStatus {
+    val resolved = resolveMiniLive(work, call, voice, sessionActive)
+    val label = resolved.labelRes?.let { res ->
+        val arg = resolved.numberArg
+        if (arg != null) stringResource(res, arg) else stringResource(res)
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    val error = MaterialTheme.colorScheme.error
+    val green = Color(0xFF34C759)
+    val amber = Color(0xFFFF9F0A)
+    val (ledColor, pulse) = when (resolved.kind) {
+        MiniLiveKind.OnCall, MiniLiveKind.Idle -> green to false
+        MiniLiveKind.Ringing, MiniLiveKind.Calling -> amber to true
+        MiniLiveKind.Failed -> error to false
+        MiniLiveKind.Working, MiniLiveKind.Listening, MiniLiveKind.Speaking -> primary to true
+    }
+    return MiniIndicatorStatus(
+        kind = resolved.kind,
+        label = label,
+        ledColor = ledColor,
+        pulse = pulse,
+    )
+}
+
 @Composable
 private fun MiniIndicatorBubble(
-    status: PhoneAutomationWorkStatus,
+    status: MiniIndicatorStatus,
     onBackToApp: () -> Unit,
 ) {
-    val statusLabel = when (status) {
-        PhoneAutomationWorkStatus.Running ->
-            stringResource(R.string.phone_mini_indicator_running)
-        PhoneAutomationWorkStatus.Error ->
-            stringResource(R.string.phone_mini_indicator_error)
-        PhoneAutomationWorkStatus.Idle ->
-            stringResource(R.string.phone_mini_indicator_idle)
-    }
-    val ledColor = when (status) {
-        PhoneAutomationWorkStatus.Running -> MaterialTheme.colorScheme.primary
-        PhoneAutomationWorkStatus.Error -> MaterialTheme.colorScheme.error
-        PhoneAutomationWorkStatus.Idle -> Color(0xFF34C759)
-    }
-    val a11y = stringResource(R.string.phone_mini_indicator_back_to_app) + " · " + statusLabel
+    val spoken = status.label ?: stringResource(R.string.phone_mini_indicator_idle)
+    val a11y = stringResource(R.string.phone_mini_indicator_back_to_app) + " · " + spoken
+    val ledColor = status.ledColor
     val dark = LocalDarkMode.current
     val discBrush = if (dark) {
         Brush.verticalGradient(
@@ -512,7 +727,9 @@ private fun MiniIndicatorBubble(
         )
     }
     val ledRing = if (dark) Color(0xFF1C1C1E) else Color.White
-    val running = status == PhoneAutomationWorkStatus.Running
+    val pulse = status.pulse
+    val expanded = status.kind != MiniLiveKind.Idle && !status.label.isNullOrBlank()
+    val shape = if (expanded) RoundedCornerShape(27.dp) else CircleShape
     val transition = rememberInfiniteTransition(label = "mini_led_pulse")
     val animatedAlpha by transition.animateFloat(
         initialValue = 0.55f,
@@ -532,34 +749,36 @@ private fun MiniIndicatorBubble(
         ),
         label = "mini_led_glow",
     )
-    val pulseAlpha = if (running) animatedAlpha else 1f
-    val pulseScale = if (running) animatedScale else 1f
+    val pulseAlpha = if (pulse) animatedAlpha else 1f
+    val pulseScale = if (pulse) animatedScale else 1f
 
-    // Compact premium glass disc (~54dp) with soft shadow + refined rabbit mark + LED.
+    // 54dp glass disc, or a 54dp-tall pill (max ~240dp) with one status line.
     Box(
         modifier = Modifier
             .padding(8.dp)
-            .size(54.dp)
+            .height(54.dp)
+            .then(
+                if (expanded) Modifier.widthIn(max = 240.dp).wrapContentWidth() else Modifier.width(54.dp),
+            )
             .semantics { contentDescription = a11y }
             .shadow(
                 elevation = 14.dp,
-                shape = CircleShape,
+                shape = shape,
                 clip = false,
                 ambientColor = Color.Black.copy(alpha = if (dark) 0.45f else 0.18f),
                 spotColor = Color.Black.copy(alpha = if (dark) 0.55f else 0.22f),
             )
-            .clip(CircleShape)
-            .background(discBrush, CircleShape)
-            .border(width = 1.dp, brush = rimBrush, shape = CircleShape)
+            .clip(shape)
+            .background(discBrush, shape)
+            .border(width = 1.dp, brush = rimBrush, shape = shape)
             .clickable(onClick = onBackToApp),
-        contentAlignment = Alignment.Center,
     ) {
         // Soft inner highlight (glass sheen)
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .matchParentSize()
                 .padding(1.dp)
-                .clip(CircleShape)
+                .clip(shape)
                 .background(
                     Brush.verticalGradient(
                         listOf(
@@ -570,23 +789,42 @@ private fun MiniIndicatorBubble(
                     )
                 ),
         )
-        Image(
-            painter = painterResource(R.drawable.ic_brand_neon),
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(6.dp)
-                .clip(CircleShape),
-        )
-        // Polished status LED (Idle green / Running primary+pulse / Error)
+        Row(
+            modifier = Modifier.height(54.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_brand_neon),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(54.dp)
+                    .padding(6.dp)
+                    .clip(CircleShape),
+            )
+            if (expanded && status.label != null) {
+                Text(
+                    text = status.label,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (dark) Color.White else Color(0xFF1C1C1E),
+                    modifier = Modifier
+                        .padding(end = 28.dp)
+                        .widthIn(max = 158.dp),
+                )
+            }
+        }
+        // LED: bottom-end of the disc when collapsed, trailing end of the pill when expanded.
         Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(3.dp)
+                .align(if (expanded) Alignment.CenterEnd else Alignment.BottomEnd)
+                .then(if (expanded) Modifier.padding(end = 8.dp) else Modifier.padding(3.dp))
                 .size(16.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (running) {
+            if (pulse) {
                 Box(
                     modifier = Modifier
                         .size(14.dp)

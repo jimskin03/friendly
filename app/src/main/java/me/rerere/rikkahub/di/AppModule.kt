@@ -104,6 +104,7 @@ val appModule = module {
             app = get(),
             appScope = get(),
             settingsStore = get(),
+            phoneCallController = get(),
         )
     }
 

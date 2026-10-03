@@ -40,6 +40,8 @@ data class CellularCallSnapshot(
     val autoAnswerAttempt: Boolean = false,
     val status: CellularCallStatus = CellularCallStatus.Unknown,
     val number: String? = null,
+    /** Dialed number for an ACTION_CALL that has not yet gone live and then idle. */
+    val outboundNumber: String? = null,
     val callPhoneGranted: Boolean = false,
     val readPhoneStateGranted: Boolean = false,
     val answerPhoneCallsGranted: Boolean = false,
@@ -81,6 +83,10 @@ class PhoneCallController(
 
     private var listenerRegistered = false
     private var answerAttemptedForRing = false
+
+    /** True after Ringing or Offhook has been seen for the current outbound attempt. */
+    @Volatile
+    private var outboundSawLive: Boolean = false
 
     @Suppress("DEPRECATION")
     private val legacyListener = object : PhoneStateListener() {
@@ -147,10 +153,19 @@ class PhoneCallController(
                 }
                 try {
                     app.startActivity(intent)
+                    val mode = if (granted) "action_call" else "action_dial"
+                    if (mode == "action_call") {
+                        outboundSawLive = false
+                        publishSnapshot(
+                            status = _snapshot.value.status,
+                            number = _snapshot.value.number,
+                            outboundNumber = parsed.number,
+                        )
+                    }
                     PhoneCallActionResult(
                         success = true,
                         action = "place_call",
-                        mode = if (granted) "action_call" else "action_dial",
+                        mode = mode,
                         detail = if (granted) {
                             "Started a cellular call to ${parsed.number} with the system phone app. " +
                                 "Voice input remains active while the cellular call is in progress. " +
@@ -346,9 +361,21 @@ class PhoneCallController(
             else -> CellularCallStatus.Idle
         }
         val previous = _snapshot.value.status
+        val outbound = when (status) {
+            CellularCallStatus.Ringing, CellularCallStatus.Offhook -> {
+                outboundSawLive = true
+                _snapshot.value.outboundNumber
+            }
+            else -> if (outboundSawLive) {
+                outboundSawLive = false
+                null
+            } else {
+                _snapshot.value.outboundNumber
+            }
+        }
         val shownNumber = number?.takeIf { it.isNotBlank() }
             ?: _snapshot.value.number?.takeIf { status != CellularCallStatus.Idle }
-        publishSnapshot(status, shownNumber)
+        publishSnapshot(status, shownNumber, outboundNumber = outbound)
         Log.i(TAG, "Call state $previous -> $status")
 
         if (status == CellularCallStatus.Ringing && previous != CellularCallStatus.Ringing) {
@@ -445,12 +472,17 @@ class PhoneCallController(
         return pkg.contains("dialer") || pkg.contains("incall") || pkg.contains("telecom")
     }
 
-    private fun publishSnapshot(status: CellularCallStatus, number: String?) {
+    private fun publishSnapshot(
+        status: CellularCallStatus,
+        number: String?,
+        outboundNumber: String? = _snapshot.value.outboundNumber,
+    ) {
         _snapshot.value = CellularCallSnapshot(
             accessEnabled = true,
             autoAnswerAttempt = false,
             status = status,
             number = number,
+            outboundNumber = outboundNumber,
             callPhoneGranted = hasPermission(Manifest.permission.CALL_PHONE),
             readPhoneStateGranted = hasPermission(Manifest.permission.READ_PHONE_STATE),
             answerPhoneCallsGranted = hasPermission(Manifest.permission.ANSWER_PHONE_CALLS),
