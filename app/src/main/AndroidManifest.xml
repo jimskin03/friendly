@@ -94,30 +94,13 @@
       </intent-filter>
 
       <intent-filter>
-        <action android:name="me.rerere.rikkahub.action.IMAGE_GEN" />
+        <action android:name="me.rerere.rikkahub.action.NEW_PROMPT" />
         <category android:name="android.intent.category.DEFAULT" />
       </intent-filter>
 
       <meta-data
         android:name="android.app.shortcuts"
         android:resource="@xml/shortcuts" />
-    </activity>
-    <activity
-      android:name=".ui.activity.ShortcutHandlerActivity"
-      android:exported="true"
-      android:theme="@android:style/Theme.Translucent.NoTitleBar">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-
-        <category android:name="android.intent.category.DEFAULT" />
-
-        <data
-          android:host="shortcut"
-          android:scheme="friendly" />
-        <data
-          android:host="shortcut"
-          android:scheme="rikkahub" />
-      </intent-filter>
     </activity>
     <activity
       android:name="com.yalantis.ucrop.UCropActivity"

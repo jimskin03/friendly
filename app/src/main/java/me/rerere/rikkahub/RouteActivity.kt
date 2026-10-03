@@ -99,7 +99,6 @@ import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
 import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
-import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
@@ -133,7 +132,7 @@ import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
-private const val ACTION_IMAGE_GEN = "me.rerere.rikkahub.action.IMAGE_GEN"
+private const val ACTION_NEW_PROMPT = "me.rerere.rikkahub.action.NEW_PROMPT"
 
 class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
@@ -213,8 +212,12 @@ class RouteActivity : ComponentActivity() {
             pendingIntents.addLast(intent)
             return
         }
+        if (intent.action == ACTION_NEW_PROMPT) {
+            backStack.clear()
+            backStack.add(Screen.Chat(Uuid.random().toString()))
+            return
+        }
         val destination = when (intent.action) {
-            ACTION_IMAGE_GEN -> Screen.ImageGen
             Intent.ACTION_SEND -> Screen.ShareHandler(
                 text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
                 streamUri = intent.getStringExtra(Intent.EXTRA_STREAM),
@@ -400,10 +403,6 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.Backup> {
                                 BackupPage()
-                            }
-
-                            entry<Screen.ImageGen> {
-                                ImageGenPage()
                             }
 
                             entry<Screen.WebView> { key ->
@@ -650,9 +649,6 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Backup : Screen
-
-    @Serializable
-    data object ImageGen : Screen
 
     @Serializable
     data class WebView(val url: String = "", val contentId: String = "") : Screen

@@ -1093,7 +1093,6 @@
   <string name="settings">الإعدادات</string>
   <string name="share">مشاركة</string>
   <string name="share_handler_page_title">اختر مساعدًا</string>
-  <string name="shortcut_take_picture">التقط صورة واسأل</string>
     <string name="skill_detail_page_content">المحتوى</string>
   <string name="skill_detail_page_create">إنشاء</string>
   <string name="skill_detail_page_delete_confirm">هل أنت متأكد من أنك تريد حذف الملف \"%s\"؟</string>

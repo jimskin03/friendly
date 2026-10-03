@@ -894,7 +894,6 @@
   <string name="settings">Настройки</string>
   <string name="share">Поделиться</string>
   <string name="share_handler_page_title">Выбрать ассистента</string>
-  <string name="shortcut_take_picture">Сделать фото и спросить</string>
     <string name="skill_detail_page_content">Контент</string>
   <string name="skill_detail_page_create">Создать</string>
   <string name="skill_detail_page_delete_confirm">Вы уверены, что хотите удалить файл "%s"?</string>
