@@ -41,6 +41,10 @@ class LocalTools(
     val placeCallTool by lazy { buildPlaceCallTool(phoneCallController) }
     val endCallTool by lazy { buildEndCallTool(phoneCallController) }
     val readCallStateTool by lazy { buildReadCallStateTool(phoneCallController) }
+    val phoneAssertVisibleTool by lazy { buildPhoneAssertVisibleTool() }
+    val phoneScrollUntilVisibleTool by lazy { buildPhoneScrollUntilVisibleTool(context) }
+    val phoneRunFlowTool by lazy { buildPhoneRunFlowTool(context) }
+    val phoneManageFlowsTool by lazy { buildPhoneManageFlowsTool(context) }
 
     private fun getDesktopClient(): me.rerere.rikkahub.data.remote.DesktopControlClient? {
         val settings = settingsStore.settingsFlow.value
@@ -104,6 +108,10 @@ class LocalTools(
             tools.add(placeCallTool.withPhoneAutomationTracking())
             tools.add(endCallTool.withPhoneAutomationTracking())
             tools.add(readCallStateTool.withPhoneAutomationTracking())
+            tools.add(phoneAssertVisibleTool.withPhoneAutomationTracking())
+            tools.add(phoneScrollUntilVisibleTool.withPhoneAutomationTracking())
+            tools.add(phoneRunFlowTool.withPhoneAutomationTracking())
+            tools.add(phoneManageFlowsTool.withPhoneAutomationTracking())
         }
         if (options.contains(LocalToolOption.DesktopControl)) {
             tools.add(desktopScreenshotTool)

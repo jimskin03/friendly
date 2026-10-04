@@ -141,3 +141,98 @@ object PhoneScreenshotToolUI : ToolUIRenderer {
         Text(text = text, style = MaterialTheme.typography.bodySmall)
     }
 }
+
+object PhoneAssertVisibleToolUI : ToolUIRenderer {
+    override val toolName: String = "phone_assert_visible"
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = "Assert Visible"
+
+    override fun hasSummary(context: ToolUIContext): Boolean = true
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val visible = context.content?.let { it.jsonObject["visible"]?.jsonPrimitive?.contentOrNull }
+        val query = context.arguments.let { it.jsonObject["query"]?.jsonPrimitive?.contentOrNull }
+            ?: context.arguments.let { it.jsonObject["view_id"]?.jsonPrimitive?.contentOrNull }
+        val text = if (visible == "true") {
+            if (!query.isNullOrBlank()) "Visible: \"$query\"" else "Element is visible"
+        } else {
+            if (!query.isNullOrBlank()) "Not visible: \"$query\"" else "Element not visible"
+        }
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+object PhoneScrollUntilVisibleToolUI : ToolUIRenderer {
+    override val toolName: String = "phone_scroll_until_visible"
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = "Scroll Until Visible"
+
+    override fun hasSummary(context: ToolUIContext): Boolean = true
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val found = context.content?.let { it.jsonObject["found"]?.jsonPrimitive?.contentOrNull }
+        val swipes = context.content?.let { it.jsonObject["swipes_performed"]?.jsonPrimitive?.contentOrNull } ?: "0"
+        val dir = context.content?.let { it.jsonObject["direction"]?.jsonPrimitive?.contentOrNull } ?: "down"
+        val text = if (found == "true") {
+            "Found element after $swipes scroll(s) $dir"
+        } else {
+            "Not found after $swipes scroll(s) $dir"
+        }
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+object PhoneRunFlowToolUI : ToolUIRenderer {
+    override val toolName: String = "phone_run_flow"
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = "Run Automation Flow"
+
+    override fun hasSummary(context: ToolUIContext): Boolean = true
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val success = context.content?.let { it.jsonObject["success"]?.jsonPrimitive?.contentOrNull }
+        val executed = context.content?.let { it.jsonObject["executed_steps"]?.jsonPrimitive?.contentOrNull }
+        val total = context.content?.let { it.jsonObject["total_steps"]?.jsonPrimitive?.contentOrNull }
+        val err = context.content?.let { it.jsonObject["error"]?.jsonPrimitive?.contentOrNull }
+        val text = if (success == "true") {
+            if (executed != null && total != null) "Completed $executed/$total flow steps" else "Flow completed successfully"
+        } else {
+            err ?: "Flow execution failed"
+        }
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+object PhoneManageFlowsToolUI : ToolUIRenderer {
+    override val toolName: String = "phone_manage_flows"
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = "Manage Flows"
+
+    override fun hasSummary(context: ToolUIContext): Boolean = true
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val action = context.arguments.let { it.jsonObject["action"]?.jsonPrimitive?.contentOrNull } ?: "list"
+        val name = context.arguments.let { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull }
+        val count = context.content?.let { it.jsonObject["count"]?.jsonPrimitive?.contentOrNull }
+        val text = when (action.lowercase()) {
+            "list" -> if (count != null) "Saved flows: $count" else "Listed saved flows"
+            "get" -> if (!name.isNullOrBlank()) "Loaded flow: $name" else "Loaded flow"
+            "save" -> if (!name.isNullOrBlank()) "Saved flow: $name" else "Saved flow"
+            "delete" -> if (!name.isNullOrBlank()) "Deleted flow: $name" else "Deleted flow"
+            else -> "Managed flow: $action"
+        }
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
+    }
+}

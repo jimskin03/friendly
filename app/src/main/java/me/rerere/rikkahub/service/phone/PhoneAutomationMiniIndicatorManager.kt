@@ -642,6 +642,10 @@ private fun stepStatusRes(step: PhoneAutomationStep): Int = when (step) {
     PhoneAutomationStep.PlaceCall -> R.string.phone_mini_status_calling
     PhoneAutomationStep.EndCall -> R.string.phone_mini_status_ending_call
     PhoneAutomationStep.ReadCall -> R.string.phone_mini_status_checking_call
+    PhoneAutomationStep.AssertVisible -> R.string.phone_mini_status_inspect
+    PhoneAutomationStep.ScrollUntilVisible -> R.string.phone_mini_status_swiping
+    PhoneAutomationStep.RunFlow,
+    PhoneAutomationStep.ManageFlows,
     PhoneAutomationStep.None,
     PhoneAutomationStep.Other -> R.string.phone_mini_status_working
 }

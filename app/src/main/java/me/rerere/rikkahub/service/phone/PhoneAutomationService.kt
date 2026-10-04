@@ -41,6 +41,10 @@ data class ScreenNodeInfo(
     val bottom: Int,
     val centerX: Int,
     val centerY: Int,
+    val enabled: Boolean = true,
+    val checked: Boolean = false,
+    val focused: Boolean = false,
+    val selected: Boolean = false,
 )
 
 data class ScreenInspectionResult(
@@ -73,6 +77,10 @@ enum class PhoneAutomationStep {
     PlaceCall,
     EndCall,
     ReadCall,
+    AssertVisible,
+    ScrollUntilVisible,
+    RunFlow,
+    ManageFlows,
     Other,
 }
 
@@ -144,6 +152,10 @@ class PhoneAutomationService : AccessibilityService() {
                 val isClickable = node.isClickable
                 val isEditable = node.isEditable
                 val isScrollable = node.isScrollable
+                val isEnabled = node.isEnabled
+                val isChecked = node.isChecked
+                val isFocused = node.isFocused
+                val isSelected = node.isSelected
 
                 val hasContent = text.isNotEmpty() || desc.isNotEmpty() || viewId.isNotEmpty()
                 val isActionable = isClickable || isEditable || isScrollable
@@ -164,6 +176,10 @@ class PhoneAutomationService : AccessibilityService() {
                         bottom = rect.bottom,
                         centerX = rect.centerX(),
                         centerY = rect.centerY(),
+                        enabled = isEnabled,
+                        checked = isChecked,
+                        focused = isFocused,
+                        selected = isSelected,
                     )
 
                     if (isActionable) {
@@ -285,6 +301,51 @@ class PhoneAutomationService : AccessibilityService() {
             else -> return false
         }
         return performGlobalAction(globalAction)
+    }
+
+    /**
+     * Waits for the UI to stabilize after an action.
+     */
+    suspend fun awaitIdle(durationMs: Long = 300L) {
+        kotlinx.coroutines.delay(durationMs.coerceIn(50L, 5000L))
+    }
+
+    /**
+     * Polls the active screen hierarchy until a node matching [predicate] is found or [timeoutMs] expires.
+     */
+    suspend fun waitForNode(
+        timeoutMs: Long = 3000L,
+        intervalMs: Long = 200L,
+        predicate: (ScreenNodeInfo) -> Boolean,
+    ): ScreenNodeInfo? {
+        val deadline = System.currentTimeMillis() + timeoutMs.coerceIn(100L, 30_000L)
+        while (System.currentTimeMillis() <= deadline) {
+            val inspection = inspectScreen()
+            val all = inspection.interactiveElements + inspection.textElements
+            val match = all.firstOrNull(predicate)
+            if (match != null) return match
+            kotlinx.coroutines.delay(intervalMs.coerceAtLeast(50L))
+        }
+        return null
+    }
+
+    /**
+     * Polls the active screen hierarchy until no node matching [predicate] is visible or [timeoutMs] expires.
+     */
+    suspend fun waitForNodeDisappear(
+        timeoutMs: Long = 3000L,
+        intervalMs: Long = 200L,
+        predicate: (ScreenNodeInfo) -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs.coerceIn(100L, 30_000L)
+        while (System.currentTimeMillis() <= deadline) {
+            val inspection = inspectScreen()
+            val all = inspection.interactiveElements + inspection.textElements
+            val match = all.firstOrNull(predicate)
+            if (match == null) return true
+            kotlinx.coroutines.delay(intervalMs.coerceAtLeast(50L))
+        }
+        return false
     }
 
     /**

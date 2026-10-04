@@ -17,9 +17,15 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.service.phone.ElementSelector
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.service.phone.PhoneAutomationStep
 import me.rerere.rikkahub.service.phone.PhoneCallController
+import me.rerere.rikkahub.service.phone.PhoneElementMatcher
+import me.rerere.rikkahub.service.phone.ScreenNodeInfo
+import me.rerere.rikkahub.service.phone.flow.MaestroFlowExecutor
+import me.rerere.rikkahub.service.phone.flow.MaestroFlowParser
+import me.rerere.rikkahub.service.phone.flow.MaestroFlowRepository
 import java.io.ByteArrayOutputStream
 
 internal fun buildPhoneInspectScreenTool(): Tool = Tool(
@@ -50,7 +56,9 @@ internal fun buildPhoneClickTool(): Tool = Tool(
     name = "phone_click",
     description = """
         Tap or click on the phone screen at specific (x, y) coordinates or on an interactive UI element.
-        Provide (x, y) coordinates, or provide 'query' (text/label of the button to click).
+        Provide (x, y) coordinates, or provide 'query' (text/label of the button to click),
+        or 'view_id' (resource ID like 'search_button'), or 'node_id' from phone_inspect_screen.
+        Optional 'index' (default 0) selects among multiple matches.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -67,9 +75,17 @@ internal fun buildPhoneClickTool(): Tool = Tool(
                     put("type", "string")
                     put("description", "Text or description of the UI element to click if (x, y) is not specified")
                 })
+                put("view_id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Resource ID or View ID of the element to click")
+                })
                 put("node_id", buildJsonObject {
                     put("type", "integer")
                     put("description", "Element ID from phone_inspect_screen")
+                })
+                put("index", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "0-based index if multiple elements match query (default: 0)")
                 })
             },
             required = emptyList()
@@ -88,24 +104,28 @@ internal fun buildPhoneClickTool(): Tool = Tool(
         val params = args.jsonObject
         var targetX = params["x"]?.jsonPrimitive?.doubleOrNull?.toFloat()
         var targetY = params["y"]?.jsonPrimitive?.doubleOrNull?.toFloat()
+        var matchedLabel = ""
 
         if (targetX == null || targetY == null) {
-            val query = params["query"]?.jsonPrimitive?.contentOrNull?.lowercase()
+            val query = params["query"]?.jsonPrimitive?.contentOrNull
+            val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
             val nodeId = params["node_id"]?.jsonPrimitive?.intOrNull
+            val index = params["index"]?.jsonPrimitive?.intOrNull ?: 0
 
             val inspection = service.inspectScreen()
-            val target = inspection.interactiveElements.firstOrNull { node ->
-                if (nodeId != null && node.id == nodeId) return@firstOrNull true
-                if (!query.isNullOrBlank()) {
-                    node.text.lowercase().contains(query) ||
-                        node.description.lowercase().contains(query) ||
-                        node.viewId.lowercase().contains(query)
-                } else false
-            }
+            val allNodes = inspection.interactiveElements + inspection.textElements
+            val selector = ElementSelector(
+                query = query,
+                viewId = viewId,
+                nodeId = nodeId,
+                index = index,
+            )
+            val target = PhoneElementMatcher.findBestMatch(allNodes, selector)
 
             if (target != null) {
                 targetX = target.centerX.toFloat()
                 targetY = target.centerY.toFloat()
+                matchedLabel = target.text.ifBlank { target.description }.ifBlank { target.viewId }
             }
         }
 
@@ -118,10 +138,12 @@ internal fun buildPhoneClickTool(): Tool = Tool(
         }
 
         val clicked = service.click(targetX, targetY)
+        service.awaitIdle(250L)
         val payload = buildJsonObject {
             put("success", clicked)
             put("x", targetX)
             put("y", targetY)
+            if (matchedLabel.isNotBlank()) put("matched", matchedLabel)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }
@@ -400,6 +422,382 @@ internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
     }
 )
 
+internal fun buildPhoneAssertVisibleTool(): Tool = Tool(
+    name = "phone_assert_visible",
+    description = """
+        Assert that a specific UI element is visible on the phone screen.
+        Waits up to 'timeout_ms' (default 3000ms) for the element to appear.
+        Provide 'query' (text or content description) and/or 'view_id' (resource ID).
+        Set 'optional' to true to check visibility without throwing a failure.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Text or description of the element to assert visible")
+                })
+                put("view_id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Resource ID / View ID of the element (e.g. 'search_button')")
+                })
+                put("timeout_ms", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Maximum time in ms to wait for the element (default 3000)")
+                })
+                put("optional", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "If true, does not fail if element is not found. Default false.")
+                })
+            },
+            required = emptyList()
+        )
+    },
+    execute = { args ->
+        val service = PhoneAutomationService.instance
+        if (service == null) {
+            return@Tool listOf(UIMessagePart.Text(accessibilityInactivePayload()))
+        }
+        val params = args.jsonObject
+        val query = params["query"]?.jsonPrimitive?.contentOrNull
+        val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
+        val timeoutMs = params["timeout_ms"]?.jsonPrimitive?.longOrNull ?: 3000L
+        val optional = params["optional"]?.jsonPrimitive?.booleanOrNull ?: false
+
+        val selector = ElementSelector(query = query, viewId = viewId)
+        val startTime = System.currentTimeMillis()
+        val node = service.waitForNode(timeoutMs = timeoutMs) { candidate ->
+            PhoneElementMatcher.findBestMatch(listOf(candidate), selector) != null
+        }
+        val elapsed = System.currentTimeMillis() - startTime
+        val found = node != null
+
+        val payload = buildJsonObject {
+            put("success", found || optional)
+            put("visible", found)
+            put("elapsed_ms", elapsed)
+            if (node != null) {
+                put("matched_node", buildJsonObject {
+                    put("id", node.id)
+                    put("text", node.text)
+                    put("view_id", node.viewId)
+                    put("x", node.centerX)
+                    put("y", node.centerY)
+                })
+            } else {
+                put("message", "Element not visible within ${timeoutMs}ms: ${query ?: viewId}")
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+internal fun buildPhoneScrollUntilVisibleTool(context: Context): Tool = Tool(
+    name = "phone_scroll_until_visible",
+    description = """
+        Scroll on the phone screen repeatedly until a specific element is found and visible.
+        Provide 'query' (text or description) and/or 'view_id'.
+        Direction can be 'down' (default) or 'up'.
+        Default max_swipes is 5.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Text or description of the target element")
+                })
+                put("view_id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "View ID of the target element")
+                })
+                put("direction", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("up"); add("down"); add("left"); add("right") })
+                    put("description", "Direction to swipe: 'down' (scrolls down) or 'up'")
+                })
+                put("max_swipes", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Maximum scroll attempts (default 5)")
+                })
+            },
+            required = emptyList()
+        )
+    },
+    execute = { args ->
+        val service = PhoneAutomationService.instance
+        if (service == null) {
+            return@Tool listOf(UIMessagePart.Text(accessibilityInactivePayload()))
+        }
+        val params = args.jsonObject
+        val query = params["query"]?.jsonPrimitive?.contentOrNull
+        val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
+        val direction = params["direction"]?.jsonPrimitive?.contentOrNull ?: "down"
+        val maxSwipes = (params["max_swipes"]?.jsonPrimitive?.intOrNull ?: 5).coerceIn(1, 15)
+
+        val selector = ElementSelector(query = query, viewId = viewId)
+        val metrics = context.resources.displayMetrics
+        val width = metrics.widthPixels.toFloat()
+        val height = metrics.heightPixels.toFloat()
+        val (sx, sy, ex, ey) = when (direction.lowercase()) {
+            "up" -> listOf(width * 0.5f, height * 0.25f, width * 0.5f, height * 0.75f)
+            "left" -> listOf(width * 0.85f, height * 0.5f, width * 0.15f, height * 0.5f)
+            "right" -> listOf(width * 0.15f, height * 0.5f, width * 0.85f, height * 0.5f)
+            else -> listOf(width * 0.5f, height * 0.75f, width * 0.5f, height * 0.25f)
+        }
+
+        var matchedNode: ScreenNodeInfo? = null
+        var swipesDone = 0
+
+        for (attempt in 0..maxSwipes) {
+            val inspection = service.inspectScreen()
+            val all = inspection.interactiveElements + inspection.textElements
+            matchedNode = PhoneElementMatcher.findBestMatch(all, selector)
+            if (matchedNode != null) break
+            if (attempt < maxSwipes) {
+                service.swipe(sx, sy, ex, ey, 300L)
+                swipesDone++
+                service.awaitIdle(400L)
+            }
+        }
+
+        val found = matchedNode != null
+        val payload = buildJsonObject {
+            put("success", found)
+            put("found", found)
+            put("swipes_performed", swipesDone)
+            put("direction", direction)
+            if (matchedNode != null) {
+                put("matched_node", buildJsonObject {
+                    put("id", matchedNode.id)
+                    put("text", matchedNode.text)
+                    put("view_id", matchedNode.viewId)
+                    put("x", matchedNode.centerX)
+                    put("y", matchedNode.centerY)
+                })
+            } else {
+                put("error", "Element not found after $swipesDone swipes")
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+internal fun buildPhoneRunFlowTool(context: Context): Tool = Tool(
+    name = "phone_run_flow",
+    description = """
+        Execute a Maestro-style automation flow on the phone in a single batch.
+        Accepts declarative YAML or JSON commands (launchApp, tapOn, inputText, pressKey, scrollUntilVisible, assertVisible, sleep, repeat).
+        Provide 'flow' (inline YAML/JSON string) OR 'name' (name of a previously saved flow).
+        Optional 'params' map replaces '${'$'}{KEY}' placeholders in the flow.
+        Optional 'save_as' saves this flow under that name for future reuse.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("flow", buildJsonObject {
+                    put("type", "string")
+                    put("description", "YAML or JSON string of Maestro commands")
+                })
+                put("name", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Name of a saved flow to run")
+                })
+                put("params", buildJsonObject {
+                    put("type", "object")
+                    put("description", "Key-value map to replace \${KEY} in the flow")
+                })
+                put("save_as", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional name to save this flow after execution")
+                })
+            },
+            required = emptyList()
+        )
+    },
+    execute = { args ->
+        val service = PhoneAutomationService.instance
+        if (service == null) {
+            return@Tool listOf(UIMessagePart.Text(accessibilityInactivePayload()))
+        }
+        val paramsObj = args.jsonObject
+        var flowContent = paramsObj["flow"]?.jsonPrimitive?.contentOrNull
+        val flowName = paramsObj["name"]?.jsonPrimitive?.contentOrNull
+        val saveAs = paramsObj["save_as"]?.jsonPrimitive?.contentOrNull
+
+        val bindings = mutableMapOf<String, String>()
+        paramsObj["params"]?.jsonObject?.forEach { (k, v) ->
+            bindings[k] = v.jsonPrimitive.contentOrNull ?: v.toString()
+        }
+
+        val repository = MaestroFlowRepository(context)
+        if (flowContent.isNullOrBlank() && !flowName.isNullOrBlank()) {
+            val saved = repository.getFlow(flowName)
+            if (saved == null) {
+                val err = buildJsonObject {
+                    put("success", false)
+                    put("error", "Saved flow \"$flowName\" not found")
+                }
+                return@Tool listOf(UIMessagePart.Text(err.toString()))
+            }
+            flowContent = saved.content
+        }
+
+        if (flowContent.isNullOrBlank()) {
+            val err = buildJsonObject {
+                put("success", false)
+                put("error", "Neither 'flow' content nor valid 'name' was provided")
+            }
+            return@Tool listOf(UIMessagePart.Text(err.toString()))
+        }
+
+        val commands = MaestroFlowParser.parse(flowContent, bindings)
+        if (commands.isEmpty()) {
+            val err = buildJsonObject {
+                put("success", false)
+                put("error", "Failed to parse any valid commands from flow")
+            }
+            return@Tool listOf(UIMessagePart.Text(err.toString()))
+        }
+
+        val executor = MaestroFlowExecutor(service, context)
+        val result = executor.execute(commands)
+
+        if (!saveAs.isNullOrBlank() && result.success) {
+            repository.saveFlow(saveAs, flowContent)
+        }
+
+        val payload = buildJsonObject {
+            put("success", result.success)
+            put("executed_steps", result.executedSteps)
+            put("total_steps", result.totalSteps)
+            put("duration_ms", result.durationMs)
+            if (result.failedStepIndex != null) put("failed_step_index", result.failedStepIndex)
+            if (result.error != null) put("error", result.error)
+            if (result.packageName.isNotBlank()) put("package_name", result.packageName)
+            put("steps", buildJsonArray {
+                result.stepResults.forEach { step ->
+                    add(buildJsonObject {
+                        put("step", step.stepIndex)
+                        put("command", step.commandName)
+                        put("detail", step.detail)
+                        put("success", step.success)
+                        put("elapsed_ms", step.elapsedMs)
+                        if (step.optionalSkipped) put("optional_skipped", true)
+                    })
+                }
+            })
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+internal fun buildPhoneManageFlowsTool(context: Context): Tool = Tool(
+    name = "phone_manage_flows",
+    description = """
+        Manage saved Maestro-style automation flows on the phone.
+        'action' can be 'list', 'get', 'save', or 'delete'.
+        Allows teaching and remembering multi-step routines across sessions.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("action", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("list"); add("get"); add("save"); add("delete") })
+                    put("description", "Action to perform: 'list', 'get', 'save', 'delete'")
+                })
+                put("name", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Flow name (required for get, save, delete)")
+                })
+                put("content", buildJsonObject {
+                    put("type", "string")
+                    put("description", "YAML/JSON content when saving a flow")
+                })
+                put("description", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Brief description of what the flow does (for save)")
+                })
+            },
+            required = listOf("action")
+        )
+    },
+    execute = { args ->
+        val params = args.jsonObject
+        val action = params["action"]?.jsonPrimitive?.contentOrNull ?: "list"
+        val name = params["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val content = params["content"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val desc = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+        val repository = MaestroFlowRepository(context)
+        val payload = when (action.lowercase()) {
+            "list" -> {
+                val list = repository.listFlows()
+                buildJsonObject {
+                    put("success", true)
+                    put("count", list.size)
+                    put("flows", buildJsonArray {
+                        list.forEach { item ->
+                            add(buildJsonObject {
+                                put("name", item.name)
+                                put("description", item.description)
+                                put("step_count", item.stepCount)
+                                put("last_modified", item.lastModified)
+                            })
+                        }
+                    })
+                }
+            }
+            "get" -> {
+                val flow = repository.getFlow(name)
+                if (flow != null) {
+                    buildJsonObject {
+                        put("success", true)
+                        put("name", flow.name)
+                        put("description", flow.description)
+                        put("step_count", flow.stepCount)
+                        put("content", flow.content)
+                    }
+                } else {
+                    buildJsonObject {
+                        put("success", false)
+                        put("error", "Flow \"$name\" not found")
+                    }
+                }
+            }
+            "save" -> {
+                if (name.isBlank() || content.isBlank()) {
+                    buildJsonObject {
+                        put("success", false)
+                        put("error", "'name' and 'content' are required to save a flow")
+                    }
+                } else {
+                    val saved = repository.saveFlow(name, content, desc)
+                    buildJsonObject {
+                        put("success", saved)
+                        put("name", name)
+                        put("message", if (saved) "Flow saved successfully" else "Failed to save flow")
+                    }
+                }
+            }
+            "delete" -> {
+                val deleted = repository.deleteFlow(name)
+                buildJsonObject {
+                    put("success", deleted)
+                    put("name", name)
+                    put("message", if (deleted) "Flow deleted successfully" else "Failed to delete flow")
+                }
+            }
+            else -> buildJsonObject {
+                put("success", false)
+                put("error", "Unknown action \"$action\"")
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
 
 
 internal fun buildPlaceCallTool(phoneCallController: PhoneCallController): Tool = Tool(
@@ -511,7 +909,14 @@ private fun screenTextMessage(service: PhoneAutomationService): UIMessagePart.Te
                     put("id", node.id)
                     put("text", clipScreenText(node.text))
                     put("content_description", clipScreenText(node.description))
+                    if (node.viewId.isNotBlank()) put("view_id", node.viewId)
+                    if (node.className.isNotBlank()) put("class_name", node.className)
                     put("clickable", node.clickable)
+                    if (node.editable) put("editable", true)
+                    if (node.scrollable) put("scrollable", true)
+                    if (!node.enabled) put("enabled", false)
+                    if (node.checked) put("checked", true)
+                    if (node.focused) put("focused", true)
                     put("bounds", buildJsonObject {
                         put("left", node.left)
                         put("top", node.top)
@@ -576,6 +981,10 @@ private fun phoneAutomationStepFor(name: String, args: kotlinx.serialization.jso
         "phone_swipe" -> PhoneAutomationStep.Swipe
         "phone_type_text" -> PhoneAutomationStep.Type
         "phone_press_key" -> PhoneAutomationStep.PressKey
+        "phone_assert_visible" -> PhoneAutomationStep.AssertVisible
+        "phone_scroll_until_visible" -> PhoneAutomationStep.ScrollUntilVisible
+        "phone_run_flow" -> PhoneAutomationStep.RunFlow
+        "phone_manage_flows" -> PhoneAutomationStep.ManageFlows
         "place_call" -> PhoneAutomationStep.PlaceCall
         "end_call" -> PhoneAutomationStep.EndCall
         "read_call_state" -> PhoneAutomationStep.ReadCall
