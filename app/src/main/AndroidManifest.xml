@@ -47,6 +47,20 @@
       <data android:scheme="tel" />
     </intent>
     <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="whatsapp" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="geo" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="google.navigation" />
+    </intent>
+    <package android:name="com.whatsapp" />
+    <package android:name="com.google.android.apps.maps" />
+    <intent>
       <action android:name="android.intent.action.CALL" />
       <data android:scheme="tel" />
     </intent>

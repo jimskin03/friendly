@@ -508,10 +508,33 @@ class PhoneAutomationService : AccessibilityService() {
 
         /**
          * Launches an app by package id or home-screen name.
+         * Known actions (WhatsApp chat, Maps search/directions, dialer) open
+         * by intent first. Everything else matches by name or package.
          * "Google Maps" matches the app labeled Maps, because every word has to
          * show up in the label or the package, and the closest label wins.
          */
-        fun launchApp(context: Context, query: String): Pair<Boolean, String> {
+        fun launchApp(
+            context: Context,
+            query: String,
+            phone: String? = null,
+            placeQuery: String? = null,
+        ): Pair<Boolean, String> {
+            val primary = query.trim()
+            val phoneArg = phone?.trim().orEmpty()
+            val placeArg = placeQuery?.trim().orEmpty()
+            if (primary.isEmpty() && phoneArg.isEmpty() && placeArg.isEmpty()) {
+                return false to "App not found matching '$query'"
+            }
+            when (val direct = DirectAppIntents.resolve(context, primary, phoneArg, placeArg)) {
+                is DirectAppIntents.Result.Launched -> return true to direct.message
+                is DirectAppIntents.Result.Blocked -> return false to direct.message
+                is DirectAppIntents.Result.Fallback -> return launchAppByName(context, direct.query)
+                null -> Unit
+            }
+            return launchAppByName(context, primary.ifEmpty { query })
+        }
+
+        private fun launchAppByName(context: Context, query: String): Pair<Boolean, String> {
             val pm = context.packageManager
             val trimmed = query.trim().lowercase()
             if (trimmed.isEmpty()) return false to "App not found matching '$query'"

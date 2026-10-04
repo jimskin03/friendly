@@ -25,9 +25,10 @@ import java.io.ByteArrayOutputStream
 internal fun buildPhoneInspectScreenTool(): Tool = Tool(
     name = "phone_inspect_screen",
     description = """
-        Inspect the currently visible UI elements, buttons, text fields, and app package on the user's phone.
-        Returns the active package name, window title, and list of clickable/interactive and text elements
-        with their element IDs, coordinates (centerX, centerY), and labels.
+        Read the phone screen as text. This is the default inspect path and does not take a screenshot.
+        Returns the visible accessibility tree: text, content description, clickable, and bounds,
+        plus the active package and window title. A huge tree is truncated with a node count.
+        Use phone_screenshot with screenshot=true only when a bitmap is required.
         Requires the Phone Automation Accessibility service to be active.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -39,44 +40,9 @@ internal fun buildPhoneInspectScreenTool(): Tool = Tool(
     execute = {
         val service = PhoneAutomationService.instance
         if (service == null) {
-            val payload = buildJsonObject {
-                put("error", "Accessibility service is not running. Please enable Friendly Phone Automation in Android Accessibility settings.")
-                put("service_active", false)
-            }
-            return@Tool listOf(UIMessagePart.Text(payload.toString()))
+            return@Tool listOf(UIMessagePart.Text(accessibilityInactivePayload()))
         }
-
-        val result = service.inspectScreen()
-        val payload = buildJsonObject {
-            put("service_active", true)
-            put("package_name", result.packageName)
-            put("window_title", result.windowTitle)
-            put("interactive_elements", buildJsonArray {
-                result.interactiveElements.take(50).forEach { node ->
-                    add(buildJsonObject {
-                        put("id", node.id)
-                        if (node.text.isNotEmpty()) put("text", node.text)
-                        if (node.description.isNotEmpty()) put("description", node.description)
-                        if (node.viewId.isNotEmpty()) put("view_id", node.viewId)
-                        put("type", node.className)
-                        put("clickable", node.clickable)
-                        put("editable", node.editable)
-                        put("center_x", node.centerX)
-                        put("center_y", node.centerY)
-                    })
-                }
-            })
-            put("text_elements", buildJsonArray {
-                result.textElements.take(30).forEach { node ->
-                    add(buildJsonObject {
-                        put("id", node.id)
-                        if (node.text.isNotEmpty()) put("text", node.text)
-                        if (node.description.isNotEmpty()) put("description", node.description)
-                    })
-                }
-            })
-        }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(screenTextMessage(service))
     }
 )
 
@@ -330,15 +296,27 @@ internal fun buildPhonePressKeyTool(): Tool = Tool(
 internal fun buildPhoneLaunchAppTool(context: Context): Tool = Tool(
     name = "phone_launch_app",
     description = """
-        Launch an application on the user's phone by application name or package name.
-        Examples: 'YouTube', 'Settings', 'Chrome', 'Camera', 'Google Maps', 'Spotify'.
+        Launch an application on the user's phone by application name or package name, without a screenshot.
+        Known actions open by deep link first: WhatsApp plus a phone number uses whatsapp://send?phone=<digits>;
+        WhatsApp alone opens com.whatsapp; Google Maps with a query uses geo:0,0?q= or google.navigation for directions;
+        call or dial plus a phone number opens the dialer with tel: and does not place the call (use place_call to dial).
+        Emergency numbers are refused. Unknown apps still match by name or package. If a deep link has no handler, the app is launched by name.
+        Examples: 'YouTube', 'Settings', 'Chrome', 'WhatsApp', 'Google Maps'.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("app_name", buildJsonObject {
                     put("type", "string")
-                    put("description", "Name or package ID of the application to open")
+                    put("description", "Name or package ID of the application to open. May include the place or the words call/dial.")
+                })
+                put("phone", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Phone number for a WhatsApp chat or for opening the dialer. Digits, optional leading +.")
+                })
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Google Maps search or directions query, when app_name is Maps.")
                 })
             },
             required = listOf("app_name")
@@ -347,12 +325,16 @@ internal fun buildPhoneLaunchAppTool(context: Context): Tool = Tool(
     execute = { args ->
         val params = args.jsonObject
         val appName = params["app_name"]?.jsonPrimitive?.contentOrNull ?: error("app_name is required")
-        val (success, message) = PhoneAutomationService.launchApp(context, appName)
+        val phone = params["phone"]?.jsonPrimitive?.contentOrNull
+        val placeQuery = params["query"]?.jsonPrimitive?.contentOrNull
+        val (success, message) = PhoneAutomationService.launchApp(context, appName, phone, placeQuery)
 
         val payload = buildJsonObject {
             put("success", success)
             put("message", message)
             put("app_name", appName)
+            if (!phone.isNullOrBlank()) put("phone", phone)
+            if (!placeQuery.isNullOrBlank()) put("query", placeQuery)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }
@@ -361,23 +343,31 @@ internal fun buildPhoneLaunchAppTool(context: Context): Tool = Tool(
 internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
     name = "phone_screenshot",
     description = """
-        Capture a live screenshot of the phone screen for multimodal visual analysis.
-        Returns the captured screen image to the conversation.
+        Read the phone screen. The default is the visible text tree (text, content description, clickable, bounds)
+        and does not take a bitmap. Set screenshot to true only when a bitmap is required.
+        Prefer phone_inspect_screen for the same text result. Requires the Phone Automation Accessibility service.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
-            properties = buildJsonObject {},
+            properties = buildJsonObject {
+                put("screenshot", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Set true to capture a bitmap. Omit or false to read the screen as text. Default false.")
+                })
+            },
             required = emptyList()
         )
     },
-    execute = {
+    execute = { args ->
         val service = PhoneAutomationService.instance
         if (service == null) {
-            val payload = buildJsonObject {
-                put("error", "Accessibility service is not running. Please enable Friendly Phone Automation in Android Accessibility settings.")
-                put("success", false)
-            }
-            return@Tool listOf(UIMessagePart.Text(payload.toString()))
+            return@Tool listOf(UIMessagePart.Text(accessibilityInactivePayload()))
+        }
+        val screenshotFlag = args.jsonObject["screenshot"]?.jsonPrimitive
+        val wantBitmap = screenshotFlag?.booleanOrNull
+            ?: screenshotFlag?.contentOrNull.equals("true", ignoreCase = true)
+        if (!wantBitmap) {
+            return@Tool listOf(screenTextMessage(service))
         }
 
         val bitmap = service.takeScreenshot()
@@ -385,6 +375,8 @@ internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
             val payload = buildJsonObject {
                 put("error", "Failed to capture screenshot (requires Android 11+ and accessibility screenshot permission).")
                 put("success", false)
+                put("mode", "image")
+                put("screenshot", true)
             }
             return@Tool listOf(UIMessagePart.Text(payload.toString()))
         }
@@ -399,6 +391,8 @@ internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
             UIMessagePart.Text(
                 buildJsonObject {
                     put("success", true)
+                    put("mode", "image")
+                    put("screenshot", true)
                     put("description", "Phone screenshot captured successfully")
                 }.toString()
             )
@@ -477,6 +471,60 @@ internal fun buildReadCallStateTool(phoneCallController: PhoneCallController): T
     }
 )
 
+
+private const val SCREEN_TEXT_NODE_LIMIT = 100
+private const val SCREEN_TEXT_CHAR_LIMIT = 200
+
+private fun clipScreenText(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.length <= SCREEN_TEXT_CHAR_LIMIT) return trimmed
+    return trimmed.take(SCREEN_TEXT_CHAR_LIMIT) + "…"
+}
+
+private fun accessibilityInactivePayload(): String {
+    return buildJsonObject {
+        put("error", "Accessibility service is not running. Please enable Friendly Phone Automation in Android Accessibility settings.")
+        put("service_active", false)
+        put("success", false)
+    }.toString()
+}
+
+private fun screenTextMessage(service: PhoneAutomationService): UIMessagePart.Text {
+    val result = service.inspectScreen()
+    val nodes = (result.interactiveElements + result.textElements).sortedBy { it.id }
+    val returned = nodes.take(SCREEN_TEXT_NODE_LIMIT)
+    val payload = buildJsonObject {
+        put("mode", "text")
+        put("screenshot", false)
+        put("service_active", true)
+        put("success", true)
+        put("package_name", result.packageName)
+        put("window_title", result.windowTitle)
+        put("node_limit", SCREEN_TEXT_NODE_LIMIT)
+        put("returned_nodes", returned.size)
+        put("total_nodes", nodes.size)
+        put("truncated", nodes.size > returned.size)
+        put("omitted_count", (nodes.size - returned.size).coerceAtLeast(0))
+        put("nodes", buildJsonArray {
+            returned.forEach { node ->
+                add(buildJsonObject {
+                    put("id", node.id)
+                    put("text", clipScreenText(node.text))
+                    put("content_description", clipScreenText(node.description))
+                    put("clickable", node.clickable)
+                    put("bounds", buildJsonObject {
+                        put("left", node.left)
+                        put("top", node.top)
+                        put("right", node.right)
+                        put("bottom", node.bottom)
+                    })
+                })
+            }
+        })
+    }
+    return UIMessagePart.Text(payload.toString())
+}
+
 private fun callActionJson(result: me.rerere.rikkahub.service.phone.PhoneCallActionResult): String {
     return buildJsonObject {
         put("success", result.success)
@@ -494,9 +542,9 @@ private fun callActionJson(result: me.rerere.rikkahub.service.phone.PhoneCallAct
 
 internal fun Tool.withPhoneAutomationTracking(): Tool {
     val originalExecute = execute
-    val step = phoneAutomationStepFor(name)
     return copy(
         execute = { args ->
+            val step = phoneAutomationStepFor(name, args)
             PhoneAutomationService.reportWorkStarted(step)
             try {
                 val result = originalExecute(args)
@@ -513,16 +561,24 @@ internal fun Tool.withPhoneAutomationTracking(): Tool {
     )
 }
 
-private fun phoneAutomationStepFor(name: String): PhoneAutomationStep = when (name) {
-    "phone_launch_app" -> PhoneAutomationStep.LaunchApp
-    "phone_screenshot" -> PhoneAutomationStep.Screenshot
-    "phone_inspect_screen" -> PhoneAutomationStep.Inspect
-    "phone_click" -> PhoneAutomationStep.Click
-    "phone_swipe" -> PhoneAutomationStep.Swipe
-    "phone_type_text" -> PhoneAutomationStep.Type
-    "phone_press_key" -> PhoneAutomationStep.PressKey
-    "place_call" -> PhoneAutomationStep.PlaceCall
-    "end_call" -> PhoneAutomationStep.EndCall
-    "read_call_state" -> PhoneAutomationStep.ReadCall
-    else -> PhoneAutomationStep.Other
+private fun phoneAutomationStepFor(name: String, args: kotlinx.serialization.json.JsonElement): PhoneAutomationStep {
+    if (name == "phone_screenshot") {
+        val flag = args.jsonObject["screenshot"]?.jsonPrimitive
+        val wantBitmap = flag?.booleanOrNull
+            ?: flag?.contentOrNull.equals("true", ignoreCase = true)
+        if (!wantBitmap) return PhoneAutomationStep.Inspect
+    }
+    return when (name) {
+        "phone_launch_app" -> PhoneAutomationStep.LaunchApp
+        "phone_screenshot" -> PhoneAutomationStep.Screenshot
+        "phone_inspect_screen" -> PhoneAutomationStep.Inspect
+        "phone_click" -> PhoneAutomationStep.Click
+        "phone_swipe" -> PhoneAutomationStep.Swipe
+        "phone_type_text" -> PhoneAutomationStep.Type
+        "phone_press_key" -> PhoneAutomationStep.PressKey
+        "place_call" -> PhoneAutomationStep.PlaceCall
+        "end_call" -> PhoneAutomationStep.EndCall
+        "read_call_state" -> PhoneAutomationStep.ReadCall
+        else -> PhoneAutomationStep.Other
+    }
 }

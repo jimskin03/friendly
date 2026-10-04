@@ -24,7 +24,14 @@ object PhoneInspectScreenToolUI : ToolUIRenderer {
         val pkg = context.content?.let {
             it.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull
         }
-        val text = if (!pkg.isNullOrBlank()) "App: $pkg" else "Inspected active phone UI"
+        val returned = context.content?.let {
+            it.jsonObject["returned_nodes"]?.jsonPrimitive?.contentOrNull
+        }
+        val text = when {
+            !pkg.isNullOrBlank() && !returned.isNullOrBlank() -> "Read $pkg ($returned text nodes)"
+            !pkg.isNullOrBlank() -> "App: $pkg"
+            else -> "Read the screen as text"
+        }
         Text(text = text, style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -127,6 +134,10 @@ object PhoneScreenshotToolUI : ToolUIRenderer {
 
     @Composable
     override fun Summary(context: ToolUIContext) {
-        Text(text = "Phone screenshot captured", style = MaterialTheme.typography.bodySmall)
+        val mode = context.content?.let {
+            it.jsonObject["mode"]?.jsonPrimitive?.contentOrNull
+        }
+        val text = if (mode == "text") "Read the screen as text" else "Phone screenshot captured"
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
     }
 }
