@@ -25,6 +25,11 @@
   <string name="phone_action_take_screenshot_desc">Capture active screen &amp; send to AI</string>
   <string name="assistant_page_local_tools_phone_automation_title">Phone Automation</string>
   <string name="assistant_page_local_tools_phone_automation_desc">Allow AI to interact with phone UI: tap, swipe, type, launch apps, inspect screen</string>
+  <string name="phone_automation_window_mode_title">Window mode</string>
+  <string name="phone_automation_window_mode_desc">Experimental. Apps opened by Phone Automation use a split or popup window. The mini indicator stays off while Split window or Popup window is selected.</string>
+  <string name="phone_automation_window_mode_off">Off</string>
+  <string name="phone_automation_window_mode_split">Split window</string>
+  <string name="phone_automation_window_mode_popup">Popup window</string>
   <string name="phone_mini_indicator_title">Phone Automation mini indicator</string>
   <string name="phone_mini_indicator_desc">When enabled, you can minimize Friendly into a floating status indicator (from the Phone sheet or by long-pressing the phone icon). The indicator also appears on its own during a call or while the agent is working, and shows the live status. An ongoing notification is used as backup. Default: on.</string>
   <string name="phone_mini_indicator_running">Running</string>

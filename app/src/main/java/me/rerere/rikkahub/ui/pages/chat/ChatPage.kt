@@ -99,6 +99,7 @@ import me.rerere.rikkahub.data.model.FolderLabel
 import me.rerere.rikkahub.ui.components.ui.CreateFolderDialog
 import me.rerere.rikkahub.ui.components.ui.FolderBadge
 import me.rerere.rikkahub.ui.components.ui.MoveToFolderSheet
+import me.rerere.rikkahub.data.datastore.PhoneAutomationWindowMode
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -370,6 +371,10 @@ private fun ChatPageContent(
     }
 
     fun activatePhoneMiniMode(requireOverlay: Boolean = true) {
+        if (setting.displaySetting.phoneAutomationWindowMode != PhoneAutomationWindowMode.OFF) {
+            pendingPhoneMiniActivate = false
+            return
+        }
         if (!setting.displaySetting.enablePhoneAutomationMiniIndicator) {
             toaster.show(
                 message = context.getString(R.string.phone_mini_indicator_disabled_toast),
@@ -434,12 +439,14 @@ private fun ChatPageContent(
                     onClick = {
                         showPhoneMiniOverlayDialog = false
                         pendingPhoneMiniActivate = false
-                        // Notification backup still works without SYSTEM_ALERT_WINDOW.
-                        phoneMiniIndicator.activate()
-                        if (vm.voiceSession.state.value.isActive) {
-                            VoiceCaptureForegroundService.acquire(context.applicationContext)
+                        if (setting.displaySetting.phoneAutomationWindowMode == PhoneAutomationWindowMode.OFF) {
+                            // Notification backup still works without SYSTEM_ALERT_WINDOW.
+                            phoneMiniIndicator.activate()
+                            if (vm.voiceSession.state.value.isActive) {
+                                VoiceCaptureForegroundService.acquire(context.applicationContext)
+                            }
+                            (context as? ComponentActivity)?.moveTaskToBack(true)
                         }
-                        (context as? ComponentActivity)?.moveTaskToBack(true)
                     }
                 ) {
                     Text(context.getString(R.string.cancel))

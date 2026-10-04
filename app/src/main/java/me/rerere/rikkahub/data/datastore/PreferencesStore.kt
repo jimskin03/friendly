@@ -824,6 +824,18 @@ enum class ChatFontFamily {
 }
 
 @Serializable
+enum class PhoneAutomationWindowMode {
+    @SerialName("off")
+    OFF,
+
+    @SerialName("split")
+    SPLIT,
+
+    @SerialName("popup")
+    POPUP,
+}
+
+@Serializable
 enum class BackgroundEffectType {
     @SerialName("blur")
     BLUR,
@@ -883,6 +895,12 @@ data class DisplaySetting(
      * Not reliable on Android 10+ unless this app is the default dialer. Default off.
      */
     val enablePhoneCallAutoAnswerAttempt: Boolean = false,
+    /**
+     * Experimental. Off keeps a normal full-screen launch.
+     * Split or Popup asks the system to open Phone Automation app launches
+     * in that window mode, and the mini indicator stays off until this is Off again.
+     */
+    val phoneAutomationWindowMode: PhoneAutomationWindowMode = PhoneAutomationWindowMode.OFF,
 )
 
 @Serializable

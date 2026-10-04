@@ -143,7 +143,7 @@ internal object DirectAppIntents {
 
     private fun start(context: Context, intent: Intent): Boolean {
         return try {
-            context.startActivity(intent)
+            context.startPhoneAutomationActivity(intent)
             true
         } catch (e: ActivityNotFoundException) {
             false

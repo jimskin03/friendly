@@ -152,7 +152,11 @@ class PhoneCallController(
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 try {
-                    app.startActivity(intent)
+                    if (granted) {
+                        app.startActivity(intent)
+                    } else {
+                        app.startPhoneAutomationActivity(intent)
+                    }
                     val mode = if (granted) "action_call" else "action_dial"
                     if (mode == "action_call") {
                         outboundSawLive = false
@@ -280,7 +284,7 @@ class PhoneCallController(
     fun openDialer(number: String? = null) {
         val uri = number?.let { Uri.fromParts("tel", it, null) }
         val intent = Intent(Intent.ACTION_DIAL, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { app.startActivity(intent) }
+        runCatching { app.startPhoneAutomationActivity(intent) }
             .onFailure { Log.w(TAG, "Unable to open dialer", it) }
     }
 

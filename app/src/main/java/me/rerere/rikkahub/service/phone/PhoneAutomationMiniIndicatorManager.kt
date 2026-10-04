@@ -77,6 +77,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.PHONE_AUTOMATION_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.data.datastore.PhoneAutomationWindowMode
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
@@ -119,6 +120,10 @@ private const val CLOSE_ZONE_TAG = "phone_automation_mini_close_zone"
  *
  * Voice phase is reported by the chat screen (not injected). It can change the
  * line only while a mini session is already active; voice alone does not auto-show.
+ *
+ * While Phone Automation window mode is Split or Popup, the mini session stays
+ * off: no auto-show, activate() is ignored, and an already-visible indicator
+ * is hidden. A live call or phone-tool run does not bring it back.
  *
  * While the mini session is active, continuous voice STT is allowed to keep
  * running across ProcessLifecycle ON_STOP (see VoiceMode + VoiceCaptureForegroundService).
@@ -214,7 +219,8 @@ class PhoneAutomationMiniIndicatorManager(
                     phoneCallController.snapshot,
                 ) { settings, session, workStatus, foreground, call ->
                     MiniSyncInput(
-                        enabled = settings.displaySetting.enablePhoneAutomationMiniIndicator,
+                        enabled = settings.displaySetting.enablePhoneAutomationMiniIndicator &&
+                            settings.displaySetting.phoneAutomationWindowMode == PhoneAutomationWindowMode.OFF,
                         sessionActive = session,
                         workStatus = workStatus,
                         appForeground = foreground,
@@ -262,8 +268,12 @@ class PhoneAutomationMiniIndicatorManager(
 
     /** Start a mini session (caller may minimize Friendly after this). Clears auto-show suppress. */
     fun activate() {
-        if (!settingsStore.settingsFlow.value.displaySetting.enablePhoneAutomationMiniIndicator) {
-            Log.i(TAG, "activate ignored — mini indicator disabled in Preferences")
+        val display = settingsStore.settingsFlow.value.displaySetting
+        if (
+            !display.enablePhoneAutomationMiniIndicator ||
+            display.phoneAutomationWindowMode != PhoneAutomationWindowMode.OFF
+        ) {
+            Log.i(TAG, "activate ignored — mini indicator disabled or window mode is not Off")
             return
         }
         suppressAutoShow = false

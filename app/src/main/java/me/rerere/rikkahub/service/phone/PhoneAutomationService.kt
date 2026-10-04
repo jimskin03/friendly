@@ -542,7 +542,7 @@ class PhoneAutomationService : AccessibilityService() {
             val directIntent = pm.getLaunchIntentForPackage(query.trim())
             if (directIntent != null) {
                 directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(directIntent)
+                context.startPhoneAutomationActivity(directIntent)
                 return true to "Launched app with package: $query"
             }
 
@@ -577,7 +577,7 @@ class PhoneAutomationService : AccessibilityService() {
                 val launchIntent = pm.getLaunchIntentForPackage(matched.activityInfo.packageName)
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(launchIntent)
+                    context.startPhoneAutomationActivity(launchIntent)
                     val label = matched.loadLabel(pm).toString()
                     return true to "Launched app: $label (${matched.activityInfo.packageName})"
                 }

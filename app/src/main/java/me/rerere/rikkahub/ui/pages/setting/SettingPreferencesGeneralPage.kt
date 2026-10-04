@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.BackgroundEffectType
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.PhoneAutomationWindowMode
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -441,18 +442,54 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier.padding(horizontal = 8.dp),
                 ) {
                     item(
+                        headlineContent = { Text(stringResource(R.string.phone_automation_window_mode_title)) },
+                        supportingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(stringResource(R.string.phone_automation_window_mode_desc))
+                                Select(
+                                    options = PhoneAutomationWindowMode.entries,
+                                    selectedOption = displaySetting.phoneAutomationWindowMode,
+                                    onOptionSelected = { mode ->
+                                        updateDisplaySetting(
+                                            displaySetting.copy(
+                                                phoneAutomationWindowMode = mode,
+                                                enablePhoneAutomationMiniIndicator = if (mode == PhoneAutomationWindowMode.OFF) {
+                                                    displaySetting.enablePhoneAutomationMiniIndicator
+                                                } else {
+                                                    false
+                                                },
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
+                                    optionToString = {
+                                        when (it) {
+                                            PhoneAutomationWindowMode.OFF -> stringResource(R.string.phone_automation_window_mode_off)
+                                            PhoneAutomationWindowMode.SPLIT -> stringResource(R.string.phone_automation_window_mode_split)
+                                            PhoneAutomationWindowMode.POPUP -> stringResource(R.string.phone_automation_window_mode_popup)
+                                        }
+                                    },
+                                )
+                            }
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.phone_mini_indicator_title)) },
                         supportingContent = { Text(stringResource(R.string.phone_mini_indicator_desc)) },
                         trailingContent = {
                             Switch(
-                                checked = displaySetting.enablePhoneAutomationMiniIndicator,
+                                checked = displaySetting.enablePhoneAutomationMiniIndicator &&
+                                    displaySetting.phoneAutomationWindowMode == PhoneAutomationWindowMode.OFF,
+                                enabled = displaySetting.phoneAutomationWindowMode == PhoneAutomationWindowMode.OFF,
                                 onCheckedChange = { enabled ->
-                                    if (enabled && !Settings.canDrawOverlays(context)) {
-                                        showOverlayPermissionDialog = true
+                                    if (displaySetting.phoneAutomationWindowMode == PhoneAutomationWindowMode.OFF) {
+                                        if (enabled && !Settings.canDrawOverlays(context)) {
+                                            showOverlayPermissionDialog = true
+                                        }
+                                        updateDisplaySetting(
+                                            displaySetting.copy(enablePhoneAutomationMiniIndicator = enabled)
+                                        )
                                     }
-                                    updateDisplaySetting(
-                                        displaySetting.copy(enablePhoneAutomationMiniIndicator = enabled)
-                                    )
                                 }
                             )
                         },
