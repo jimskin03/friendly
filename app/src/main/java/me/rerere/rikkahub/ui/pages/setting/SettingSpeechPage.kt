@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.asr.ASRProviderSetting
+import me.rerere.asr.DEFAULT_SYSTEM_ASR_ID
 import me.rerere.rikkahub.data.datastore.DEFAULT_SYSTEM_TTS_ID
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -419,7 +420,7 @@ private fun ASRProviderList(
                 val newProviders = settings.asrProviders.filter { it.id != target.id }
                 val newSelectedId =
                     if (settings.selectedASRProviderId == target.id) {
-                        newProviders.firstOrNull()?.id
+                        newProviders.firstOrNull()?.id ?: DEFAULT_SYSTEM_ASR_ID
                     } else {
                         settings.selectedASRProviderId
                     }
@@ -527,6 +528,14 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
             expanded = showTypeMenu,
             onDismissRequest = { showTypeMenu = false }
         ) {
+            DropdownMenuItem(
+                text = { Text("System ASR") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.System()
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
             DropdownMenuItem(
                 text = { Text("Gemini ASR") },
                 onClick = {
@@ -834,6 +843,7 @@ private fun ASRProviderItem(
 
                     Text(
                         text = when (provider) {
+                            is ASRProviderSetting.System -> "System ASR"
                             is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                             is ASRProviderSetting.DashScope -> "DashScope"
                             is ASRProviderSetting.Volcengine -> "Volcengine"
@@ -858,6 +868,7 @@ private fun ASRProviderItem(
                             text = stringResource(R.string.delete),
                             icon = HugeIcons.Delete01,
                             destructive = true,
+                            enabled = provider.id != DEFAULT_SYSTEM_ASR_ID,
                             onClick = onDelete,
                         ),
                     )

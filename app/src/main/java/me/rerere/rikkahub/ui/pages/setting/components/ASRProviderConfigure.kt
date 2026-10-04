@@ -32,6 +32,7 @@ fun ASRProviderConfigure(
         ) {
             OutlinedTextField(
                 value = when (setting) {
+                    is ASRProviderSetting.System -> "System ASR"
                     is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                     is ASRProviderSetting.DashScope -> "DashScope"
                     is ASRProviderSetting.Volcengine -> "Volcengine"
@@ -59,6 +60,7 @@ fun ASRProviderConfigure(
         }
 
         when (setting) {
+            is ASRProviderSetting.System -> SystemASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.OpenAIRealtime -> OpenAIRealtimeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.DashScope -> DashScopeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.Volcengine -> VolcengineASRConfiguration(setting, onValueChange)
@@ -67,6 +69,25 @@ fun ASRProviderConfigure(
             is ASRProviderSetting.Gemini -> GeminiASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.Whisper -> WhisperASRConfiguration(setting, onValueChange)
         }
+    }
+}
+
+@Composable
+private fun SystemASRConfiguration(
+    setting: ASRProviderSetting.System,
+    onValueChange: (ASRProviderSetting) -> Unit
+) {
+    Text(stringResource(R.string.setting_asr_configure_system_desc))
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_language)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_system_language_desc)) }
+    ) {
+        OutlinedTextField(
+            value = setting.language,
+            onValueChange = { onValueChange(setting.copy(language = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("auto") }
+        )
     }
 }
 

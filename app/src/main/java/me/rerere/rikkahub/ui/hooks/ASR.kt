@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.hooks
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.util.Log
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import androidx.compose.runtime.Composable
@@ -20,6 +21,7 @@ import me.rerere.asr.providers.GeminiASRController
 import me.rerere.asr.providers.MiMoASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
 import me.rerere.asr.providers.StepASRController
+import me.rerere.asr.providers.SystemASRController
 import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.asr.providers.WhisperASRController
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -83,6 +85,10 @@ private class CustomAsrStateImpl(
     fun updateProvider(provider: ASRProviderSetting?) {
         controller?.dispose()
         controller = provider?.let { createController(it) }
+        Log.i(
+            "CustomASR",
+            "Selected ${provider?.let { it::class.simpleName } ?: "none"} available=${controller?.state?.value?.isAvailable == true}"
+        )
         if (controller == null) {
             idleState.value = ASRState()
         }
@@ -108,6 +114,10 @@ private class CustomAsrStateImpl(
 
     private fun createController(provider: ASRProviderSetting): ASRController? {
         return when (provider) {
+            is ASRProviderSetting.System -> {
+                SystemASRController(context, provider)
+            }
+
             is ASRProviderSetting.OpenAIRealtime -> {
                 if (provider.apiKey.isBlank()) return null
                 OpenAIRealtimeASRController(context, httpClient, provider)

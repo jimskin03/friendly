@@ -735,6 +735,8 @@
   <string name="setting_asr_configure_whisper_prompt_desc">Optional glossary or style prompt to guide Whisper transcription</string>
   <string name="setting_asr_configure_whisper_sample_rate_desc">PCM recording sample rate in Hz, 16000 is recommended for ASR</string>
   <string name="setting_asr_configure_whisper_segment_desc">Auto-flush buffered audio every N seconds during recording. 0 disables auto-segmentation (single request on stop)</string>
+  <string name="setting_asr_configure_system_desc">Uses the speech recognizer built into this device. No API key is required.</string>
+  <string name="setting_asr_configure_system_language_desc">Language tag for Android speech recognition (e.g. en-US, zh-CN, ms-MY), or &quot;auto&quot; for device default</string>
   <string name="setting_asr_page_add_provider">Add ASR Provider</string>
   <string name="setting_asr_page_default_name">ASR</string>
   <string name="setting_asr_page_edit_provider">Edit ASR Provider</string>

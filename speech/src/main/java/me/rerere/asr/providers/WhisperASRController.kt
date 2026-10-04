@@ -10,6 +10,7 @@ import android.media.MediaRecorder
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,6 +58,7 @@ class WhisperASRController(
     private var onTranscriptChange: ((String) -> Unit)? = null
 
     private var flushJob: Job? = null
+    private var reportErrors = true
 
     private val bufferLock = Any()
     private var currentBuffer = ByteArrayOutputStream()
@@ -74,6 +76,7 @@ class WhisperASRController(
             return
         }
 
+        reportErrors = true
         this.onTranscriptChange = onTranscriptChange
         synchronized(bufferLock) {
             currentBuffer = ByteArrayOutputStream()
@@ -92,6 +95,7 @@ class WhisperASRController(
     }
 
     override fun stop() {
+        reportErrors = false
         recorderJob?.cancel()
         releaseRecorder()
         _state.update { it.copy(status = ASRStatus.Stopping) }
@@ -100,11 +104,15 @@ class WhisperASRController(
             try {
                 flushJob?.join()
                 flushSegment()
+                _state.update { it.copy(status = ASRStatus.Idle) }
             } catch (e: Exception) {
                 Log.e(TAG, "Final flush failed", e)
-                setError(e.message ?: "Whisper ASR final flush failed")
-            } finally {
-                _state.update { it.copy(status = ASRStatus.Idle) }
+                _state.update {
+                    it.copy(
+                        status = ASRStatus.Error,
+                        errorMessage = e.message ?: "Whisper ASR final flush failed"
+                    )
+                }
             }
         }
     }
@@ -130,13 +138,11 @@ class WhisperASRController(
                 .coerceAtLeast(sampleRate / 10 * 2)
                 .coerceAtLeast(4096)
 
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 2
-            )
+            val recorder = openAudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, sampleRate, bufferSize)
+                ?: openAudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, bufferSize)
+            check(recorder != null && recorder.state == AudioRecord.STATE_INITIALIZED) {
+                "Failed to initialize AudioRecord for Whisper ASR"
+            }
             audioRecord = recorder
 
             try {
@@ -166,6 +172,8 @@ class WhisperASRController(
                         throw IllegalStateException("AudioRecord read error: $read")
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Audio recording failed", e)
                 setError(e.message ?: "Audio recording failed")
@@ -179,7 +187,11 @@ class WhisperASRController(
         if (flushJob?.isActive == true) return
         flushJob = scope.launch(Dispatchers.IO) {
             runCatching { flushSegment() }
-                .onFailure { Log.e(TAG, "Segment flush failed", it) }
+                .onFailure {
+                    if (it is CancellationException) return@onFailure
+                    Log.e(TAG, "Segment flush failed", it)
+                    setError(it.message ?: "Whisper ASR segment flush failed")
+                }
         }
     }
 
@@ -254,11 +266,33 @@ class WhisperASRController(
     }
 
     private fun setError(message: String) {
+        if (!reportErrors) return
         _state.update {
             it.copy(
                 status = ASRStatus.Error,
                 errorMessage = message
             )
+        }
+    }
+
+    private fun openAudioRecord(source: Int, sampleRate: Int, bufferSize: Int): AudioRecord? {
+        return try {
+            val record = AudioRecord(
+                source,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize * 2
+            )
+            if (record.state == AudioRecord.STATE_INITIALIZED) {
+                record
+            } else {
+                record.release()
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "AudioRecord source $source failed to initialize", e)
+            null
         }
     }
 

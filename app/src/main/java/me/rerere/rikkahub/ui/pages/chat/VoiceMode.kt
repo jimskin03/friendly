@@ -27,6 +27,7 @@ import me.rerere.asr.providers.GeminiASRController
 import me.rerere.asr.providers.MiMoASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
 import me.rerere.asr.providers.StepASRController
+import me.rerere.asr.providers.SystemASRController
 import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.asr.providers.WhisperASRController
 import me.rerere.rikkahub.data.datastore.Settings
@@ -165,6 +166,9 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
 
 private fun createVoiceAsr(context: Context, client: OkHttpClient, provider: ASRProviderSetting): ASRController {
     val delegate = when (provider) {
+        is ASRProviderSetting.System -> {
+            SystemASRController(context, provider)
+        }
         is ASRProviderSetting.OpenAIRealtime -> {
             check(provider.apiKey.isNotBlank()) { context.getString(R.string.chat_page_voice_configure_key) }
             OpenAIRealtimeASRController(context, client, provider)

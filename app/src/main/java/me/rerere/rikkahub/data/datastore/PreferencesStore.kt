@@ -42,6 +42,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
 import me.rerere.asr.ASRProviderSetting
+import me.rerere.asr.DEFAULT_SYSTEM_ASR_ID
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
@@ -390,9 +391,13 @@ class SettingsStore(
                     ?: DEFAULT_SYSTEM_TTS_ID,
                 defaultTTSPlaybackSpeed = preferences[DEFAULT_TTS_PLAYBACK_SPEED]?.coerceIn(0.5f, 2.0f) ?: 1.0f,
                 asrProviders = preferences[ASR_PROVIDERS]?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: emptyList(),
-                selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let { Uuid.parse(it) },
+                    runCatching {
+                        JsonInstant.decodeFromString<List<ASRProviderSetting>>(it)
+                    }.getOrNull()
+                } ?: DEFAULT_ASR_PROVIDERS,
+                selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let {
+                    runCatching { Uuid.parse(it) }.getOrNull()
+                } ?: DEFAULT_SYSTEM_ASR_ID,
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -466,7 +471,12 @@ class SettingsStore(
             val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
-            val asrProviders = settings.asrProviders.distinctBy { it.id }
+            val rawAsrProviders = settings.asrProviders.ifEmpty { DEFAULT_ASR_PROVIDERS }
+            val asrProviders = if (rawAsrProviders.none { it.id == DEFAULT_SYSTEM_ASR_ID }) {
+                listOf(ASRProviderSetting.System(id = DEFAULT_SYSTEM_ASR_ID, name = "System ASR")) + rawAsrProviders
+            } else {
+                rawAsrProviders
+            }.distinctBy { it.id }
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
@@ -507,7 +517,8 @@ class SettingsStore(
                 asrProviders = asrProviders,
                 selectedASRProviderId = settings.selectedASRProviderId
                     ?.takeIf { id -> asrProviders.any { provider -> provider.id == id } }
-                    ?: asrProviders.firstOrNull()?.id,
+                    ?: asrProviders.firstOrNull()?.id
+                    ?: DEFAULT_SYSTEM_ASR_ID,
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
                 },
@@ -745,8 +756,8 @@ data class Settings(
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val defaultTTSPlaybackSpeed: Float = 1.0f,
-    val asrProviders: List<ASRProviderSetting> = emptyList(),
-    val selectedASRProviderId: Uuid? = null,
+    val asrProviders: List<ASRProviderSetting> = DEFAULT_ASR_PROVIDERS,
+    val selectedASRProviderId: Uuid? = DEFAULT_SYSTEM_ASR_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
@@ -969,9 +980,11 @@ fun Settings.getSelectedTTSProvider(): TTSProviderSetting? {
 }
 
 fun Settings.getSelectedASRProvider(): ASRProviderSetting? {
-    return selectedASRProviderId?.let { id ->
+    val selected = selectedASRProviderId?.let { id ->
         asrProviders.find { it.id == id }
     } ?: asrProviders.firstOrNull()
+    if (selected == null || selected.hasCredentials) return selected
+    return asrProviders.firstOrNull { it is ASRProviderSetting.System } ?: selected
 }
 
 fun Model.findProvider(providers: List<ProviderSetting>, checkOverwrite: Boolean = true): ProviderSetting? {
@@ -1034,6 +1047,13 @@ private val DEFAULT_TTS_PROVIDERS = listOf(
         baseUrl = "https://api.openai.com/v1",
         model = "tts-1",
         voice = "alloy",
+    )
+)
+
+val DEFAULT_ASR_PROVIDERS = listOf(
+    ASRProviderSetting.System(
+        id = DEFAULT_SYSTEM_ASR_ID,
+        name = "System ASR",
     )
 )
 
