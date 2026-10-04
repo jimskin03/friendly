@@ -521,9 +521,26 @@ class PhoneAutomationMiniIndicatorManager(
         }
     }
 
-    private fun bringFriendlyToFront(focusInput: Boolean) {
+    /**
+     * Same path as a mini-bar tap: reorder the existing Friendly task and open
+     * [PhoneAutomationService.lastConversationId] (or the saved last chat).
+     * Does not call moveTaskToBack and does not ask for overlay permission.
+     * If that conversation is already the resumed top screen, this does not
+     * relaunch, so the activity is not restarted and the transcript stays put.
+     * A dismissed mini bar (suppressAutoShow) does not block this.
+     */
+    fun bringFriendlyToFront(focusInput: Boolean) {
         if (focusInput) {
             _focusInputRequests.tryEmit(Unit)
+        }
+        val conversationId = PhoneAutomationService.lastConversationId
+            ?: app.readStringPreference("lastConversationId")
+        if (
+            !conversationId.isNullOrBlank() &&
+            RouteActivity.resumedTopChatId == conversationId
+        ) {
+            Log.i(TAG, "Already showing conversation $conversationId; not relaunching")
+            return
         }
         runCatching { app.startActivity(buildOpenIntent(focusInput)) }
             .onFailure { Log.e(TAG, "Unable to bring Friendly to front", it) }

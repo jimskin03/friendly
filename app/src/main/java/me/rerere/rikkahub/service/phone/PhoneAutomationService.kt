@@ -442,10 +442,16 @@ class PhoneAutomationService : AccessibilityService() {
          * [aborted] is a non-cancellation failure of generation.
          * [cancelled] (user [kotlinx.coroutines.CancellationException]) returns to idle
          * and does not surface "Didn't finish", even if the last tool failed.
+         *
+         * @return true when this generation included phone automation (holding for the
+         * reply, or a phone tool still running) and was not cancelled. The caller should
+         * then bring Friendly back to that chat. A failed finish still returns true so
+         * the user can see "Didn't finish". Cancelled generations and ordinary replies
+         * return false and must not take the screen.
          */
-        fun reportGenerationFinished(aborted: Boolean, cancelled: Boolean = false) {
+        fun reportGenerationFinished(aborted: Boolean, cancelled: Boolean = false): Boolean {
             val previous = _activity.value
-            if (!previous.holdingForGeneration && !previous.toolRunning) return
+            if (!previous.holdingForGeneration && !previous.toolRunning) return false
             val failed = !cancelled && (previous.failed || aborted)
             _activity.value = PhoneAutomationActivity(
                 toolRunning = false,
@@ -458,6 +464,7 @@ class PhoneAutomationService : AccessibilityService() {
             } else {
                 PhoneAutomationWorkStatus.Idle
             }
+            return !cancelled
         }
 
         suspend fun <T> trackWork(conversationId: String? = null, block: suspend () -> T): T {

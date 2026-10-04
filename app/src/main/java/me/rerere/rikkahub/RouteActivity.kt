@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
@@ -142,6 +143,17 @@ class RouteActivity : ComponentActivity() {
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
     private val pendingIntents = ArrayDeque<Intent>()
+    private var topChatId: String? = null
+
+    companion object {
+        /**
+         * Conversation at the top of the nav stack while this activity is resumed.
+         * Null when Friendly is not resumed or another screen is on top.
+         */
+        @Volatile
+        var resumedTopChatId: String? = null
+            private set
+    }
 
     // Volume key listener registry — last registered handler wins
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
@@ -203,6 +215,16 @@ class RouteActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        resumedTopChatId = topChatId
+    }
+
+    override fun onPause() {
+        resumedTopChatId = null
+        super.onPause()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -229,6 +251,11 @@ class RouteActivity : ComponentActivity() {
                 text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
             )
             else -> intent.getStringExtra("conversationId")?.let { Screen.Chat(it) }
+        }
+        // Already on this chat: do not push another copy (that would remount the transcript).
+        if (destination is Screen.Chat) {
+            val current = backStack.lastOrNull()
+            if (current is Screen.Chat && current.id == destination.id) return
         }
         if (destination != null && backStack.lastOrNull() != destination) {
             backStack.add(destination)
@@ -267,8 +294,13 @@ class RouteActivity : ComponentActivity() {
         )
 
         val backStack = rememberNavBackStack(startScreen)
+        val topChat = (backStack.lastOrNull() as? Screen.Chat)?.id
         SideEffect {
             navStack = backStack
+            topChatId = topChat
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                resumedTopChatId = topChat
+            }
             while (pendingIntents.isNotEmpty()) {
                 handleIntent(pendingIntents.removeFirst())
             }

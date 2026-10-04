@@ -78,6 +78,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.service.phone.PhoneAutomationMiniIndicatorManager
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
@@ -178,6 +179,7 @@ class ChatService(
     private val filesManager: FilesManager,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    private val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager,
 ) {
 
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -221,10 +223,18 @@ class ChatService(
     fun cleanup() = runCatching { sessionManager.cleanup() }
 
     private fun onSessionGenerationFinished(session: ConversationSession, cause: Throwable?) {
-        PhoneAutomationService.reportGenerationFinished(
+        val returnToChat = PhoneAutomationService.reportGenerationFinished(
             aborted = cause != null && cause !is CancellationException,
             cancelled = cause is CancellationException,
         )
+        // Phone-automation replies only. Cancelled generations and normal chat stay put.
+        // Posted, not Main.immediate: this runs under ConversationSession's lock.
+        if (returnToChat) {
+            PhoneAutomationService.lastConversationId = session.id.toString()
+            appScope.launch(Dispatchers.Main) {
+                phoneMiniIndicator.bringFriendlyToFront(focusInput = false)
+            }
+        }
         if (cause != null) session.messageQueue.pause()
         if (session.state.value.currentMessages.any { message ->
                 message.parts.any { it is UIMessagePart.Tool && it.isPending }
