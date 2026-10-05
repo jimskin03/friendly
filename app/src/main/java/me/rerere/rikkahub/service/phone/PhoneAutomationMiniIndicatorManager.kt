@@ -164,6 +164,7 @@ class PhoneAutomationMiniIndicatorManager(
         const val NOTIFICATION_ID = 2003
         const val EXTRA_FOCUS_INPUT = "focusInput"
         const val EXTRA_CONVERSATION_ID = "conversationId"
+        const val MINI_BAR_LONG_PRESS_TIMEOUT_MS = 1000L
 
         private val _voicePhase = MutableStateFlow(VoicePhase.Off)
         val voicePhase: StateFlow<VoicePhase> = _voicePhase.asStateFlow()
@@ -189,7 +190,7 @@ class PhoneAutomationMiniIndicatorManager(
             gesture {
                 drag = FxDrag.DISABLED
                 click = false
-                longPressTimeout = 2000L
+                longPressTimeout = MINI_BAR_LONG_PRESS_TIMEOUT_MS
             }
         }
     }
@@ -199,7 +200,7 @@ class PhoneAutomationMiniIndicatorManager(
             gesture {
                 drag = FxDrag.IMMEDIATE
                 click = true
-                longPressTimeout = 2000L
+                longPressTimeout = MINI_BAR_LONG_PRESS_TIMEOUT_MS
             }
         }
     }
@@ -237,7 +238,7 @@ class PhoneAutomationMiniIndicatorManager(
         }
 
         override fun onLongClick(control: FxControl, view: View) {
-            Log.i(TAG, "Mini indicator long-pressed (>2s) -> locking position and opening menu")
+            Log.i(TAG, "Mini indicator long-pressed (>=1s) -> locking position and opening menu")
             _showOptions.value = true
             lockPosition()
             val parentView = view.parent as? View
@@ -597,7 +598,7 @@ class PhoneAutomationMiniIndicatorManager(
                         click = true
                         longPress = true
                         drag = FxDrag.IMMEDIATE
-                        longPressTimeout = 2000L
+                        longPressTimeout = MINI_BAR_LONG_PRESS_TIMEOUT_MS
                     }
                 }
             }
@@ -625,7 +626,7 @@ class PhoneAutomationMiniIndicatorManager(
                     click = true
                     longPress = true
                     drag = FxDrag.IMMEDIATE
-                    longPressTimeout = 2000L
+                    longPressTimeout = MINI_BAR_LONG_PRESS_TIMEOUT_MS
                 }
                 systemHost(app) {
                     theme(R.style.Theme_Rikkahub)
