@@ -415,6 +415,61 @@ class GoogleRequestMessageTest {
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
     }
 
+    @Test
+    fun `multimodal tool output should include inlineData in parts without synthetic ref`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "call_screen",
+                    toolName = "phone_inspect_screen",
+                    input = """{"screenshot": true}""",
+                    output = listOf(
+                        UIMessagePart.Image("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="),
+                        UIMessagePart.Text("Phone screenshot captured successfully")
+                    )
+                )
+            )
+        )
+
+        val messages = listOf(
+            UIMessage.user("Take a screenshot"),
+            assistantMessage
+        )
+
+        val result = invokeBuildContents(messages)
+
+        var functionResponse: kotlinx.serialization.json.JsonObject? = null
+        for (msg in result) {
+            val msgObj = msg.jsonObject
+            val parts = msgObj["parts"]?.jsonArray ?: continue
+            for (part in parts) {
+                if (part.jsonObject.containsKey("functionResponse")) {
+                    functionResponse = part.jsonObject["functionResponse"]?.jsonObject
+                    break
+                }
+            }
+            if (functionResponse != null) break
+        }
+
+        assertTrue("Should find functionResponse", functionResponse != null)
+        assertEquals("phone_inspect_screen", functionResponse!!["name"]?.jsonPrimitive?.content)
+
+        val response = functionResponse["response"]?.jsonObject
+        assertTrue("Response should contain result", response?.containsKey("result") == true)
+        // Verify NO synthetic $ref is present in response object
+        for ((key, value) in response!!) {
+            val obj = value as? kotlinx.serialization.json.JsonObject
+            assertTrue("Response field '$key' should not contain synthetic \$ref", obj?.containsKey("\$ref") != true)
+        }
+
+        val parts = functionResponse["parts"]?.jsonArray
+        assertTrue("functionResponse should contain parts for media", parts != null && parts.isNotEmpty())
+        val firstPart = parts!!.first().jsonObject
+        assertTrue("Part should contain inlineData", firstPart.containsKey("inlineData"))
+        assertEquals("image/png", firstPart["inlineData"]?.jsonObject?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

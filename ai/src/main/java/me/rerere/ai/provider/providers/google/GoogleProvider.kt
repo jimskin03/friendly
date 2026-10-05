@@ -788,67 +788,39 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     }
 
     private fun UIMessagePart.Tool.toFunctionResponsePart() = buildJsonObject {
-            put("functionResponse", buildJsonObject {
-                put("name", toolName)
-                put("id", toolCallId)
+        put("functionResponse", buildJsonObject {
+            put("name", toolName)
+            put("id", toolCallId)
 
+            val textParts = output.filterIsInstance<UIMessagePart.Text>()
 
-                val textParts = output.filterIsInstance<UIMessagePart.Text>()
+            val mediaGoogleParts = output
+                .filter { it !is UIMessagePart.Text }
+                .mapNotNull { it.toGooglePart() }
+                .filter { it.containsKey("inlineData") }
 
-
-                val mediaGoogleParts = output
-                    .filter { it !is UIMessagePart.Text }
-                    .mapNotNull { it.toGooglePart() }
-                    .filter { it.containsKey("inlineData") }
-
-
-                put("response", buildJsonObject {
-
-                    if (textParts.isNotEmpty()) {
-                        put(
-                            "result",
-                            textParts.joinToString("\n") { it.text }
-                        )
-                    } else if (mediaGoogleParts.isEmpty()) {
-
-                        put("result", " ")
-                    }
-
-
-                    mediaGoogleParts.forEachIndexed { index, _ ->
-                        val refName = "media_ref_$index"
-                        put(refName, buildJsonObject {
-                            put("\$ref", refName)
-                        })
-                    }
-                })
-
-
-                if (mediaGoogleParts.isNotEmpty()) {
-                    putJsonArray("parts") {
-                        mediaGoogleParts.forEachIndexed { index, googlePart ->
-                            val refName = "media_ref_$index"
-                            val inlineData = googlePart["inlineData"]!!.jsonObject
-
-                            add(buildJsonObject {
-
-                                put("inlineData", buildJsonObject {
-
-                                    inlineData.forEach { (k, v) -> put(k, v) }
-
-                                    put("displayName", refName)
-                                })
-
-
-                                googlePart.forEach { (k, v) ->
-                                    if (k != "inlineData") put(k, v)
-                                }
-                            })
-                        }
-                    }
+            put("response", buildJsonObject {
+                if (textParts.isNotEmpty()) {
+                    put(
+                        "result",
+                        textParts.joinToString("\n") { it.text }
+                    )
+                } else if (mediaGoogleParts.isNotEmpty()) {
+                    put("result", "Media content attached")
+                } else {
+                    put("result", " ")
                 }
             })
-        }
+
+            if (mediaGoogleParts.isNotEmpty()) {
+                putJsonArray("parts") {
+                    mediaGoogleParts.forEach { googlePart ->
+                        add(googlePart)
+                    }
+                }
+            }
+        })
+    }
 
     private fun UIMessagePart.ServerTool.toGoogleServerToolParts(): List<JsonObject> {
         val metadata = metadataAs<ServerToolMetadata>()
