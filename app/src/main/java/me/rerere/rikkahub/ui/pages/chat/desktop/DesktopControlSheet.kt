@@ -1510,12 +1510,21 @@ private const val TRACKPAD_INSTALL_JS = """
         if (visTop + visH > cr.bottom) this.panY -= (visTop + visH) - cr.bottom;
       }
     },
+    // Map logical canvas coords (this.x/y in pre-transform layout space) to
+    // viewport client coords under translate(pan) scale(z) with origin center.
+    hotspot: function(box) {
+      var z = this.viewScale();
+      return {
+        x: box.left + this.panX + box.width / 2 + (this.x - box.width / 2) * z,
+        y: box.top + this.panY + box.height / 2 + (this.y - box.height / 2) * z
+      };
+    },
     revealCursor: function(box) {
       var container = document.getElementById('noVNC_container') || document.documentElement;
       var cr = container.getBoundingClientRect();
-      var z = this.viewScale();
-      var vx = box.left + this.panX + box.width / 2 + (this.x - box.width / 2) * z;
-      var vy = box.top + this.panY + box.height / 2 + (this.y - box.height / 2) * z;
+      var hot = this.hotspot(box);
+      var vx = hot.x;
+      var vy = hot.y;
       var m = 36;
       if (vx < cr.left + m) this.panX += (cr.left + m) - vx;
       if (vx > cr.right - m) this.panX -= vx - (cr.right - m);
@@ -1541,13 +1550,14 @@ private const val TRACKPAD_INSTALL_JS = """
         box = this.layoutBox(c);
       }
       var visual = c.getBoundingClientRect();
-      var scale = this.viewScale();
-      var vx = box.left + this.panX + box.width / 2 + (this.x - box.width / 2) * scale;
-      var vy = box.top + this.panY + box.height / 2 + (this.y - box.height / 2) * scale;
+      var hot = this.hotspot(box);
       var mark = cursorEl();
-      mark.style.left = vx + 'px';
-      mark.style.top = vy + 'px';
-      return { canvas: c, rect: visual, box: box };
+      mark.style.left = hot.x + 'px';
+      mark.style.top = hot.y + 'px';
+      // clientX/Y must be the same visual hotspot as the pointer mark. Using
+      // rect.left + this.x mixes post-transform bounds with pre-transform x/y
+      // and misaligns clicks once zoomed.
+      return { canvas: c, rect: visual, box: box, clientX: hot.x, clientY: hot.y };
     },
     dispatch: function(type, button, buttons) {
       var placed = this.place();
@@ -1556,8 +1566,8 @@ private const val TRACKPAD_INSTALL_JS = """
         bubbles: true,
         cancelable: true,
         view: window,
-        clientX: placed.rect.left + this.x,
-        clientY: placed.rect.top + this.y,
+        clientX: placed.clientX,
+        clientY: placed.clientY,
         button: button || 0,
         buttons: buttons || 0
       });
@@ -1634,8 +1644,8 @@ private const val TRACKPAD_INSTALL_JS = """
           bubbles: true,
           cancelable: true,
           view: window,
-          clientX: placed.rect.left + this.x,
-          clientY: placed.rect.top + this.y,
+          clientX: placed.clientX,
+          clientY: placed.clientY,
           deltaX: sx,
           deltaY: sy,
           deltaMode: 0
