@@ -64,12 +64,7 @@ fun WebAppPage(
 
     val state = rememberWebViewState(
         url = app?.startUrl?.takeIf { it.isNotBlank() } ?: "about:blank",
-        settings = {
-            builtInZoomControls = true
-            displayZoomControls = false
-            useWideViewPort = true
-            loadWithOverviewMode = true
-        },
+        settings = { applyInstalledWebAppSettings() },
     )
 
     BackHandler(enabled = app != null && state.canGoBack) {
