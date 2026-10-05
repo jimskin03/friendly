@@ -164,7 +164,7 @@ class PhoneAutomationMiniIndicatorManager(
         const val NOTIFICATION_ID = 2003
         const val EXTRA_FOCUS_INPUT = "focusInput"
         const val EXTRA_CONVERSATION_ID = "conversationId"
-        const val MINI_BAR_LONG_PRESS_TIMEOUT_MS = 1000L
+        const val MINI_BAR_LONG_PRESS_TIMEOUT_MS = 700L
 
         private val _voicePhase = MutableStateFlow(VoicePhase.Off)
         val voicePhase: StateFlow<VoicePhase> = _voicePhase.asStateFlow()
@@ -238,7 +238,7 @@ class PhoneAutomationMiniIndicatorManager(
         }
 
         override fun onLongClick(control: FxControl, view: View) {
-            Log.i(TAG, "Mini indicator long-pressed (>=1s) -> locking position and opening menu")
+            Log.i(TAG, "Mini indicator long-pressed (>=700ms) -> locking position and opening menu")
             _showOptions.value = true
             lockPosition()
             val parentView = view.parent as? View
