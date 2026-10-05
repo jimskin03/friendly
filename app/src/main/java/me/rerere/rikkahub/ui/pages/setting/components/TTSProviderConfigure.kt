@@ -2,9 +2,13 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -13,19 +17,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.dokar.sonner.ToastType
+import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.components.ui.SelectTextField
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.tts.provider.TTSProviderSetting
 
 @Composable
@@ -176,6 +187,12 @@ fun TTSProviderConfigure(
             is TTSProviderSetting.Step -> StepTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.Volcengine -> VolcengineTTSConfiguration(setting, onValueChange)
         }
+
+        // Voice preview player for all TTS providers
+        VoicePreviewSection(
+            setting = setting,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
@@ -184,6 +201,17 @@ private fun OpenAITTSConfiguration(
     setting: TTSProviderSetting.OpenAI,
     onValueChange: (TTSProviderSetting) -> Unit
 ) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var availableModels by remember {
+        mutableStateOf(
+            (listOf(setting.model) + SpeechApiHelper.OPENAI_TTS_MODELS_PRESET).filter { it.isNotBlank() }.distinct()
+        )
+    }
+
     // API Key
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
@@ -219,18 +247,77 @@ private fun OpenAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_openai)) }
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectTextField(
+                value = setting.model,
+                options = availableModels,
+                onValueChange = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                onOptionSelected = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_openai)) }
+            )
+
+            IconButton(
+                onClick = {
+                    if (setting.apiKey.isBlank()) {
+                        toaster.show(
+                            context.getString(R.string.setting_speech_api_key_required),
+                            type = ToastType.Warning
+                        )
+                        return@IconButton
+                    }
+
+                    scope.launch {
+                        isFetchingModels = true
+                        SpeechApiHelper.fetchOpenAIModels(setting.baseUrl, setting.apiKey)
+                            .onSuccess { fetched ->
+                                availableModels = (fetched + availableModels).distinct()
+                                toaster.show(
+                                    context.getString(R.string.setting_speech_fetch_models_success, fetched.size),
+                                    type = ToastType.Success
+                                )
+                            }
+                            .onFailure { err ->
+                                toaster.show(
+                                    context.getString(
+                                        R.string.setting_speech_fetch_models_failed,
+                                        err.message ?: "Unknown error"
+                                    ),
+                                    type = ToastType.Error
+                                )
+                            }
+                        isFetchingModels = false
+                    }
+                },
+                enabled = !isFetchingModels
+            ) {
+                if (isFetchingModels) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Refresh01,
+                        contentDescription = stringResource(R.string.setting_speech_fetch_models)
+                    )
+                }
+            }
+        }
     }
 
     // Voice
-    val voices = listOf("alloy", "echo", "fable", "onyx", "nova", "shimmer")
+    val voices = remember {
+        (listOf(setting.voice) + SpeechApiHelper.OPENAI_TTS_VOICES_PRESET).filter { it.isNotBlank() }.distinct()
+    }
 
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_voice)) },
@@ -437,6 +524,17 @@ private fun GeminiTTSConfiguration(
     setting: TTSProviderSetting.Gemini,
     onValueChange: (TTSProviderSetting) -> Unit
 ) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var availableModels by remember {
+        mutableStateOf(
+            (listOf(setting.model) + SpeechApiHelper.GEMINI_TTS_MODELS_PRESET).filter { it.isNotBlank() }.distinct()
+        )
+    }
+
     // API Key
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
@@ -472,24 +570,89 @@ private fun GeminiTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_gemini)) }
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectTextField(
+                value = setting.model,
+                options = availableModels,
+                onValueChange = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                onOptionSelected = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_gemini)) }
+            )
+
+            IconButton(
+                onClick = {
+                    if (setting.apiKey.isBlank()) {
+                        toaster.show(
+                            context.getString(R.string.setting_speech_api_key_required),
+                            type = ToastType.Warning
+                        )
+                        return@IconButton
+                    }
+
+                    scope.launch {
+                        isFetchingModels = true
+                        SpeechApiHelper.fetchGeminiModels(setting.baseUrl, setting.apiKey)
+                            .onSuccess { fetched ->
+                                availableModels = (fetched + availableModels).distinct()
+                                toaster.show(
+                                    context.getString(R.string.setting_speech_fetch_models_success, fetched.size),
+                                    type = ToastType.Success
+                                )
+                            }
+                            .onFailure { err ->
+                                toaster.show(
+                                    context.getString(
+                                        R.string.setting_speech_fetch_models_failed,
+                                        err.message ?: "Unknown error"
+                                    ),
+                                    type = ToastType.Error
+                                )
+                            }
+                        isFetchingModels = false
+                    }
+                },
+                enabled = !isFetchingModels
+            ) {
+                if (isFetchingModels) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Refresh01,
+                        contentDescription = stringResource(R.string.setting_speech_fetch_models)
+                    )
+                }
+            }
+        }
     }
 
     // Voice Name
+    val geminiVoices = remember {
+        (listOf(setting.voiceName) + SpeechApiHelper.GEMINI_TTS_VOICES).filter { it.isNotBlank() }.distinct()
+    }
+
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_voice_name)) },
         description = { Text(stringResource(R.string.setting_tts_page_voice_name_description)) }
     ) {
-        OutlinedTextField(
+        SelectTextField(
             value = setting.voiceName,
+            options = geminiVoices,
             onValueChange = { newVoiceName ->
+                onValueChange(setting.copy(voiceName = newVoiceName))
+            },
+            onOptionSelected = { newVoiceName ->
                 onValueChange(setting.copy(voiceName = newVoiceName))
             },
             modifier = Modifier.fillMaxWidth(),
@@ -848,6 +1011,37 @@ private fun ElevenLabsTTSConfiguration(
     setting: TTSProviderSetting.ElevenLabs,
     onValueChange: (TTSProviderSetting) -> Unit
 ) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var isFetchingVoices by remember { mutableStateOf(false) }
+
+    val defaultModels = listOf(
+        "eleven_multilingual_v2" to "Eleven Multilingual v2",
+        "eleven_v3" to "Eleven v3",
+        "eleven_flash_v2_5" to "Eleven Flash v2.5"
+    )
+    var availableModels by remember {
+        mutableStateOf(
+            if (defaultModels.any { it.first == setting.model }) defaultModels
+            else listOf(setting.model to setting.model) + defaultModels
+        )
+    }
+
+    var availableVoices by remember {
+        mutableStateOf(
+            if (SpeechApiHelper.ELEVENLABS_DEFAULT_VOICES.any { it.first == setting.voiceId }) {
+                SpeechApiHelper.ELEVENLABS_DEFAULT_VOICES
+            } else if (setting.voiceId.isNotBlank()) {
+                listOf(setting.voiceId to setting.voiceId) + SpeechApiHelper.ELEVENLABS_DEFAULT_VOICES
+            } else {
+                SpeechApiHelper.ELEVENLABS_DEFAULT_VOICES
+            }
+        )
+    }
+
     // API Key
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
@@ -879,28 +1073,75 @@ private fun ElevenLabsTTSConfiguration(
     }
 
     // Model
-    val models = listOf(
-        "eleven_multilingual_v2" to "Eleven Multilingual v2",
-        "eleven_v3" to "Eleven v3",
-        "eleven_flash_v2_5" to "Eleven Flash v2.5"
-    )
-
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        SelectTextField(
-            value = setting.model,
-            options = models,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
-            onOptionSelected = { (modelId, _) ->
-                onValueChange(setting.copy(model = modelId))
-            },
-            optionToString = { (modelId, displayName) -> "$displayName ($modelId)" },
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectTextField(
+                value = setting.model,
+                options = availableModels,
+                onValueChange = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                onOptionSelected = { (modelId, _) ->
+                    onValueChange(setting.copy(model = modelId))
+                },
+                optionToString = { (modelId, displayName) -> "$displayName ($modelId)" },
+                modifier = Modifier.weight(1f)
+            )
+
+            IconButton(
+                onClick = {
+                    if (setting.apiKey.isBlank()) {
+                        toaster.show(
+                            context.getString(R.string.setting_speech_api_key_required),
+                            type = ToastType.Warning
+                        )
+                        return@IconButton
+                    }
+
+                    scope.launch {
+                        isFetchingModels = true
+                        SpeechApiHelper.fetchElevenLabsModels(setting.baseUrl, setting.apiKey)
+                            .onSuccess { fetched ->
+                                availableModels = (fetched + availableModels).distinctBy { it.first }
+                                toaster.show(
+                                    context.getString(R.string.setting_speech_fetch_models_success, fetched.size),
+                                    type = ToastType.Success
+                                )
+                            }
+                            .onFailure { err ->
+                                toaster.show(
+                                    context.getString(
+                                        R.string.setting_speech_fetch_models_failed,
+                                        err.message ?: "Unknown error"
+                                    ),
+                                    type = ToastType.Error
+                                )
+                            }
+                        isFetchingModels = false
+                    }
+                },
+                enabled = !isFetchingModels
+            ) {
+                if (isFetchingModels) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Refresh01,
+                        contentDescription = stringResource(R.string.setting_speech_fetch_models)
+                    )
+                }
+            }
+        }
     }
 
     // Voice ID
@@ -908,14 +1149,72 @@ private fun ElevenLabsTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_voice)) },
         description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.voiceId,
-            onValueChange = { newVoiceId ->
-                onValueChange(setting.copy(voiceId = newVoiceId))
-            },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("JBFqnCBsd6RMkjVDRZzb") }
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectTextField(
+                value = setting.voiceId,
+                options = availableVoices,
+                onValueChange = { newVoiceId ->
+                    onValueChange(setting.copy(voiceId = newVoiceId))
+                },
+                onOptionSelected = { (voiceId, _) ->
+                    onValueChange(setting.copy(voiceId = voiceId))
+                },
+                optionToString = { (voiceId, name) -> "$name ($voiceId)" },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Select or enter Voice ID") }
+            )
+
+            IconButton(
+                onClick = {
+                    if (setting.apiKey.isBlank()) {
+                        toaster.show(
+                            context.getString(R.string.setting_speech_api_key_required),
+                            type = ToastType.Warning
+                        )
+                        return@IconButton
+                    }
+
+                    scope.launch {
+                        isFetchingVoices = true
+                        SpeechApiHelper.fetchElevenLabsVoices(setting.baseUrl, setting.apiKey)
+                            .onSuccess { fetched ->
+                                availableVoices = (fetched + availableVoices).distinctBy { it.first }
+                                toaster.show(
+                                    context.getString(R.string.setting_speech_fetch_voices_success, fetched.size),
+                                    type = ToastType.Success
+                                )
+                            }
+                            .onFailure { err ->
+                                toaster.show(
+                                    context.getString(
+                                        R.string.setting_speech_fetch_voices_failed,
+                                        err.message ?: "Unknown error"
+                                    ),
+                                    type = ToastType.Error
+                                )
+                            }
+                        isFetchingVoices = false
+                    }
+                },
+                enabled = !isFetchingVoices
+            ) {
+                if (isFetchingVoices) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Refresh01,
+                        contentDescription = stringResource(R.string.setting_speech_fetch_voices)
+                    )
+                }
+            }
+        }
     }
 
     // Stability

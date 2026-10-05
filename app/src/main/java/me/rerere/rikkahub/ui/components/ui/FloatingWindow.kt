@@ -29,10 +29,12 @@ fun FloatingWindow(
     var window: FxControl? by remember { mutableStateOf(null) }
 
     LaunchedEffect(window, visibility) {
-        if (visibility) {
-            window?.show()
-        } else {
-            window?.hide()
+        runCatching {
+            if (visibility) {
+                window?.show()
+            } else {
+                window?.hide()
+            }
         }
     }
 
@@ -50,7 +52,8 @@ fun FloatingWindow(
         window = control
         if (visibility) control.show() else control.hide()
         onDispose {
-            control.cancel()
+            window = null
+            runCatching { control.cancel() }
         }
     }
 }

@@ -72,12 +72,18 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import android.view.MotionEvent
+import android.view.View
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
 import com.petterp.floatingx.core.FxControl
 import com.petterp.floatingx.core.FxListener
 import com.petterp.floatingx.core.animation.FxAnimations
+import com.petterp.floatingx.core.gesture.FxDrag
+import com.petterp.floatingx.core.gesture.FxGesture
 import com.petterp.floatingx.core.layout.FxGravity
+import com.petterp.floatingx.core.update
 import com.petterp.floatingx.system.permission.FxPermissionStrategy
 import com.petterp.floatingx.system.systemHost
 import kotlinx.coroutines.Dispatchers
@@ -175,6 +181,36 @@ class PhoneAutomationMiniIndicatorManager(
     private val _sessionActive = MutableStateFlow(false)
     val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
 
+    private val _showOptions = MutableStateFlow(false)
+    val showOptions: StateFlow<Boolean> = _showOptions.asStateFlow()
+
+    fun lockPosition() {
+        control?.update {
+            gesture {
+                drag = FxDrag.DISABLED
+                click = false
+                longPressTimeout = 2000L
+            }
+        }
+    }
+
+    fun unlockPosition() {
+        control?.update {
+            gesture {
+                drag = FxDrag.IMMEDIATE
+                click = true
+                longPressTimeout = 2000L
+            }
+        }
+    }
+
+    fun dismissMenu() {
+        if (_showOptions.value) {
+            _showOptions.value = false
+            unlockPosition()
+        }
+    }
+
     /**
      * User dragged the bubble away while a call or phone-automation work was
      * still live, including the gap while a reply that used a phone tool is
@@ -192,7 +228,41 @@ class PhoneAutomationMiniIndicatorManager(
         private var dragStartY = 0f
         private var dragStartTime = 0L
 
+        override fun onClick(control: FxControl, view: View) {
+            if (_showOptions.value) {
+                dismissMenu()
+            } else {
+                bringFriendlyToFront(focusInput = false)
+            }
+        }
+
+        override fun onLongClick(control: FxControl, view: View) {
+            Log.i(TAG, "Mini indicator long-pressed (>2s) -> locking position and opening menu")
+            _showOptions.value = true
+            lockPosition()
+            val parentView = view.parent as? View
+            val releaseListener = View.OnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.setOnTouchListener(null)
+                        parentView?.setOnTouchListener(null)
+                        Log.i(TAG, "Touch released after long press -> unlocking position")
+                        view.post {
+                            unlockPosition()
+                        }
+                        return@OnTouchListener true
+                    }
+                }
+                false
+            }
+            view.setOnTouchListener(releaseListener)
+            parentView?.setOnTouchListener(releaseListener)
+        }
+
         override fun onDragStart(control: FxControl) {
+            if (_showOptions.value) {
+                dismissMenu()
+            }
             val pos = runCatching { control.position }.getOrNull()
             dragStartY = pos?.y ?: 0f
             dragStartTime = System.currentTimeMillis()
@@ -221,12 +291,12 @@ class PhoneAutomationMiniIndicatorManager(
 
             hideCloseZone()
 
-            val nearBottom = py > screenH * 0.72f
+            val nearBottom = py > screenH * 0.70f
             val nearCenterX = px in (screenW * 0.2f)..(screenW * 0.8f)
-            // Downward swipe: significant downward drag (> 180px) or quick downward flick (> 80px with velocity > 0.35 px/ms)
-            val isDownwardSwipe = (deltaY > 180f) || (deltaY > 80f && velocityY > 0.35f)
+            val isFlingToBottom = py > screenH * 0.60f && deltaY > 120f && velocityY > 0.35f
+            val isBottomDrop = (nearBottom && nearCenterX) || py > screenH * 0.78f || isFlingToBottom
 
-            if ((nearBottom && nearCenterX) || isDownwardSwipe) {
+            if (isBottomDrop) {
                 Log.i(TAG, "Mini indicator dismissed via downward swipe/drop at ($px,$py), deltaY=$deltaY, velocityY=$velocityY")
                 dismiss()
             }
@@ -459,6 +529,7 @@ class PhoneAutomationMiniIndicatorManager(
     }
 
     private fun hideOverlay() {
+        _showOptions.value = false
         control?.let {
             runCatching { it.removeListener(dragListener) }
             runCatching { it.hide() }
@@ -494,6 +565,7 @@ class PhoneAutomationMiniIndicatorManager(
                 anchor(FxGravity.BOTTOM_CENTER, dx = 0f, dy = -48f)
                 animation(FxAnimations.fade())
                 enableLog("$TAG-close")
+                gesture(FxGesture.DisplayOnly)
                 systemHost(app) {
                     theme(R.style.Theme_Rikkahub)
                     permission(FxPermissionStrategy.skip())
@@ -518,6 +590,17 @@ class PhoneAutomationMiniIndicatorManager(
             control = existing
             runCatching { existing.removeListener(dragListener) }
             existing.addListener(dragListener)
+            _showOptions.value = false
+            runCatching {
+                existing.update {
+                    gesture {
+                        click = true
+                        longPress = true
+                        drag = FxDrag.IMMEDIATE
+                        longPressTimeout = 2000L
+                    }
+                }
+            }
             if (!existing.isShowing) {
                 runCatching { existing.show() }
                     .onFailure { Log.w(TAG, "Existing overlay show failed; reinstalling", it) }
@@ -533,10 +616,17 @@ class PhoneAutomationMiniIndicatorManager(
             if (FloatingX.isInstalled(FLOATING_TAG)) {
                 runCatching { FloatingX.uninstall(FLOATING_TAG) }
             }
+            _showOptions.value = false
             val installed = FloatingX.install(FLOATING_TAG) {
                 anchor(FxGravity.TOP_END, dx = 16f, dy = 120f)
                 animation(FxAnimations.fade())
                 enableLog(TAG)
+                gesture {
+                    click = true
+                    longPress = true
+                    drag = FxDrag.IMMEDIATE
+                    longPressTimeout = 2000L
+                }
                 systemHost(app) {
                     theme(R.style.Theme_Rikkahub)
                     permission(FxPermissionStrategy.skip())
@@ -548,6 +638,9 @@ class PhoneAutomationMiniIndicatorManager(
                         val call by phoneCallController.snapshot.collectAsState()
                         val voice by voicePhase.collectAsState()
                         val session by sessionActive.collectAsState()
+                        val showOpt by showOptions.collectAsState()
+                        val screenH = app.resources.displayMetrics.heightPixels.toFloat()
+                        val menuAbove = (control?.position?.y ?: 0f) > screenH * 0.65f
                         MiniIndicatorBubble(
                             status = miniIndicatorStatus(
                                 work = work,
@@ -556,9 +649,18 @@ class PhoneAutomationMiniIndicatorManager(
                                 voice = voice,
                                 sessionActive = session,
                             ),
+                            showOptions = showOpt,
+                            menuAbove = menuAbove,
+                            onDismissMenu = { dismissMenu() },
                             onBackToApp = { bringFriendlyToFront(focusInput = false) },
-                            onNewPrompt = { newPrompt() },
-                            onStartVoice = { startNewVoice() },
+                            onNewPrompt = {
+                                dismissMenu()
+                                newPrompt()
+                            },
+                            onStartVoice = {
+                                dismissMenu()
+                                startNewVoice()
+                            },
                         )
                     }
                 }
@@ -826,21 +928,22 @@ private fun miniIndicatorStatus(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MiniIndicatorBubble(
     status: MiniIndicatorStatus,
+    showOptions: Boolean,
+    menuAbove: Boolean,
+    onDismissMenu: () -> Unit,
     onBackToApp: () -> Unit,
     onNewPrompt: () -> Unit,
     onStartVoice: () -> Unit,
 ) {
-    var showOptions by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
     LaunchedEffect(showOptions) {
         if (showOptions) {
             delay(8000)
-            showOptions = false
+            onDismissMenu()
         }
     }
 
@@ -909,6 +1012,21 @@ private fun MiniIndicatorBubble(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        if (menuAbove) {
+            AnimatedVisibility(
+                visible = showOptions,
+                enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+            ) {
+                MiniIndicatorOptionsMenu(
+                    onNewPrompt = onNewPrompt,
+                    onStartVoice = onStartVoice,
+                    dark = dark,
+                    rimBrush = rimBrush,
+                )
+            }
+        }
+
         // 54dp glass disc, or a 54dp-tall pill (max ~240dp) with one status line.
         Box(
             modifier = Modifier
@@ -927,20 +1045,7 @@ private fun MiniIndicatorBubble(
                 )
                 .clip(shape)
                 .background(discBrush, shape)
-                .border(width = 1.dp, brush = rimBrush, shape = shape)
-                .combinedClickable(
-                    onClick = {
-                        if (showOptions) {
-                            showOptions = false
-                        } else {
-                            onBackToApp()
-                        }
-                    },
-                    onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showOptions = !showOptions
-                    },
-                ),
+                .border(width = 1.dp, brush = rimBrush, shape = shape),
         ) {
             // Soft inner highlight (glass sheen)
             Box(
@@ -1023,23 +1128,19 @@ private fun MiniIndicatorBubble(
             }
         }
 
-        AnimatedVisibility(
-            visible = showOptions,
-            enter = fadeIn(tween(180)) + expandVertically(tween(180)),
-            exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
-        ) {
-            MiniIndicatorOptionsMenu(
-                onNewPrompt = {
-                    showOptions = false
-                    onNewPrompt()
-                },
-                onStartVoice = {
-                    showOptions = false
-                    onStartVoice()
-                },
-                dark = dark,
-                rimBrush = rimBrush,
-            )
+        if (!menuAbove) {
+            AnimatedVisibility(
+                visible = showOptions,
+                enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+            ) {
+                MiniIndicatorOptionsMenu(
+                    onNewPrompt = onNewPrompt,
+                    onStartVoice = onStartVoice,
+                    dark = dark,
+                    rimBrush = rimBrush,
+                )
+            }
         }
     }
 }

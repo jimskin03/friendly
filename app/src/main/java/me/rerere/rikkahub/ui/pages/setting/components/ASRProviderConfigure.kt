@@ -2,19 +2,37 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.dokar.sonner.ToastType
+import kotlinx.coroutines.launch
 import me.rerere.asr.ASRProviderSetting
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
+import me.rerere.rikkahub.ui.components.ui.SelectTextField
+import me.rerere.rikkahub.ui.context.LocalToaster
 
 @Composable
 fun ASRProviderConfigure(
@@ -120,13 +138,19 @@ private fun OpenAIRealtimeASRConfiguration(
         )
     }
 
+    val openaiRealtimeModels = remember {
+        (listOf(setting.model) + SpeechApiHelper.OPENAI_REALTIME_MODELS_PRESET).filter { it.isNotBlank() }.distinct()
+    }
+
     FormItem(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_model_desc)) }
     ) {
-        OutlinedTextField(
+        SelectTextField(
             value = setting.model,
+            options = openaiRealtimeModels,
             onValueChange = { onValueChange(setting.copy(model = it)) },
+            onOptionSelected = { onValueChange(setting.copy(model = it)) },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("gpt-4o-transcribe") }
         )
@@ -575,6 +599,17 @@ private fun GeminiASRConfiguration(
     setting: ASRProviderSetting.Gemini,
     onValueChange: (ASRProviderSetting) -> Unit
 ) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var availableModels by remember {
+        mutableStateOf(
+            (listOf(setting.model) + SpeechApiHelper.GEMINI_ASR_MODELS_PRESET).filter { it.isNotBlank() }.distinct()
+        )
+    }
+
     FormItem(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_gemini_api_key_desc)) }
@@ -603,12 +638,67 @@ private fun GeminiASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_gemini_model_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { onValueChange(setting.copy(model = it)) },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("gemini-2.0-flash") }
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectTextField(
+                value = setting.model,
+                options = availableModels,
+                onValueChange = { onValueChange(setting.copy(model = it)) },
+                onOptionSelected = { onValueChange(setting.copy(model = it)) },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("gemini-2.0-flash") }
+            )
+
+            IconButton(
+                onClick = {
+                    if (setting.apiKey.isBlank()) {
+                        toaster.show(
+                            context.getString(R.string.setting_speech_api_key_required),
+                            type = ToastType.Warning
+                        )
+                        return@IconButton
+                    }
+
+                    scope.launch {
+                        isFetchingModels = true
+                        SpeechApiHelper.fetchGeminiModels(setting.baseUrl, setting.apiKey)
+                            .onSuccess { fetched ->
+                                availableModels = (fetched + availableModels).distinct()
+                                toaster.show(
+                                    context.getString(R.string.setting_speech_fetch_models_success, fetched.size),
+                                    type = ToastType.Success
+                                )
+                            }
+                            .onFailure { err ->
+                                toaster.show(
+                                    context.getString(
+                                        R.string.setting_speech_fetch_models_failed,
+                                        err.message ?: "Unknown error"
+                                    ),
+                                    type = ToastType.Error
+                                )
+                            }
+                        isFetchingModels = false
+                    }
+                },
+                enabled = !isFetchingModels
+            ) {
+                if (isFetchingModels) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Refresh01,
+                        contentDescription = stringResource(R.string.setting_speech_fetch_models)
+                    )
+                }
+            }
+        }
     }
 
     FormItem(
@@ -661,6 +751,17 @@ private fun WhisperASRConfiguration(
     setting: ASRProviderSetting.Whisper,
     onValueChange: (ASRProviderSetting) -> Unit
 ) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var availableModels by remember {
+        mutableStateOf(
+            (listOf(setting.model) + SpeechApiHelper.WHISPER_MODELS_PRESET).filter { it.isNotBlank() }.distinct()
+        )
+    }
+
     FormItem(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_whisper_api_key_desc)) }
@@ -689,12 +790,67 @@ private fun WhisperASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_whisper_model_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { onValueChange(setting.copy(model = it)) },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("whisper-large-v3-turbo") }
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectTextField(
+                value = setting.model,
+                options = availableModels,
+                onValueChange = { onValueChange(setting.copy(model = it)) },
+                onOptionSelected = { onValueChange(setting.copy(model = it)) },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("whisper-large-v3-turbo") }
+            )
+
+            IconButton(
+                onClick = {
+                    if (setting.apiKey.isBlank()) {
+                        toaster.show(
+                            context.getString(R.string.setting_speech_api_key_required),
+                            type = ToastType.Warning
+                        )
+                        return@IconButton
+                    }
+
+                    scope.launch {
+                        isFetchingModels = true
+                        SpeechApiHelper.fetchWhisperModels(setting.baseUrl, setting.apiKey)
+                            .onSuccess { fetched ->
+                                availableModels = (fetched + availableModels).distinct()
+                                toaster.show(
+                                    context.getString(R.string.setting_speech_fetch_models_success, fetched.size),
+                                    type = ToastType.Success
+                                )
+                            }
+                            .onFailure { err ->
+                                toaster.show(
+                                    context.getString(
+                                        R.string.setting_speech_fetch_models_failed,
+                                        err.message ?: "Unknown error"
+                                    ),
+                                    type = ToastType.Error
+                                )
+                            }
+                        isFetchingModels = false
+                    }
+                },
+                enabled = !isFetchingModels
+            ) {
+                if (isFetchingModels) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Refresh01,
+                        contentDescription = stringResource(R.string.setting_speech_fetch_models)
+                    )
+                }
+            }
+        }
     }
 
     FormItem(
