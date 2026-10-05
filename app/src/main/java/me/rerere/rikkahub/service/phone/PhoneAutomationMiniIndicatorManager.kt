@@ -5,18 +5,28 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +35,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,6 +43,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +54,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -46,6 +63,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Voice
 import me.rerere.rikkahub.ui.pages.chat.VoicePhase
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import androidx.core.app.NotificationCompat
@@ -169,12 +189,22 @@ class PhoneAutomationMiniIndicatorManager(
 
 
     private val dragListener = object : FxListener {
+        private var dragStartY = 0f
+        private var dragStartTime = 0L
+
         override fun onDragStart(control: FxControl) {
+            val pos = runCatching { control.position }.getOrNull()
+            dragStartY = pos?.y ?: 0f
+            dragStartTime = System.currentTimeMillis()
             ensureCloseZoneVisible()
         }
 
         override fun onDrag(control: FxControl, x: Float, y: Float) {
-            // Close zone stays visible for the whole drag.
+            if (dragStartY == 0f) {
+                val pos = runCatching { control.position }.getOrNull()
+                dragStartY = pos?.y ?: y
+                dragStartTime = System.currentTimeMillis()
+            }
         }
 
         override fun onDragEnd(control: FxControl, x: Float, y: Float) {
@@ -185,13 +215,23 @@ class PhoneAutomationMiniIndicatorManager(
             val pos = runCatching { control.position }.getOrNull()
             val px = pos?.x ?: x
             val py = pos?.y ?: y
+            val deltaY = py - dragStartY
+            val elapsed = (System.currentTimeMillis() - dragStartTime).coerceAtLeast(1L)
+            val velocityY = deltaY / elapsed.toFloat()
+
+            hideCloseZone()
+
             val nearBottom = py > screenH * 0.72f
             val nearCenterX = px in (screenW * 0.2f)..(screenW * 0.8f)
-            hideCloseZone()
-            if (nearBottom && nearCenterX) {
-                Log.i(TAG, "Mini indicator dismissed via close zone drop at ($px,$py)")
+            // Downward swipe: significant downward drag (> 180px) or quick downward flick (> 80px with velocity > 0.35 px/ms)
+            val isDownwardSwipe = (deltaY > 180f) || (deltaY > 80f && velocityY > 0.35f)
+
+            if ((nearBottom && nearCenterX) || isDownwardSwipe) {
+                Log.i(TAG, "Mini indicator dismissed via downward swipe/drop at ($px,$py), deltaY=$deltaY, velocityY=$velocityY")
                 dismiss()
             }
+            dragStartY = 0f
+            dragStartTime = 0L
         }
     }
 
@@ -517,6 +557,8 @@ class PhoneAutomationMiniIndicatorManager(
                                 sessionActive = session,
                             ),
                             onBackToApp = { bringFriendlyToFront(focusInput = false) },
+                            onNewPrompt = { newPrompt() },
+                            onStartVoice = { startNewVoice() },
                         )
                     }
                 }
@@ -554,6 +596,30 @@ class PhoneAutomationMiniIndicatorManager(
         }
         runCatching { app.startActivity(buildOpenIntent(focusInput)) }
             .onFailure { Log.e(TAG, "Unable to bring Friendly to front", it) }
+    }
+
+    fun newPrompt() {
+        val intent = Intent(app, RouteActivity::class.java).apply {
+            action = RouteActivity.ACTION_NEW_PROMPT
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_FOCUS_INPUT, true)
+        }
+        _focusInputRequests.tryEmit(Unit)
+        runCatching { app.startActivity(intent) }
+            .onFailure { Log.e(TAG, "Unable to start new prompt", it) }
+    }
+
+    fun startNewVoice() {
+        val intent = Intent(app, RouteActivity::class.java).apply {
+            action = RouteActivity.ACTION_NEW_VOICE
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        runCatching { app.startActivity(intent) }
+            .onFailure { Log.e(TAG, "Unable to start new voice", it) }
     }
 }
 
@@ -760,11 +826,24 @@ private fun miniIndicatorStatus(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MiniIndicatorBubble(
     status: MiniIndicatorStatus,
     onBackToApp: () -> Unit,
+    onNewPrompt: () -> Unit,
+    onStartVoice: () -> Unit,
 ) {
+    var showOptions by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
+    LaunchedEffect(showOptions) {
+        if (showOptions) {
+            delay(8000)
+            showOptions = false
+        }
+    }
+
     val spoken = status.label ?: stringResource(R.string.phone_mini_indicator_idle)
     val a11y = stringResource(R.string.phone_mini_indicator_back_to_app) + " · " + spoken
     val ledColor = status.ledColor
@@ -826,103 +905,227 @@ private fun MiniIndicatorBubble(
     val pulseAlpha = if (pulse) animatedAlpha else 1f
     val pulseScale = if (pulse) animatedScale else 1f
 
-    // 54dp glass disc, or a 54dp-tall pill (max ~240dp) with one status line.
-    Box(
-        modifier = Modifier
-            .padding(8.dp)
-            .height(54.dp)
-            .then(
-                if (expanded) Modifier.widthIn(max = 240.dp).wrapContentWidth() else Modifier.width(54.dp),
-            )
-            .semantics { contentDescription = a11y }
-            .shadow(
-                elevation = 14.dp,
-                shape = shape,
-                clip = false,
-                ambientColor = Color.Black.copy(alpha = if (dark) 0.45f else 0.18f),
-                spotColor = Color.Black.copy(alpha = if (dark) 0.55f else 0.22f),
-            )
-            .clip(shape)
-            .background(discBrush, shape)
-            .border(width = 1.dp, brush = rimBrush, shape = shape)
-            .clickable(onClick = onBackToApp),
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Soft inner highlight (glass sheen)
+        // 54dp glass disc, or a 54dp-tall pill (max ~240dp) with one status line.
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .padding(1.dp)
+                .padding(8.dp)
+                .height(54.dp)
+                .then(
+                    if (expanded) Modifier.widthIn(max = 240.dp).wrapContentWidth() else Modifier.width(54.dp),
+                )
+                .semantics { contentDescription = a11y }
+                .shadow(
+                    elevation = 14.dp,
+                    shape = shape,
+                    clip = false,
+                    ambientColor = Color.Black.copy(alpha = if (dark) 0.45f else 0.18f),
+                    spotColor = Color.Black.copy(alpha = if (dark) 0.55f else 0.22f),
+                )
                 .clip(shape)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (dark) 0.14f else 0.35f),
-                            Color.Transparent,
-                            Color.Transparent,
-                        )
-                    )
+                .background(discBrush, shape)
+                .border(width = 1.dp, brush = rimBrush, shape = shape)
+                .combinedClickable(
+                    onClick = {
+                        if (showOptions) {
+                            showOptions = false
+                        } else {
+                            onBackToApp()
+                        }
+                    },
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showOptions = !showOptions
+                    },
                 ),
-        )
-        Row(
-            modifier = Modifier.height(54.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_brand_neon),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(54.dp)
-                    .padding(6.dp)
-                    .clip(CircleShape),
-            )
-            if (expanded && status.label != null) {
-                Text(
-                    text = status.label,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = if (dark) Color.White else Color(0xFF1C1C1E),
-                    modifier = Modifier
-                        .padding(end = 28.dp)
-                        .widthIn(max = 158.dp),
-                )
-            }
-        }
-        // LED: bottom-end of the disc when collapsed, trailing end of the pill when expanded.
-        Box(
-            modifier = Modifier
-                .align(if (expanded) Alignment.CenterEnd else Alignment.BottomEnd)
-                .then(if (expanded) Modifier.padding(end = 8.dp) else Modifier.padding(3.dp))
-                .size(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (pulse) {
-                Box(
-                    modifier = Modifier
-                        .size(14.dp)
-                        .scale(pulseScale)
-                        .background(ledColor.copy(alpha = 0.28f * pulseAlpha), CircleShape),
-                )
-            }
+            // Soft inner highlight (glass sheen)
             Box(
                 modifier = Modifier
-                    .size(13.dp)
-                    .shadow(
-                        elevation = 3.dp,
-                        shape = CircleShape,
-                        clip = false,
-                        ambientColor = ledColor.copy(alpha = 0.35f),
-                        spotColor = ledColor.copy(alpha = 0.45f),
+                    .matchParentSize()
+                    .padding(1.dp)
+                    .clip(shape)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = if (dark) 0.14f else 0.35f),
+                                Color.Transparent,
+                                Color.Transparent,
+                            )
+                        )
+                    ),
+            )
+            Row(
+                modifier = Modifier.height(54.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_brand_neon),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(54.dp)
+                        .padding(6.dp)
+                        .clip(CircleShape),
+                )
+                if (expanded) {
+                    Text(
+                        text = status.label.orEmpty(),
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (dark) Color.White else Color(0xFF1C1C1E),
+                        modifier = Modifier
+                            .padding(end = 28.dp)
+                            .widthIn(max = 158.dp),
                     )
-                    .background(ledRing, CircleShape),
+                }
+            }
+            // LED: bottom-end of the disc when collapsed, trailing end of the pill when expanded.
+            Box(
+                modifier = Modifier
+                    .align(if (expanded) Alignment.CenterEnd else Alignment.BottomEnd)
+                    .then(if (expanded) Modifier.padding(end = 8.dp) else Modifier.padding(3.dp))
+                    .size(16.dp),
                 contentAlignment = Alignment.Center,
             ) {
+                if (pulse) {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .scale(pulseScale)
+                            .background(ledColor.copy(alpha = 0.28f * pulseAlpha), CircleShape),
+                    )
+                }
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
-                        .background(ledColor.copy(alpha = pulseAlpha), CircleShape),
+                        .size(13.dp)
+                        .shadow(
+                            elevation = 3.dp,
+                            shape = CircleShape,
+                            clip = false,
+                            ambientColor = ledColor.copy(alpha = 0.35f),
+                            spotColor = ledColor.copy(alpha = 0.45f),
+                        )
+                        .background(ledRing, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(ledColor.copy(alpha = pulseAlpha), CircleShape),
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showOptions,
+            enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+            exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+        ) {
+            MiniIndicatorOptionsMenu(
+                onNewPrompt = {
+                    showOptions = false
+                    onNewPrompt()
+                },
+                onStartVoice = {
+                    showOptions = false
+                    onStartVoice()
+                },
+                dark = dark,
+                rimBrush = rimBrush,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniIndicatorOptionsMenu(
+    onNewPrompt: () -> Unit,
+    onStartVoice: () -> Unit,
+    dark: Boolean,
+    rimBrush: Brush,
+) {
+    val menuBg = if (dark) {
+        Color(0xFF1E1E20).copy(alpha = 0.94f)
+    } else {
+        Color(0xFFF2F4F7).copy(alpha = 0.96f)
+    }
+    val shape = RoundedCornerShape(18.dp)
+
+    Surface(
+        modifier = Modifier
+            .padding(horizontal = 8.dp)
+            .widthIn(min = 180.dp, max = 220.dp)
+            .shadow(
+                elevation = 16.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = if (dark) 0.5f else 0.18f),
+                spotColor = Color.Black.copy(alpha = if (dark) 0.6f else 0.22f),
+            )
+            .border(width = 1.dp, brush = rimBrush, shape = shape),
+        shape = shape,
+        color = menuBg,
+        tonalElevation = 6.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 4.dp),
+        ) {
+            // Option 1: New prompt
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNewPrompt)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Add01,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = stringResource(R.string.shortcut_new_prompt),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (dark) Color.White else Color(0xFF1C1C1E),
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = if (dark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.1f),
+            )
+
+            // Option 2: Start new voice
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onStartVoice)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Voice,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = stringResource(R.string.phone_mini_start_new_voice),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (dark) Color.White else Color(0xFF1C1C1E),
                 )
             }
         }

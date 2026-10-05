@@ -44,6 +44,7 @@
   <string name="phone_mini_indicator_disabled_toast">Enable Phone Automation mini indicator in Preferences first</string>
   <string name="phone_mini_indicator_minimize_button">Minimize to background</string>
   <string name="phone_mini_indicator_minimize_hint">Keeps a floating rabbit status indicator while Friendly is in the background. You can also long-press the phone icon.</string>
+  <string name="phone_mini_start_new_voice">Start new voice</string>
   <string name="phone_mini_status_calling">Calling</string>
   <string name="phone_mini_status_ringing">Ringing</string>
   <string name="phone_mini_status_on_call">On call</string>

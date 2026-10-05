@@ -136,7 +136,6 @@ import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
-private const val ACTION_NEW_PROMPT = "me.rerere.rikkahub.action.NEW_PROMPT"
 
 class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
@@ -146,6 +145,9 @@ class RouteActivity : ComponentActivity() {
     private var topChatId: String? = null
 
     companion object {
+        const val ACTION_NEW_PROMPT = "me.rerere.rikkahub.action.NEW_PROMPT"
+        const val ACTION_NEW_VOICE = "me.rerere.rikkahub.action.NEW_VOICE"
+
         /**
          * Conversation at the top of the nav stack while this activity is resumed.
          * Null when Friendly is not resumed or another screen is on top.
@@ -240,6 +242,11 @@ class RouteActivity : ComponentActivity() {
         if (intent.action == ACTION_NEW_PROMPT) {
             backStack.clear()
             backStack.add(Screen.Chat(Uuid.random().toString()))
+            return
+        }
+        if (intent.action == ACTION_NEW_VOICE) {
+            backStack.clear()
+            backStack.add(Screen.Chat(id = Uuid.random().toString(), autoStartVoice = true))
             return
         }
         val destination = when (intent.action) {
@@ -365,6 +372,7 @@ class RouteActivity : ComponentActivity() {
                                     folderId = key.folderId,
                                     folderName = key.folderName,
                                     folderLabelId = key.folderLabelId,
+                                    autoStartVoice = key.autoStartVoice,
                                 )
                             }
 
@@ -642,6 +650,7 @@ sealed interface Screen : NavKey {
         val folderId: String? = null,
         val folderName: String? = null,
         val folderLabelId: String? = null,
+        val autoStartVoice: Boolean = false,
     ) : Screen
 
     @Serializable

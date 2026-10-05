@@ -145,6 +145,7 @@ fun ChatPage(
     folderId: String? = null,
     folderName: String? = null,
     folderLabelId: String? = null,
+    autoStartVoice: Boolean = false,
 ) {
     val vm: ChatVM = koinViewModel(
         parameters = {
@@ -173,6 +174,11 @@ fun ChatPage(
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
 
     val startVoiceMode = rememberVoiceModeStarter(vm, setting)
+    LaunchedEffect(autoStartVoice) {
+        if (autoStartVoice) {
+            startVoiceMode()
+        }
+    }
 
     val inputState = vm.inputState
     val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager = koinInject()

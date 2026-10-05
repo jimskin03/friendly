@@ -93,6 +93,7 @@ import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Mic01
 import me.rerere.hugeicons.stroke.SmartPhone01
+import me.rerere.hugeicons.stroke.Voice
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -379,15 +380,6 @@ fun ChatInput(
                             )
                         }
 
-                        if (!voiceState.isActive && !asrState.isRecording && onStartVoiceMode != null) {
-                            ActionIconButton(onClick = onStartVoiceMode) {
-                                Icon(
-                                    imageVector = HugeIcons.Mic01,
-                                    contentDescription = stringResource(R.string.chat_page_voice_title),
-                                )
-                            }
-                        }
-
                         if (!voiceState.isActive && (asrState.isAvailable || asrState.isRecording)) {
                             AsrButton(
                                 state = asrState,
@@ -413,6 +405,15 @@ fun ChatInput(
                                     }
                                 }
                             )
+                        }
+
+                        if (!voiceState.isActive && !asrState.isRecording && onStartVoiceMode != null) {
+                            ActionIconButton(onClick = onStartVoiceMode) {
+                                Icon(
+                                    imageVector = HugeIcons.Voice,
+                                    contentDescription = stringResource(R.string.chat_page_voice_title),
+                                )
+                            }
                         }
 
                         if (loading) {

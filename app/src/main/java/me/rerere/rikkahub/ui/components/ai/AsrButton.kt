@@ -46,7 +46,7 @@ import me.rerere.asr.ASRState
 import me.rerere.rikkahub.R
 import me.rerere.asr.ASRStatus
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Voice
+import me.rerere.hugeicons.stroke.Mic01
 
 private enum class AsrDisplayState {
     Idle, Connecting, Active
@@ -114,7 +114,7 @@ internal fun AsrButton(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = HugeIcons.Voice,
+                            imageVector = HugeIcons.Mic01,
                             contentDescription = stringResource(R.string.asr_button_content_description),
                             tint = contentColor
                         )

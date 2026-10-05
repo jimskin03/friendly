@@ -93,7 +93,7 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
         mutableStateOf(settings.networkSetting.desktopControlApiToken)
     }
     var desktopTokenVisible by remember { mutableStateOf(false) }
-    val defaultUserAgent = "RikkaHub-Android/${BuildConfig.VERSION_NAME}"
+    val defaultUserAgent = "Friendly-Android/${BuildConfig.VERSION_NAME}"
     val proxyUrlInvalid = proxyUrlDraft.isNotBlank() && proxyUrlDraft.toProxyOrNull() == null
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
