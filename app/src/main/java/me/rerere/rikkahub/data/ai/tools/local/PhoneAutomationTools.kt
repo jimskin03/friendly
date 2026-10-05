@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.service.phone.ElementSelector
+import me.rerere.rikkahub.service.phone.PhoneAutomationLoopGuard
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.service.phone.PhoneAutomationStep
 import me.rerere.rikkahub.service.phone.PhoneCallController
@@ -137,6 +138,14 @@ internal fun buildPhoneClickTool(): Tool = Tool(
             return@Tool listOf(UIMessagePart.Text(payload.toString()))
         }
 
+        service.refuseIfActingOnFriendly(targetX, targetY)?.let { reason ->
+            val payload = buildJsonObject {
+                put("error", reason)
+                put("success", false)
+            }
+            return@Tool listOf(UIMessagePart.Text(payload.toString()))
+        }
+
         val clicked = service.click(targetX, targetY)
         service.awaitIdle(250L)
         val payload = buildJsonObject {
@@ -212,6 +221,14 @@ internal fun buildPhoneSwipeTool(context: Context): Tool = Tool(
             }
         }
 
+        service.refuseIfActingOnFriendly(startX, startY)?.let { reason ->
+            val payload = buildJsonObject {
+                put("error", reason)
+                put("success", false)
+            }
+            return@Tool listOf(UIMessagePart.Text(payload.toString()))
+        }
+
         val swiped = service.swipe(startX, startY, endX, endY, duration)
         val payload = buildJsonObject {
             put("success", swiped)
@@ -259,6 +276,14 @@ internal fun buildPhoneTypeTextTool(): Tool = Tool(
         val params = args.jsonObject
         val text = params["text"]?.jsonPrimitive?.contentOrNull ?: error("text is required")
         val clearFirst = params["clear_first"]?.jsonPrimitive?.booleanOrNull ?: false
+
+        service.refuseIfActingOnFriendly()?.let { reason ->
+            val payload = buildJsonObject {
+                put("error", reason)
+                put("success", false)
+            }
+            return@Tool listOf(UIMessagePart.Text(payload.toString()))
+        }
 
         val typed = service.typeText(text, clearFirst)
         val payload = buildJsonObject {
@@ -957,13 +982,116 @@ internal fun Tool.withPhoneAutomationTracking(): Tool {
                 val failed = Regex("\"success\"\\s*:\\s*false").containsMatchIn(text) ||
                     Regex("\"error\"\\s*:").containsMatchIn(text)
                 PhoneAutomationService.reportWorkFinished(success = !failed)
-                result
+                // Only track successful actions; refused/errored calls must not inflate the loop counter.
+                if (failed) result else maybeAnnotateLoopWarning(name, args, result)
             } catch (e: Exception) {
                 PhoneAutomationService.reportWorkFinished(success = false)
                 throw e
             }
         }
     )
+}
+
+/**
+ * After a phone tool returns, fingerprint the screen and warn when the same
+ * action has been repeated on an unchanged UI. Does not press BACK.
+ */
+private fun maybeAnnotateLoopWarning(
+    toolName: String,
+    args: kotlinx.serialization.json.JsonElement,
+    result: List<UIMessagePart>,
+): List<UIMessagePart> {
+    val service = PhoneAutomationService.instance ?: return result
+    val resultText = result.filterIsInstance<UIMessagePart.Text>().joinToString(separator = "") { it.text }
+    val fingerprint = runCatching {
+        PhoneAutomationLoopGuard.fingerprint(service.inspectScreen())
+    }.getOrDefault("")
+    val target = normalizeLoopTarget(toolName, args, resultText)
+    val warning = PhoneAutomationLoopGuard.observe(toolName, target, fingerprint) ?: return result
+    return appendToolWarning(result, warning)
+}
+
+private fun normalizeLoopTarget(
+    toolName: String,
+    args: kotlinx.serialization.json.JsonElement,
+    resultText: String,
+): String {
+    val params = runCatching { args.jsonObject }.getOrNull() ?: return toolName
+    return when (toolName) {
+        "phone_click" -> {
+            val matched = Regex("\"matched\"\\s*:\\s*\"([^\"]*)\"").find(resultText)?.groupValues?.getOrNull(1)
+            val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
+            val query = params["query"]?.jsonPrimitive?.contentOrNull
+            val x = params["x"]?.jsonPrimitive?.doubleOrNull?.toInt()?.div(40)
+            val y = params["y"]?.jsonPrimitive?.doubleOrNull?.toInt()?.div(40)
+            when {
+                !matched.isNullOrBlank() -> "label:${matched.trim().lowercase()}"
+                !viewId.isNullOrBlank() -> "view:${viewId.trim()}"
+                !query.isNullOrBlank() -> "query:${query.trim().lowercase()}"
+                x != null && y != null -> "xy:$x,$y"
+                else -> "click"
+            }
+        }
+        "phone_swipe" -> {
+            val direction = params["direction"]?.jsonPrimitive?.contentOrNull?.lowercase()
+            if (!direction.isNullOrBlank()) "dir:$direction" else "swipe"
+        }
+        "phone_type_text" -> {
+            val clearFirst = params["clear_first"]?.jsonPrimitive?.booleanOrNull ?: false
+            "type:clear=$clearFirst"
+        }
+        "phone_press_key" -> {
+            val key = params["key"]?.jsonPrimitive?.contentOrNull?.lowercase().orEmpty()
+            "key:$key"
+        }
+        "phone_assert_visible", "phone_scroll_until_visible" -> {
+            val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
+            val query = params["query"]?.jsonPrimitive?.contentOrNull
+            when {
+                !viewId.isNullOrBlank() -> "view:${viewId.trim()}"
+                !query.isNullOrBlank() -> "query:${query.trim().lowercase()}"
+                else -> toolName
+            }
+        }
+        "phone_run_flow" -> {
+            val name = params["name"]?.jsonPrimitive?.contentOrNull
+            val saveAs = params["save_as"]?.jsonPrimitive?.contentOrNull
+            when {
+                !name.isNullOrBlank() -> "flow:$name"
+                !saveAs.isNullOrBlank() -> "flow:$saveAs"
+                else -> "flow:inline"
+            }
+        }
+        else -> toolName
+    }
+}
+
+private fun appendToolWarning(parts: List<UIMessagePart>, warning: String): List<UIMessagePart> {
+    var applied = false
+    val updated = parts.map { part ->
+        if (applied || part !is UIMessagePart.Text) return@map part
+        val trimmed = part.text.trim()
+        if (!trimmed.startsWith("{")) return@map part
+        val annotated = runCatching {
+            val obj = kotlinx.serialization.json.Json.parseToJsonElement(trimmed).jsonObject
+            buildJsonObject {
+                obj.forEach { (key, value) -> put(key, value) }
+                put("warning", warning)
+            }.toString()
+        }.getOrElse {
+            buildJsonObject {
+                put("warning", warning)
+                put("raw", trimmed)
+            }.toString()
+        }
+        applied = true
+        part.copy(text = annotated)
+    }
+    return if (applied) {
+        updated
+    } else {
+        parts + UIMessagePart.Text(buildJsonObject { put("warning", warning) }.toString())
+    }
 }
 
 private fun phoneAutomationStepFor(name: String, args: kotlinx.serialization.json.JsonElement): PhoneAutomationStep {

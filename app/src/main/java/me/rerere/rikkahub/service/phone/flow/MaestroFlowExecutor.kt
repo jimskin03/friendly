@@ -124,6 +124,17 @@ class MaestroFlowExecutor(
             matchedText = target.text.ifBlank { target.description }.ifBlank { target.viewId }
         }
 
+        service.refuseIfActingOnFriendly(targetX, targetY)?.let { reason ->
+            return FlowStepResult(
+                stepIndex = stepIndex + 1,
+                commandName = if (cmd.longPress) "longPressOn" else if (cmd.repeat > 1) "doubleTapOn" else "tapOn",
+                detail = reason,
+                success = cmd.optional,
+                elapsedMs = 0,
+                optionalSkipped = cmd.optional,
+            )
+        }
+
         var clicked = false
         val repeatCount = cmd.repeat.coerceAtLeast(1)
         for (i in 0 until repeatCount) {
@@ -150,6 +161,16 @@ class MaestroFlowExecutor(
     }
 
     private suspend fun executeInputText(stepIndex: Int, cmd: MaestroCommand.InputText): FlowStepResult {
+        service.refuseIfActingOnFriendly()?.let { reason ->
+            return FlowStepResult(
+                stepIndex = stepIndex + 1,
+                commandName = "inputText",
+                detail = reason,
+                success = cmd.optional,
+                elapsedMs = 0,
+                optionalSkipped = cmd.optional,
+            )
+        }
         val ok = service.typeText(cmd.text, cmd.clearFirst)
         service.awaitIdle(200L)
         return FlowStepResult(
@@ -163,6 +184,16 @@ class MaestroFlowExecutor(
     }
 
     private suspend fun executeEraseText(stepIndex: Int, cmd: MaestroCommand.EraseText): FlowStepResult {
+        service.refuseIfActingOnFriendly()?.let { reason ->
+            return FlowStepResult(
+                stepIndex = stepIndex + 1,
+                commandName = "eraseText",
+                detail = reason,
+                success = cmd.optional,
+                elapsedMs = 0,
+                optionalSkipped = cmd.optional,
+            )
+        }
         val ok = service.typeText("", clearFirst = true)
         service.awaitIdle(150L)
         return FlowStepResult(
@@ -190,6 +221,16 @@ class MaestroFlowExecutor(
 
     private suspend fun executeScroll(stepIndex: Int, cmd: MaestroCommand.Scroll): FlowStepResult {
         val (sx, sy, ex, ey) = computeScrollCoordinates(cmd.direction)
+        service.refuseIfActingOnFriendly(sx, sy)?.let { reason ->
+            return FlowStepResult(
+                stepIndex = stepIndex + 1,
+                commandName = "scroll",
+                detail = reason,
+                success = cmd.optional,
+                elapsedMs = 0,
+                optionalSkipped = cmd.optional,
+            )
+        }
         val ok = service.swipe(sx, sy, ex, ey, cmd.durationMs)
         service.awaitIdle(350L)
         return FlowStepResult(
@@ -219,6 +260,16 @@ class MaestroFlowExecutor(
             }
             if (attempt < maxSwipes) {
                 val (sx, sy, ex, ey) = computeScrollCoordinates(cmd.direction)
+                service.refuseIfActingOnFriendly(sx, sy)?.let { reason ->
+                    return FlowStepResult(
+                        stepIndex = stepIndex + 1,
+                        commandName = "scrollUntilVisible",
+                        detail = reason,
+                        success = cmd.optional,
+                        elapsedMs = 0,
+                        optionalSkipped = cmd.optional,
+                    )
+                }
                 service.swipe(sx, sy, ex, ey, 300L)
                 swipesDone++
                 service.awaitIdle(400L)

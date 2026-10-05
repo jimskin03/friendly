@@ -24,7 +24,7 @@ internal object DirectAppIntents {
     private val PHONE_CANDIDATE = Regex("""\+?\d[\d\s().-]{1,}\d|\b\d{3,}\b""")
 
     sealed class Result {
-        data class Launched(val message: String) : Result()
+        data class Launched(val message: String, val packageName: String? = null) : Result()
         data class Blocked(val message: String) : Result()
         data class Fallback(val query: String) : Result()
     }
@@ -44,14 +44,20 @@ internal object DirectAppIntents {
         if (digits.length in 8..15) {
             val intent = view("whatsapp://send?phone=$digits")
             if (start(context, intent)) {
-                return Result.Launched("Opened WhatsApp chat via whatsapp://send?phone=$digits")
+                return Result.Launched(
+                    message = "Opened WhatsApp chat via whatsapp://send?phone=$digits",
+                    packageName = WHATSAPP_PACKAGE,
+                )
             }
         }
         val launch = context.packageManager.getLaunchIntentForPackage(WHATSAPP_PACKAGE)
         if (launch != null) {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (start(context, launch)) {
-                return Result.Launched("Launched WhatsApp ($WHATSAPP_PACKAGE)")
+                return Result.Launched(
+                    message = "Launched WhatsApp ($WHATSAPP_PACKAGE)",
+                    packageName = WHATSAPP_PACKAGE,
+                )
             }
         }
         return Result.Fallback("WhatsApp")
@@ -72,10 +78,14 @@ internal object DirectAppIntents {
         }
         val targeted = view(uri).apply { setPackage(MAPS_PACKAGE) }
         if (start(context, targeted)) {
-            return Result.Launched(mapsMessage(directions, q))
+            return Result.Launched(
+                message = mapsMessage(directions, q),
+                packageName = MAPS_PACKAGE,
+            )
         }
         if (start(context, view(uri))) {
-            return Result.Launched(mapsMessage(directions, q))
+            // Generic handler; package may not be Maps.
+            return Result.Launched(message = mapsMessage(directions, q), packageName = null)
         }
         return Result.Fallback("Google Maps")
     }
@@ -96,7 +106,8 @@ internal object DirectAppIntents {
                 }
                 if (start(context, intent)) {
                     Result.Launched(
-                        "Opened the dialer with ${parsed.number}. The call was not placed.",
+                        message = "Opened the dialer with ${parsed.number}. The call was not placed.",
+                        packageName = null,
                     )
                 } else {
                     Result.Fallback("Phone")

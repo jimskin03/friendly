@@ -18,6 +18,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -122,10 +123,12 @@ class PhoneAutomationService : AccessibilityService() {
     }
 
     /**
-     * Inspects active window hierarchy and returns structured UI elements.
+     * Inspects the best available application window hierarchy.
+     * Prefers the last launched target package, then any non-Friendly
+     * application window, then [rootInActiveWindow].
      */
     fun inspectScreen(): ScreenInspectionResult {
-        val root = rootInActiveWindow ?: return ScreenInspectionResult(
+        val root = resolveInspectionRoot() ?: return ScreenInspectionResult(
             packageName = "",
             windowTitle = "",
             interactiveElements = emptyList(),
@@ -348,6 +351,84 @@ class PhoneAutomationService : AccessibilityService() {
         return false
     }
 
+
+    /**
+     * Picks the accessibility root for inspection / matching.
+     * [FlagRetrieveInteractiveWindows] is enabled so [windows] is populated.
+     */
+    fun resolveInspectionRoot(): AccessibilityNodeInfo? {
+        val own = packageName
+        val target = lastTargetPackage
+        val windowList = windows
+        if (!windowList.isNullOrEmpty()) {
+            if (!target.isNullOrBlank()) {
+                windowList.firstNotNullOfOrNull { window ->
+                    applicationRootMatching(window, target)
+                }?.let { return it }
+            }
+            windowList.firstNotNullOfOrNull { window ->
+                val root = applicationRoot(window) ?: return@firstNotNullOfOrNull null
+                val pkg = root.packageName?.toString().orEmpty()
+                if (pkg.isNotBlank() && pkg != own) root else null
+            }?.let { return it }
+        }
+        return rootInActiveWindow
+    }
+
+    private fun applicationRoot(window: AccessibilityWindowInfo): AccessibilityNodeInfo? {
+        if (window.type != AccessibilityWindowInfo.TYPE_APPLICATION) return null
+        return window.root
+    }
+
+    private fun applicationRootMatching(
+        window: AccessibilityWindowInfo,
+        targetPackage: String,
+    ): AccessibilityNodeInfo? {
+        val root = applicationRoot(window) ?: return null
+        return if (root.packageName?.toString() == targetPackage) root else null
+    }
+
+    fun activeWindowPackage(): String =
+        rootInActiveWindow?.packageName?.toString().orEmpty()
+
+    fun windowPackageAt(x: Float, y: Float): String? {
+        val windowList = windows ?: return null
+        val px = x.toInt()
+        val py = y.toInt()
+        val bounds = Rect()
+        return windowList
+            .asSequence()
+            .filter { window ->
+                window.getBoundsInScreen(bounds)
+                bounds.contains(px, py)
+            }
+            .maxByOrNull { it.layer }
+            ?.root
+            ?.packageName
+            ?.toString()
+    }
+
+    /**
+     * Passive guardrail: refuse mutative gestures when they would hit Friendly
+     * itself. Prefer returning this error over yanking focus back to the target.
+     */
+    fun refuseIfActingOnFriendly(x: Float? = null, y: Float? = null): String? {
+        val own = packageName
+        val pkg = if (x != null && y != null) {
+            windowPackageAt(x, y) ?: activeWindowPackage()
+        } else {
+            activeWindowPackage()
+        }
+        return if (pkg.isNotBlank() && pkg == own) {
+            FRIENDLY_IN_FRONT_ERROR
+        } else {
+            null
+        }
+    }
+
+    fun isOwnPackage(pkg: String): Boolean =
+        pkg.isNotBlank() && pkg == packageName
+
     /**
      * Best-effort tap of an in-call Answer / End control. Returns false when no
      * matching visible control is found. Not reliable across OEM dialers.
@@ -453,6 +534,9 @@ class PhoneAutomationService : AccessibilityService() {
     }
 
     companion object {
+        const val FRIENDLY_IN_FRONT_ERROR =
+            "Friendly is in front; call phone_launch_app."
+
         @Volatile
         var instance: PhoneAutomationService? = null
             private set
@@ -470,10 +554,36 @@ class PhoneAutomationService : AccessibilityService() {
         @Volatile
         var lastConversationId: String? = null
 
+        /**
+         * Last successfully launched target package from [launchApp] /
+         * [DirectAppIntents]. Never stores Friendly's own package.
+         */
+        @Volatile
+        var lastTargetPackage: String? = null
+            private set
+
         fun isRunning(): Boolean = instance != null
+
+        /**
+         * Remember a launched app package for inspect preference / focus checks.
+         * Ignores blank values and Friendly's own [Context.getPackageName].
+         */
+        fun rememberTargetPackage(context: Context, pkg: String?) {
+            val trimmed = pkg?.trim().orEmpty()
+            if (trimmed.isEmpty()) return
+            val own = context.packageName
+            if (trimmed == own) return
+            lastTargetPackage = trimmed
+            PhoneAutomationLoopGuard.reset()
+        }
 
         /** No-arg starts [PhoneAutomationStep.Other]. Phone tools pass a real step. */
         fun reportWorkStarted(step: PhoneAutomationStep = PhoneAutomationStep.Other) {
+            val previous = _activity.value
+            // New phone-work generation: reset loop detector once per reply.
+            if (!previous.holdingForGeneration && !previous.toolRunning) {
+                PhoneAutomationLoopGuard.reset()
+            }
             _activity.value = PhoneAutomationActivity(
                 toolRunning = true,
                 step = step,
@@ -587,7 +697,10 @@ class PhoneAutomationService : AccessibilityService() {
                 return false to "App not found matching '$query'"
             }
             when (val direct = DirectAppIntents.resolve(context, primary, phoneArg, placeArg)) {
-                is DirectAppIntents.Result.Launched -> return true to direct.message
+                is DirectAppIntents.Result.Launched -> {
+                    rememberTargetPackage(context, direct.packageName)
+                    return true to direct.message
+                }
                 is DirectAppIntents.Result.Blocked -> return false to direct.message
                 is DirectAppIntents.Result.Fallback -> return launchAppByName(context, direct.query)
                 null -> Unit
@@ -604,6 +717,7 @@ class PhoneAutomationService : AccessibilityService() {
             if (directIntent != null) {
                 directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startPhoneAutomationActivity(directIntent)
+                rememberTargetPackage(context, query.trim())
                 return true to "Launched app with package: $query"
             }
 
@@ -639,6 +753,7 @@ class PhoneAutomationService : AccessibilityService() {
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startPhoneAutomationActivity(launchIntent)
+                    rememberTargetPackage(context, matched.activityInfo.packageName)
                     val label = matched.loadLabel(pm).toString()
                     return true to "Launched app: $label (${matched.activityInfo.packageName})"
                 }
