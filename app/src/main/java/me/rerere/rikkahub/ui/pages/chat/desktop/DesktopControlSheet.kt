@@ -1399,7 +1399,10 @@ private fun String.fittedViewerUrl(): String {
 
 private const val TRACKPAD_INSTALL_JS = """
 (function() {
-  if (window.FriendlyTrackpad && window.FriendlyTrackpad.zoomAt) return;
+  // Coord model grok-1: one logical desktop point drives both the drawn
+  // cursor and RFB pointer events. CSS zoom/pan is view-only; never feed
+  // CSS-transformed getBoundingClientRect coords back into noVNC absX.
+  if (window.FriendlyTrackpad && window.FriendlyTrackpad._coordModel === 'grok-1') return;
   function canvas() {
     var list = document.querySelectorAll('canvas');
     var best = null;
@@ -1431,12 +1434,24 @@ private const val TRACKPAD_INSTALL_JS = """
     return el;
   }
   window.FriendlyTrackpad = {
+    _coordModel: 'grok-1',
     x: null,
     y: null,
     zoom: 1,
     cover: 1,
     panX: 0,
     panY: 0,
+    held: 0,
+    rfb: function() {
+      var ui = window.__novncUI;
+      return ui && ui.rfb ? ui.rfb : null;
+    },
+    // RFB button mask: left=1, middle=2, right=4 (not DOM MouseEvent.buttons).
+    vncMask: function() {
+      if (this.held === 4) return 4; // right
+      if (this.held) return 1; // left
+      return 0;
+    },
     viewScale: function() {
       return (this.cover || 1) * (this.zoom || 1);
     },
@@ -1460,14 +1475,21 @@ private const val TRACKPAD_INSTALL_JS = """
       var frame = document.getElementById('noVNC_container');
       if (frame) {
         frame.style.overflow = 'hidden';
-        // The hosted noVNC page clips the bottom-right with an 800px by 600px radius.
         frame.style.setProperty('border-radius', '0', 'important');
       }
       var list = document.querySelectorAll('canvas');
       for (var i = 0; i < list.length; i++) {
-        if (list[i] !== c) list[i].style.visibility = 'hidden';
+        if (list[i] === c) continue;
+        // Keep noVNC's fixed fallback cursor canvas; hide spare backbuffers only.
+        var st = list[i].style;
+        if (st && st.position === 'fixed' && String(st.zIndex) === '65535') {
+          st.visibility = '';
+          continue;
+        }
+        st.visibility = 'hidden';
       }
     },
+    // Pre-transform layout box of the canvas (noVNC mouse space).
     layoutBox: function(c) {
       var visual = c.getBoundingClientRect();
       var z = this.viewScale();
@@ -1510,9 +1532,10 @@ private const val TRACKPAD_INSTALL_JS = """
         if (visTop + visH > cr.bottom) this.panY -= (visTop + visH) - cr.bottom;
       }
     },
-    // Map logical canvas coords (this.x/y in pre-transform layout space) to
-    // viewport client coords under translate(pan) scale(z) with origin center.
-    hotspot: function(box) {
+    // Single transform: logical canvas point (this.x/y) -> viewport client point
+    // under translate(pan) scale(z) with origin center. Used for the drawn
+    // cursor only; RFB gets this.x/y directly.
+    logicalToVisual: function(box) {
       var z = this.viewScale();
       return {
         x: box.left + this.panX + box.width / 2 + (this.x - box.width / 2) * z,
@@ -1522,14 +1545,12 @@ private const val TRACKPAD_INSTALL_JS = """
     revealCursor: function(box) {
       var container = document.getElementById('noVNC_container') || document.documentElement;
       var cr = container.getBoundingClientRect();
-      var hot = this.hotspot(box);
-      var vx = hot.x;
-      var vy = hot.y;
+      var hot = this.logicalToVisual(box);
       var m = 36;
-      if (vx < cr.left + m) this.panX += (cr.left + m) - vx;
-      if (vx > cr.right - m) this.panX -= vx - (cr.right - m);
-      if (vy < cr.top + m) this.panY += (cr.top + m) - vy;
-      if (vy > cr.bottom - m) this.panY -= vy - (cr.bottom - m);
+      if (hot.x < cr.left + m) this.panX += (cr.left + m) - hot.x;
+      if (hot.x > cr.right - m) this.panX -= hot.x - (cr.right - m);
+      if (hot.y < cr.top + m) this.panY += (cr.top + m) - hot.y;
+      if (hot.y > cr.bottom - m) this.panY -= hot.y - (cr.bottom - m);
       this.clampPan(box);
     },
     place: function(opts) {
@@ -1549,29 +1570,43 @@ private const val TRACKPAD_INSTALL_JS = """
         this.applyView(c);
         box = this.layoutBox(c);
       }
-      var visual = c.getBoundingClientRect();
-      var hot = this.hotspot(box);
+      var hot = this.logicalToVisual(box);
       var mark = cursorEl();
       mark.style.left = hot.x + 'px';
       mark.style.top = hot.y + 'px';
-      // clientX/Y must be the same visual hotspot as the pointer mark. Using
-      // rect.left + this.x mixes post-transform bounds with pre-transform x/y
-      // and misaligns clicks once zoomed.
-      return { canvas: c, rect: visual, box: box, clientX: hot.x, clientY: hot.y };
+      return { canvas: c, box: box, clientX: hot.x, clientY: hot.y, x: this.x, y: this.y };
     },
-    dispatch: function(type, button, buttons) {
+    // Push the one logical point to the desktop. Prefer RFB._sendMouse so CSS
+    // zoom cannot inflate absX via getBoundingClientRect. Sync the local
+    // noVNC cursor glyph to the same visual hotspot as our ring.
+    sendPointer: function(bmask) {
       var placed = this.place();
       if (!placed) return false;
-      var ev = new MouseEvent(type, {
+      var rfb = this.rfb();
+      if (rfb && typeof rfb._sendMouse === 'function') {
+        rfb._mousePos = { x: placed.x, y: placed.y };
+        rfb._mouseButtonMask = bmask;
+        if (typeof rfb._flushMouseMoveTimer === 'function') {
+          try { rfb._flushMouseMoveTimer(placed.x, placed.y); } catch (e) {}
+        }
+        rfb._sendMouse(placed.x, placed.y, bmask);
+        if (rfb._cursor && typeof rfb._cursor.move === 'function') {
+          rfb._cursor.move(placed.clientX, placed.clientY);
+        }
+        return true;
+      }
+      // Fallback without RFB hook: client pos such that clientToElement yields
+      // layout x/y (not layout*z). Visual ring already sits on logicalToVisual.
+      var visual = placed.canvas.getBoundingClientRect();
+      placed.canvas.dispatchEvent(new MouseEvent('mousemove', {
         bubbles: true,
         cancelable: true,
         view: window,
-        clientX: placed.clientX,
-        clientY: placed.clientY,
-        button: button || 0,
-        buttons: buttons || 0
-      });
-      placed.canvas.dispatchEvent(ev);
+        clientX: visual.left + placed.x,
+        clientY: visual.top + placed.y,
+        button: 0,
+        buttons: bmask === 4 ? 2 : (bmask & 1)
+      }));
       return true;
     },
     moveBy: function(dx, dy) {
@@ -1579,8 +1614,7 @@ private const val TRACKPAD_INSTALL_JS = """
       this.x += dx;
       this.y += dy;
       this.place({reveal: true});
-      var buttons = this.held === 4 ? 2 : (this.held ? 1 : 0);
-      return this.dispatch('mousemove', 0, buttons);
+      return this.sendPointer(this.vncMask());
     },
     zoomAt: function(factor, sx, sy) {
       var c = canvas();
@@ -1617,14 +1651,12 @@ private const val TRACKPAD_INSTALL_JS = """
       return true;
     },
     down: function(button) {
-      var mask = button === 2 ? 2 : 1;
       this.held = button === 2 ? 4 : 1;
-      return this.dispatch('mousedown', button || 0, mask);
+      return this.sendPointer(this.vncMask());
     },
     up: function(button) {
-      var which = button || 0;
       this.held = 0;
-      return this.dispatch('mouseup', which, 0);
+      return this.sendPointer(0);
     },
     click: function(button) {
       var self = this;
@@ -1634,22 +1666,47 @@ private const val TRACKPAD_INSTALL_JS = """
     wheel: function(dx, dy) {
       var placed = this.place();
       if (!placed) return false;
+      var rfb = this.rfb();
       var steps = Math.round(Math.max(Math.abs(dx), Math.abs(dy)) / 50);
       if (steps < 1) steps = 1;
       if (steps > 8) steps = 8;
-      var sx = dx === 0 ? 0 : (dx < 0 ? -50 : 50);
-      var sy = dy === 0 ? 0 : (dy < 0 ? -50 : 50);
+      var base = this.vncMask();
+      var sx = dx === 0 ? 0 : (dx < 0 ? -1 : 1);
+      var sy = dy === 0 ? 0 : (dy < 0 ? -1 : 1);
       for (var i = 0; i < steps; i++) {
-        placed.canvas.dispatchEvent(new WheelEvent('wheel', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          clientX: placed.clientX,
-          clientY: placed.clientY,
-          deltaX: sx,
-          deltaY: sy,
-          deltaMode: 0
-        }));
+        if (rfb && typeof rfb._handleMouseButton === 'function') {
+          if (sy < 0) {
+            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 3));
+            rfb._handleMouseButton(placed.x, placed.y, base);
+          } else if (sy > 0) {
+            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 4));
+            rfb._handleMouseButton(placed.x, placed.y, base);
+          }
+          if (sx < 0) {
+            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 5));
+            rfb._handleMouseButton(placed.x, placed.y, base);
+          } else if (sx > 0) {
+            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 6));
+            rfb._handleMouseButton(placed.x, placed.y, base);
+          }
+        } else {
+          var visual = placed.canvas.getBoundingClientRect();
+          var clientX = visual.left + placed.x;
+          var clientY = visual.top + placed.y;
+          placed.canvas.dispatchEvent(new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: clientX,
+            clientY: clientY,
+            deltaX: sx * 50,
+            deltaY: sy * 50,
+            deltaMode: 0
+          }));
+        }
+      }
+      if (rfb && rfb._cursor && typeof rfb._cursor.move === 'function') {
+        rfb._cursor.move(placed.clientX, placed.clientY);
       }
       return true;
     }
