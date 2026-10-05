@@ -50,6 +50,21 @@ class PhoneAutomationLoopGuardTest {
         )
     }
 
+
+    @Test
+    fun bringAppToFrontResetsCounter() {
+        val fp = "com.example.app#9"
+        assertNull(PhoneAutomationLoopGuard.observe("phone_click", "query:ok", fp))
+        assertNull(PhoneAutomationLoopGuard.observe("phone_click", "query:ok", fp))
+        assertNull(PhoneAutomationLoopGuard.observe("phone_bring_app_to_front", "pkg", fp))
+        assertNull(PhoneAutomationLoopGuard.observe("phone_click", "query:ok", fp))
+        assertNull(PhoneAutomationLoopGuard.observe("phone_click", "query:ok", fp))
+        assertEquals(
+            PhoneAutomationLoopGuard.WARNING,
+            PhoneAutomationLoopGuard.observe("phone_click", "query:ok", fp),
+        )
+    }
+
     @Test
     fun inspectDoesNotCountTowardStuck() {
         val fp = "com.example.app#5"

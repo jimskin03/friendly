@@ -20,6 +20,7 @@ import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.flow.MutableStateFlow
+import me.rerere.rikkahub.data.datastore.PhoneAutomationWindowMode
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -276,19 +277,81 @@ class PhoneAutomationService : AccessibilityService() {
     }
 
     /**
-     * Enters text into the currently focused editable field.
+     * Enters text into an editable field.
+     * When [target] is set, focuses that node (by view id / bounds) and sets text
+     * on it; if that fails, falls back to the currently focused input.
+     * When [target] is null, types into the focused field only.
      */
-    fun typeText(text: String, clearFirst: Boolean = false): Boolean {
+    fun typeText(
+        text: String,
+        clearFirst: Boolean = false,
+        target: ScreenNodeInfo? = null,
+    ): Boolean {
+        val preferred = target?.let { findLiveNode(it) }
+        if (preferred != null) {
+            preferred.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            if (setTextOnNode(preferred, text, clearFirst)) return true
+        }
         val root = rootInActiveWindow ?: return false
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        return setTextOnNode(focused, text, clearFirst)
+    }
 
-        val currentText = if (clearFirst) "" else focused.text?.toString().orEmpty()
+    private fun setTextOnNode(
+        node: AccessibilityNodeInfo,
+        text: String,
+        clearFirst: Boolean,
+    ): Boolean {
+        val currentText = if (clearFirst) "" else node.text?.toString().orEmpty()
         val newText = currentText + text
-
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
         }
-        return focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+    }
+
+    /**
+     * Best-effort match of a [ScreenNodeInfo] to a live accessibility node under
+     * the preferred inspection root (then [rootInActiveWindow]).
+     */
+    private fun findLiveNode(target: ScreenNodeInfo): AccessibilityNodeInfo? {
+        val roots = listOfNotNull(resolveInspectionRoot(), rootInActiveWindow).distinct()
+        for (root in roots) {
+            findLiveNodeIn(root, target)?.let { return it }
+        }
+        return null
+    }
+
+    private fun findLiveNodeIn(
+        root: AccessibilityNodeInfo,
+        target: ScreenNodeInfo,
+    ): AccessibilityNodeInfo? {
+        val rect = Rect()
+        fun walk(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            if (node == null || !node.isVisibleToUser) return null
+            node.getBoundsInScreen(rect)
+            val viewId = node.viewIdResourceName.orEmpty()
+            val text = node.text?.toString().orEmpty().trim()
+            val desc = node.contentDescription?.toString().orEmpty().trim()
+            val boundsMatch = rect.left == target.left &&
+                rect.top == target.top &&
+                rect.right == target.right &&
+                rect.bottom == target.bottom
+            val viewIdMatch = target.viewId.isNotBlank() &&
+                viewId.isNotBlank() &&
+                (viewId == target.viewId ||
+                    viewId.substringAfter(":id/") == target.viewId.substringAfter(":id/"))
+            val labelMatch = (target.text.isNotBlank() && text == target.text) ||
+                (target.description.isNotBlank() && desc == target.description)
+            if (boundsMatch) return node
+            if (viewIdMatch && (node.isEditable || labelMatch)) return node
+            if (labelMatch && node.isEditable) return node
+            for (i in 0 until node.childCount) {
+                walk(node.getChild(i))?.let { return it }
+            }
+            return null
+        }
+        return walk(root)
     }
 
     /**
@@ -535,7 +598,8 @@ class PhoneAutomationService : AccessibilityService() {
 
     companion object {
         const val FRIENDLY_IN_FRONT_ERROR =
-            "Friendly is in front; call phone_launch_app."
+            "Friendly is in front; call phone_bring_app_to_front to restore the last target app " +
+                "(or phone_launch_app if you still need to open an app)."
 
         @Volatile
         var instance: PhoneAutomationService? = null
@@ -675,6 +739,98 @@ class PhoneAutomationService : AccessibilityService() {
                 }
             }
             return false
+        }
+
+        /**
+         * Bring a remembered (or named) third-party app to the front using only
+         * [Intent.FLAG_ACTIVITY_NEW_TASK] on [PackageManager.getLaunchIntentForPackage].
+         * Never re-fires [DirectAppIntents] deep links. Skipped entirely in Split /
+         * Popup window mode. Tool-driven only — not called on focus loss.
+         *
+         * @param packageOrName optional package id or launcher label; when blank,
+         * uses [lastTargetPackage].
+         */
+        fun bringTargetAppToFront(
+            context: Context,
+            packageOrName: String? = null,
+        ): Pair<Boolean, String> {
+            val mode = currentPhoneAutomationWindowMode()
+            if (mode == PhoneAutomationWindowMode.SPLIT || mode == PhoneAutomationWindowMode.POPUP) {
+                return false to
+                    "phone_bring_app_to_front is skipped in ${mode.name.lowercase()} window mode"
+            }
+
+            val resolved = resolvePackageForBringToFront(context, packageOrName)
+                ?: return false to if (packageOrName.isNullOrBlank()) {
+                    "No lastTargetPackage; launch an app first with phone_launch_app, " +
+                        "or pass app_name/package."
+                } else {
+                    "App not found matching '$packageOrName'"
+                }
+
+            if (resolved == context.packageName) {
+                return false to "Refusing to bring Friendly itself to front with this tool."
+            }
+
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(resolved)
+                ?: return false to "No launch intent for package: $resolved"
+
+            // ONLY NEW_TASK for third-party apps — no REORDER_TO_FRONT / SINGLE_TOP / CLEAR_TOP.
+            launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            return try {
+                context.startActivity(launchIntent)
+                rememberTargetPackage(context, resolved)
+                true to "Brought app to front: $resolved"
+            } catch (e: Exception) {
+                false to "Failed to bring app to front: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+
+        /**
+         * Resolves a package for [bringTargetAppToFront]. Blank input uses
+         * [lastTargetPackage]. Otherwise matches package id, then launcher label
+         * (same scoring as [launchAppByName]) without launching or deep-linking.
+         */
+        private fun resolvePackageForBringToFront(
+            context: Context,
+            packageOrName: String?,
+        ): String? {
+            val trimmed = packageOrName?.trim().orEmpty()
+            if (trimmed.isEmpty()) {
+                return lastTargetPackage?.takeIf { it.isNotBlank() }
+            }
+            val pm = context.packageManager
+            if (pm.getLaunchIntentForPackage(trimmed) != null) {
+                return trimmed
+            }
+            val needle = trimmed.lowercase()
+            val words = needle.split(Regex("[^a-z0-9]+")).filter { it.length >= 2 }
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            val matched = pm.queryIntentActivities(mainIntent, 0)
+                .map { info ->
+                    val label = info.loadLabel(pm).toString().lowercase()
+                    val pkgWords = info.activityInfo.packageName.lowercase().replace('.', ' ')
+                    val score = when {
+                        label == needle -> 1000
+                        needle.length >= 2 && label.contains(needle) -> 800
+                        words.isNotEmpty() && words.all { label.contains(it) } -> 700
+                        words.isNotEmpty() && words.all { word ->
+                            label.contains(word) || pkgWords.contains(word)
+                        } -> 600
+                        else -> 0
+                    }
+                    Triple(score, label, info)
+                }
+                .filter { it.first > 0 }
+                .maxWithOrNull(
+                    compareBy<Triple<Int, String, android.content.pm.ResolveInfo>> { it.first }
+                        .thenBy { if (words.any { word -> word == it.second }) 1 else 0 }
+                        .thenByDescending { it.second.length },
+                )
+                ?.third
+            return matched?.activityInfo?.packageName
         }
 
         /**

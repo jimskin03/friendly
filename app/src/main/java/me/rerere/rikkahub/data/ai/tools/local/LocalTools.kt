@@ -37,6 +37,7 @@ class LocalTools(
     val phoneTypeTextTool by lazy { buildPhoneTypeTextTool() }
     val phonePressKeyTool by lazy { buildPhonePressKeyTool() }
     val phoneLaunchAppTool by lazy { buildPhoneLaunchAppTool(context) }
+    val phoneBringAppToFrontTool by lazy { buildPhoneBringAppToFrontTool(context) }
     val phoneScreenshotTool by lazy { buildPhoneScreenshotTool(org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.files.FilesManager>()) }
     val placeCallTool by lazy { buildPlaceCallTool(phoneCallController) }
     val endCallTool by lazy { buildEndCallTool(phoneCallController) }
@@ -104,6 +105,7 @@ class LocalTools(
             tools.add(phoneTypeTextTool.withPhoneAutomationTracking())
             tools.add(phonePressKeyTool.withPhoneAutomationTracking())
             tools.add(phoneLaunchAppTool.withPhoneAutomationTracking())
+            tools.add(phoneBringAppToFrontTool.withPhoneAutomationTracking())
             tools.add(phoneScreenshotTool.withPhoneAutomationTracking())
             tools.add(placeCallTool.withPhoneAutomationTracking())
             tools.add(endCallTool.withPhoneAutomationTracking())

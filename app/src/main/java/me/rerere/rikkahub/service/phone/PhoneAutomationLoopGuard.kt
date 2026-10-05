@@ -53,7 +53,7 @@ internal object PhoneAutomationLoopGuard {
         normalizedTarget: String,
         fingerprint: String,
     ): String? {
-        if (toolName == "phone_launch_app") {
+        if (toolName == "phone_launch_app" || toolName == "phone_bring_app_to_front") {
             reset()
             lastFingerprint = fingerprint.ifBlank { lastFingerprint }
             return null

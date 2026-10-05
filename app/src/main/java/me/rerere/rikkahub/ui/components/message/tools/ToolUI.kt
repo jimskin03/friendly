@@ -104,6 +104,7 @@ object ToolUIRegistry {
         PhoneTypeTextToolUI,
         PhonePressKeyToolUI,
         PhoneLaunchAppToolUI,
+        PhoneBringAppToFrontToolUI,
         PhoneScreenshotToolUI,
         PhoneAssertVisibleToolUI,
         PhoneScrollUntilVisibleToolUI,

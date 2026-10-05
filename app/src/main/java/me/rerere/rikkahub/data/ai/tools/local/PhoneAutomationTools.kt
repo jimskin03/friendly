@@ -19,6 +19,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.service.phone.ElementSelector
 import me.rerere.rikkahub.service.phone.PhoneAutomationLoopGuard
+import me.rerere.rikkahub.service.phone.PhoneSearchHints
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.service.phone.PhoneAutomationStep
 import me.rerere.rikkahub.service.phone.PhoneCallController
@@ -34,8 +35,12 @@ internal fun buildPhoneInspectScreenTool(): Tool = Tool(
     description = """
         Read the phone screen as text. This is the default inspect path and does not take a screenshot.
         Returns the visible accessibility tree: text, content description, clickable, and bounds,
-        plus the active package and window title. A huge tree is truncated with a node count.
-        Use phone_screenshot with screenshot=true only when a bitmap is required.
+        plus the active package, window title, and search_candidates (likely search fields/icons
+        from labels like search / cari / 搜索 or view ids containing search). Prefer those
+        candidates when the user wants to find, look up, order, play, or navigate inside an app
+        that exposes a search UI — click the candidate, then phone_type_text. Do not invent
+        keyword gates; use the app's own search when it appears. A huge tree is truncated with
+        a node count. Use phone_screenshot with screenshot=true only when a bitmap is required.
         Requires the Phone Automation Accessibility service to be active.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -60,6 +65,8 @@ internal fun buildPhoneClickTool(): Tool = Tool(
         Provide (x, y) coordinates, or provide 'query' (text/label of the button to click),
         or 'view_id' (resource ID like 'search_button'), or 'node_id' from phone_inspect_screen.
         Optional 'index' (default 0) selects among multiple matches.
+        For find / look-up / order / play style tasks inside an app, prefer tapping a
+        search_candidates entry from phone_inspect_screen when one is present, then type the query.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -245,19 +252,36 @@ internal fun buildPhoneSwipeTool(context: Context): Tool = Tool(
 internal fun buildPhoneTypeTextTool(): Tool = Tool(
     name = "phone_type_text",
     description = """
-        Type text into the currently focused editable input field on the phone screen.
-        Optionally set 'clear_first' to true to replace existing text.
+        Type text into an editable field on the phone screen.
+        By default uses the currently focused input. Optionally pass 'node_id' from
+        phone_inspect_screen, or 'query' / 'view_id', to focus that node first and set text
+        on it (falls back to the focused field if the target cannot be set).
+        Set 'clear_first' to true to replace existing text.
+        After opening an app's search UI (see search_candidates on inspect), type the user's
+        query here rather than browsing menus when search is available.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("text", buildJsonObject {
                     put("type", "string")
-                    put("description", "Text to type into the focused input")
+                    put("description", "Text to type into the input")
                 })
                 put("clear_first", buildJsonObject {
                     put("type", "boolean")
                     put("description", "Whether to clear existing text before typing")
+                })
+                put("node_id", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Optional element id from phone_inspect_screen / search_candidates")
+                })
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional text/label of the editable field to focus before typing")
+                })
+                put("view_id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional resource / view id of the editable field to focus")
                 })
             },
             required = listOf("text")
@@ -276,6 +300,9 @@ internal fun buildPhoneTypeTextTool(): Tool = Tool(
         val params = args.jsonObject
         val text = params["text"]?.jsonPrimitive?.contentOrNull ?: error("text is required")
         val clearFirst = params["clear_first"]?.jsonPrimitive?.booleanOrNull ?: false
+        val nodeId = params["node_id"]?.jsonPrimitive?.intOrNull
+        val query = params["query"]?.jsonPrimitive?.contentOrNull
+        val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
 
         service.refuseIfActingOnFriendly()?.let { reason ->
             val payload = buildJsonObject {
@@ -285,10 +312,26 @@ internal fun buildPhoneTypeTextTool(): Tool = Tool(
             return@Tool listOf(UIMessagePart.Text(payload.toString()))
         }
 
-        val typed = service.typeText(text, clearFirst)
+        var targetNode: ScreenNodeInfo? = null
+        var matchedLabel = ""
+        if (nodeId != null || !query.isNullOrBlank() || !viewId.isNullOrBlank()) {
+            val inspection = service.inspectScreen()
+            val allNodes = inspection.interactiveElements + inspection.textElements
+            targetNode = PhoneElementMatcher.findBestMatch(
+                allNodes,
+                ElementSelector(query = query, viewId = viewId, nodeId = nodeId),
+            )
+            if (targetNode != null) {
+                matchedLabel = targetNode.text.ifBlank { targetNode.description }.ifBlank { targetNode.viewId }
+            }
+        }
+
+        val typed = service.typeText(text, clearFirst, targetNode)
         val payload = buildJsonObject {
             put("success", typed)
             put("typed", text)
+            if (matchedLabel.isNotBlank()) put("matched", matchedLabel)
+            if (targetNode != null) put("node_id", targetNode.id)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }
@@ -348,6 +391,9 @@ internal fun buildPhoneLaunchAppTool(context: Context): Tool = Tool(
         WhatsApp alone opens com.whatsapp; Google Maps with a query uses geo:0,0?q= or google.navigation for directions;
         call or dial plus a phone number opens the dialer with tel: and does not place the call (use place_call to dial).
         Emergency numbers are refused. Unknown apps still match by name or package. If a deep link has no handler, the app is launched by name.
+        After launch, prefer phone_inspect_screen and the app's own search UI (search_candidates) for find /
+        look-up / order / play tasks instead of scanning every menu. To restore a previously launched
+        target without re-firing deep links, use phone_bring_app_to_front.
         Examples: 'YouTube', 'Settings', 'Chrome', 'WhatsApp', 'Google Maps'.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -387,11 +433,55 @@ internal fun buildPhoneLaunchAppTool(context: Context): Tool = Tool(
     }
 )
 
+
+internal fun buildPhoneBringAppToFrontTool(context: Context): Tool = Tool(
+    name = "phone_bring_app_to_front",
+    description = """
+        Bring the remembered last target app (or an optional app_name / package) to the front
+        using only the package launch intent with FLAG_ACTIVITY_NEW_TASK.
+        Does not re-fire WhatsApp / Maps / dialer deep links — use phone_launch_app for those.
+        Skipped in Split or Popup phone-automation window mode. Prefer this when Friendly is
+        in front after a refuse error, or when the model needs the prior target visible again.
+        Does not replace phone_press_key back (keep Back for dialogs and the keyboard).
+        Not called automatically on focus loss — call it only when needed.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("app_name", buildJsonObject {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Optional name or package of the app to bring forward. " +
+                            "Omit to use the remembered lastTargetPackage from the last successful launch.",
+                    )
+                })
+            },
+            required = emptyList(),
+        )
+    },
+    execute = { args ->
+        val params = args.jsonObject
+        val appName = params["app_name"]?.jsonPrimitive?.contentOrNull
+        val (success, message) = PhoneAutomationService.bringTargetAppToFront(context, appName)
+        val payload = buildJsonObject {
+            put("success", success)
+            put("message", message)
+            if (!appName.isNullOrBlank()) put("app_name", appName)
+            if (success) {
+                val remembered = PhoneAutomationService.lastTargetPackage
+                if (!remembered.isNullOrBlank()) put("package_name", remembered)
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    },
+)
+
 internal fun buildPhoneScreenshotTool(filesManager: FilesManager): Tool = Tool(
     name = "phone_screenshot",
     description = """
-        Read the phone screen. The default is the visible text tree (text, content description, clickable, bounds)
-        and does not take a bitmap. Set screenshot to true only when a bitmap is required.
+        Read the phone screen. The default is the visible text tree (text, content description, clickable, bounds,
+        search_candidates) and does not take a bitmap. Set screenshot to true only when a bitmap is required.
         Prefer phone_inspect_screen for the same text result. Requires the Phone Automation Accessibility service.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -912,10 +1002,31 @@ private fun accessibilityInactivePayload(): String {
     }.toString()
 }
 
+private fun screenNodeJson(node: ScreenNodeInfo) = buildJsonObject {
+    put("id", node.id)
+    put("text", clipScreenText(node.text))
+    put("content_description", clipScreenText(node.description))
+    if (node.viewId.isNotBlank()) put("view_id", node.viewId)
+    if (node.className.isNotBlank()) put("class_name", node.className)
+    put("clickable", node.clickable)
+    if (node.editable) put("editable", true)
+    if (node.scrollable) put("scrollable", true)
+    if (!node.enabled) put("enabled", false)
+    if (node.checked) put("checked", true)
+    if (node.focused) put("focused", true)
+    put("bounds", buildJsonObject {
+        put("left", node.left)
+        put("top", node.top)
+        put("right", node.right)
+        put("bottom", node.bottom)
+    })
+}
+
 private fun screenTextMessage(service: PhoneAutomationService): UIMessagePart.Text {
     val result = service.inspectScreen()
     val nodes = (result.interactiveElements + result.textElements).sortedBy { it.id }
     val returned = nodes.take(SCREEN_TEXT_NODE_LIMIT)
+    val searchCandidates = PhoneSearchHints.collect(nodes)
     val payload = buildJsonObject {
         put("mode", "text")
         put("screenshot", false)
@@ -928,28 +1039,11 @@ private fun screenTextMessage(service: PhoneAutomationService): UIMessagePart.Te
         put("total_nodes", nodes.size)
         put("truncated", nodes.size > returned.size)
         put("omitted_count", (nodes.size - returned.size).coerceAtLeast(0))
+        put("search_candidates", buildJsonArray {
+            searchCandidates.forEach { node -> add(screenNodeJson(node)) }
+        })
         put("nodes", buildJsonArray {
-            returned.forEach { node ->
-                add(buildJsonObject {
-                    put("id", node.id)
-                    put("text", clipScreenText(node.text))
-                    put("content_description", clipScreenText(node.description))
-                    if (node.viewId.isNotBlank()) put("view_id", node.viewId)
-                    if (node.className.isNotBlank()) put("class_name", node.className)
-                    put("clickable", node.clickable)
-                    if (node.editable) put("editable", true)
-                    if (node.scrollable) put("scrollable", true)
-                    if (!node.enabled) put("enabled", false)
-                    if (node.checked) put("checked", true)
-                    if (node.focused) put("focused", true)
-                    put("bounds", buildJsonObject {
-                        put("left", node.left)
-                        put("top", node.top)
-                        put("right", node.right)
-                        put("bottom", node.bottom)
-                    })
-                })
-            }
+            returned.forEach { node -> add(screenNodeJson(node)) }
         })
     }
     return UIMessagePart.Text(payload.toString())
@@ -1038,7 +1132,16 @@ private fun normalizeLoopTarget(
         }
         "phone_type_text" -> {
             val clearFirst = params["clear_first"]?.jsonPrimitive?.booleanOrNull ?: false
-            "type:clear=$clearFirst"
+            val viewId = params["view_id"]?.jsonPrimitive?.contentOrNull
+            val query = params["query"]?.jsonPrimitive?.contentOrNull
+            val nodeId = params["node_id"]?.jsonPrimitive?.intOrNull
+            val target = when {
+                !viewId.isNullOrBlank() -> "view:${viewId.trim()}"
+                !query.isNullOrBlank() -> "query:${query.trim().lowercase()}"
+                nodeId != null -> "node:$nodeId"
+                else -> "focused"
+            }
+            "type:clear=$clearFirst;$target"
         }
         "phone_press_key" -> {
             val key = params["key"]?.jsonPrimitive?.contentOrNull?.lowercase().orEmpty()
@@ -1102,7 +1205,7 @@ private fun phoneAutomationStepFor(name: String, args: kotlinx.serialization.jso
         if (!wantBitmap) return PhoneAutomationStep.Inspect
     }
     return when (name) {
-        "phone_launch_app" -> PhoneAutomationStep.LaunchApp
+        "phone_launch_app", "phone_bring_app_to_front" -> PhoneAutomationStep.LaunchApp
         "phone_screenshot" -> PhoneAutomationStep.Screenshot
         "phone_inspect_screen" -> PhoneAutomationStep.Inspect
         "phone_click" -> PhoneAutomationStep.Click

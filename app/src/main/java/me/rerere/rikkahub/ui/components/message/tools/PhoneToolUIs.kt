@@ -123,6 +123,26 @@ object PhoneLaunchAppToolUI : ToolUIRenderer {
     }
 }
 
+
+object PhoneBringAppToFrontToolUI : ToolUIRenderer {
+    override val toolName: String = "phone_bring_app_to_front"
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = "Bring App To Front"
+
+    override fun hasSummary(context: ToolUIContext): Boolean = true
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val msg = context.content?.let { it.jsonObject["message"]?.jsonPrimitive?.contentOrNull }
+        val app = context.content?.let { it.jsonObject["app_name"]?.jsonPrimitive?.contentOrNull }
+            ?: context.content?.let { it.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull }
+        val text = msg ?: if (!app.isNullOrBlank()) "Brought $app to front" else "Brought app to front"
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 object PhoneScreenshotToolUI : ToolUIRenderer {
     override val toolName: String = "phone_screenshot"
     override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
