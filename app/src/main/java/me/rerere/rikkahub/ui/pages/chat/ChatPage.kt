@@ -548,6 +548,7 @@ private fun ChatPageContent(
                         onStartVoiceMode = onStartVoiceMode,
                         voiceState = voiceState,
                         onStopVoiceMode = vm.voiceSession::stop,
+                        onInterruptVoiceMode = vm.voiceSession::interrupt,
                         onOpenComputer = {
                             showDesktopSheet = true
                         },

@@ -11,4 +11,15 @@
             android:targetClass="me.rerere.rikkahub.RouteActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
+    <shortcut
+        android:shortcutId="new_voice"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_new_voice"
+        android:shortcutShortLabel="@string/shortcut_new_voice"
+        android:shortcutLongLabel="@string/shortcut_new_voice">
+        <intent
+            android:action="me.rerere.rikkahub.action.NEW_VOICE"
+            android:targetClass="me.rerere.rikkahub.RouteActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
 </shortcuts>

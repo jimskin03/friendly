@@ -27,8 +27,10 @@ internal fun VoiceModeRow(
     state: VoiceSessionState,
     onStop: () -> Unit,
     onRetry: () -> Unit,
+    onInterrupt: () -> Unit = {},
 ) {
     val isError = state.phase == VoicePhase.Error
+    val isSpeaking = state.phase == VoicePhase.Speaking
     val statusColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
@@ -54,6 +56,11 @@ internal fun VoiceModeRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (isSpeaking) {
+                TextButton(onClick = onInterrupt) {
+                    Text(stringResource(R.string.chat_page_voice_interrupt))
+                }
             }
             if (isError) TextButton(onClick = onRetry) { Text(stringResource(R.string.chat_page_voice_retry)) }
             TextButton(onClick = onStop) { Text(stringResource(R.string.chat_page_voice_end)) }

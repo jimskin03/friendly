@@ -126,29 +126,27 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
             !permission.allRequiredPermissionsGranted -> permission.requestPermissions()
             else -> voice.start(
                 createAsr = { createVoiceAsr(context, client, checkNotNull(provider)) },
-                speak = if (settings.displaySetting.replyWithVoice && tts.isAvailable.value) {
-                    { reply ->
-                        var text = reply
-                        if (settings.displaySetting.ttsOnlyReadQuoted) {
-                            text = text.extractQuotedContentAsText() ?: text
-                        }
-                        if (settings.displaySetting.ttsOnlyReadOutsideBrackets) {
-                            text = text.removeBracketedContent() ?: text
-                        }
-                        text = text.stripMarkdown()
-                        if (text.isNotBlank()) {
-                            tts.speak(text)
-                            // playbackState.Ended is also emitted between chunks. isSpeaking
-                            // remains true until the entire synthesis/playback queue finishes.
-                            combine(tts.isSpeaking, tts.error) { speaking, error ->
-                                check(error == null) { error.orEmpty() }
-                                !speaking
-                            }.first { it }
+                speakChunk = if (settings.displaySetting.replyWithVoice && tts.isAvailable.value) {
+                    { sentence, isFirst ->
+                        if (sentence.isNotBlank()) {
+                            tts.speak(sentence, flush = isFirst)
                         }
                     }
                 } else null,
                 stopSpeaking = tts::stop,
+                awaitSpeakingFinished = {
+                    combine(tts.isSpeaking, tts.error) { speaking, error ->
+                        check(error == null) { error.orEmpty() }
+                        !speaking
+                    }.first { it }
+                },
                 serverVad = checkNotNull(provider).supportsServerVadVoiceMode,
+                ttsOnlyReadQuoted = settings.displaySetting.ttsOnlyReadQuoted,
+                ttsOnlyReadOutsideBrackets = settings.displaySetting.ttsOnlyReadOutsideBrackets,
+                onInterrupt = {
+                    vm.stopGeneration()
+                    tts.stop()
+                },
             )
         }
     }

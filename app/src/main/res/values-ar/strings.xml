@@ -361,6 +361,7 @@
   <string name="chat_page_voice_tool_approval">يلزم اعتماد الأداة. عالج الأمر، ثم أعد تشغيل وضع الصوت.</string>
   <string name="chat_page_voice_tools_before_resume">عالج الموافقات المعلّقة على الأدوات قبل استئناف وضع الصوت</string>
   <string name="chat_page_voice_transcribing">جارٍ إنهاء النسخ النصي…</string>
+  <string name="chat_page_voice_interrupt">مقاطعة</string>
     <string name="chat_page_yesterday">أمس</string>
   <string name="chat_size_dialog_content">عدد الرسائل الحالي: %1$d. قد يؤدي هذا إلى تعطل التطبيق أو تباطؤه، أو حتى فقدان بيانات هذه المحادثة. يرجى إنشاء محادثة جديدة في أقرب وقت ممكن لمواصلة الدردشة.</string>
   <string name="chat_size_dialog_title">حجم بيانات هذه المحادثة كبير جدًا</string>

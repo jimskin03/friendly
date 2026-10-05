@@ -152,6 +152,7 @@ fun ChatInput(
     onStartVoiceMode: (() -> Unit)? = null,
     voiceState: VoiceSessionState = VoiceSessionState(),
     onStopVoiceMode: () -> Unit = {},
+    onInterruptVoiceMode: () -> Unit = {},
     onOpenComputer: (() -> Unit)? = null,
     onOpenPhone: (() -> Unit)? = null,
     onLongOpenPhone: (() -> Unit)? = null,
@@ -272,6 +273,7 @@ fun ChatInput(
                             state = voiceState,
                             onStop = onStopVoiceMode,
                             onRetry = { onStartVoiceMode?.invoke() },
+                            onInterrupt = onInterruptVoiceMode,
                         )
                         androidx.compose.material3.HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),

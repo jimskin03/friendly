@@ -1221,6 +1221,7 @@
   <string name="chat_page_voice_paused">Приостановлено</string>
   <string name="chat_page_voice_retry">Повторить</string>
   <string name="chat_page_voice_end">Завершить</string>
+  <string name="chat_page_voice_interrupt">Прервать</string>
   <string name="chat_page_voice_configure_asr">Сначала настройте ASR в настройках речи</string>
     <string name="chat_page_voice_tool_approval">Требуется одобрение использования инструмента. Одобрите его, затем перезапустите голосовой режим.</string>
   <string name="chat_page_voice_empty">Речь не распознана</string>

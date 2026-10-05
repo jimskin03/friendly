@@ -17,6 +17,7 @@ data class QueuedMessage(
     // Optional in-memory observer; null result means the queued message was withdrawn.
     val reply: CompletableDeferred<String?>? = null,
     val fromVoiceInput: Boolean = false,
+    val onPartialText: ((String) -> Unit)? = null,
 )
 
 data class MessageQueueState(
@@ -48,6 +49,7 @@ class MessageQueue {
         answer: Boolean = true,
         reply: CompletableDeferred<String?>? = null,
         fromVoiceInput: Boolean = false,
+        onPartialText: ((String) -> Unit)? = null,
     ) {
         if (parts.isEmptyInputMessage()) {
             reply?.complete(null)
@@ -59,6 +61,7 @@ class MessageQueue {
                 answer = answer,
                 reply = reply,
                 fromVoiceInput = fromVoiceInput,
+                onPartialText = onPartialText,
             ),
         )
     }

@@ -93,7 +93,7 @@ interface CustomTtsState {
      * Speaks the given text using the selected TTS provider.
      * Long texts will be automatically chunked and queued.
      */
-    fun speak(text: String, flushCalled: Boolean = true)
+    fun speak(text: String, flush: Boolean = true)
 
     /** Stops the current speech and clears the queue. */
     fun stop()
@@ -142,9 +142,9 @@ private class CustomTtsStateImpl(
         controller.setProvider(provider)
     }
 
-    override fun speak(text: String, flushCalled: Boolean) {
+    override fun speak(text: String, flush: Boolean) {
         val processed = text.stripMarkdown()
-        controller.speak(processed, flushCalled)
+        controller.speak(processed, flush)
     }
 
     override fun stop() {

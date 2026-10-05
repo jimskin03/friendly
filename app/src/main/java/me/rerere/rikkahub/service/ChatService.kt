@@ -381,7 +381,11 @@ class ChatService(
     }
 
     /** Enqueue immediately; the result belongs to this item even after edits or later turns. */
-    fun enqueueVoiceMessage(conversationId: Uuid, text: String): Deferred<String?> {
+    fun enqueueVoiceMessage(
+        conversationId: Uuid,
+        text: String,
+        onPartialText: ((String) -> Unit)? = null,
+    ): Deferred<String?> {
         val session = sessionManager.getOrCreate(conversationId)
         val reply = CompletableDeferred<String?>()
         synchronized(session) {
@@ -393,7 +397,12 @@ class ChatService(
                 message.parts.any { it is UIMessagePart.Tool && it.isPending }
             }) { context.getString(R.string.chat_page_voice_tools_before_resume) }
             if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
-            session.messageQueue.enqueue(listOf(UIMessagePart.Text(text)), reply = reply)
+            session.messageQueue.enqueue(
+                parts = listOf(UIMessagePart.Text(text)),
+                reply = reply,
+                fromVoiceInput = true,
+                onPartialText = onPartialText,
+            )
             dispatchNextQueuedMessage(conversationId)
         }
         return reply
@@ -441,7 +450,7 @@ class ChatService(
 
 
                 if (answer) {
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(conversationId, onPartialText = queued.onPartialText)
                 }
 
                 queued.reply?.completeWith(runCatching {
@@ -626,7 +635,8 @@ class ChatService(
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null
+        messageRange: ClosedRange<Int>? = null,
+        onPartialText: ((String) -> Unit)? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
@@ -741,6 +751,9 @@ class ChatService(
                             appEventBus.tryEmit(
                                 AppEvent.ChatGenerationUpdate(conversationId, lastMessage, senderName)
                             )
+                        }
+                        chunk.messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.toText()?.let { text ->
+                            onPartialText?.invoke(text)
                         }
                     }
                 }

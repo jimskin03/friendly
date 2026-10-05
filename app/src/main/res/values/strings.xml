@@ -1108,6 +1108,7 @@
   <string name="share">Share</string>
   <string name="share_handler_page_title">Select an Assistant</string>
   <string name="shortcut_new_prompt">New prompt</string>
+  <string name="shortcut_new_voice">Start new voice</string>
     <string name="skill_detail_page_content">Content</string>
   <string name="skill_detail_page_create">Create</string>
   <string name="skill_detail_page_delete_confirm">Are you sure you want to delete file "%s"?</string>
@@ -1352,6 +1353,7 @@
   <string name="chat_page_voice_paused">Paused</string>
   <string name="chat_page_voice_retry">Retry</string>
   <string name="chat_page_voice_end">End</string>
+  <string name="chat_page_voice_interrupt">Interrupt</string>
   <string name="chat_page_voice_configure_asr">Configure ASR in speech settings first</string>
     <string name="chat_page_voice_select_model">Select a chat model first</string>
   <string name="chat_page_voice_finish_dictation">Finish the current voice input first</string>

@@ -73,8 +73,8 @@ class ChatVM(
 
     val inputState = ChatInputState()
 
-    val voiceSession = VoiceSessionController(viewModelScope, context::getString) {
-        chatService.enqueueVoiceMessage(_conversationId, it)
+    val voiceSession = VoiceSessionController(viewModelScope, context::getString) { text, onPartial ->
+        chatService.enqueueVoiceMessage(_conversationId, text, onPartial)
     }
 
 

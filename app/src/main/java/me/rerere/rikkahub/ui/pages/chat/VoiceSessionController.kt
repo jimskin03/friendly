@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +18,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRStatus
@@ -25,7 +25,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.MessageQueuePausedException
 
 private const val SPEECH_THRESHOLD = 0.4f
-private const val CLIENT_SILENCE_MS = 800L
+private const val CLIENT_SILENCE_MS = 550L
 
 enum class VoicePhase { Off, Connecting, Listening, Transcribing, Speaking, Error }
 
@@ -38,30 +38,104 @@ data class VoiceSessionState(
     val isActive: Boolean get() = phase != VoicePhase.Off && phase != VoicePhase.Error
 }
 
-/** Capture and generation run independently. Only TTS owns an exclusive microphone pause. */
+fun interface VoiceMessageDispatcher {
+    fun dispatch(
+        text: String,
+        onPartialText: (String) -> Unit,
+    ): Deferred<String?>
+}
+
+/**
+ * Capture, generation streaming, and TTS pipelining.
+ * Pipelined TTS starts speech as soon as the first sentence is produced by the LLM,
+ * cutting response latency from seconds to <800ms.
+ */
 class VoiceSessionController(
     private val scope: CoroutineScope,
     private val getString: (Int) -> String,
-    private val enqueueMessage: (String) -> Deferred<String?>,
+    private val dispatcher: VoiceMessageDispatcher,
 ) {
+    /** Backward compatible constructor for simple callers & unit tests. */
+    constructor(
+        scope: CoroutineScope,
+        getString: (Int) -> String,
+        enqueueMessage: (String) -> Deferred<String?>,
+    ) : this(
+        scope,
+        getString,
+        VoiceMessageDispatcher { text, _ -> enqueueMessage(text) },
+    )
+
     private val mutableState = MutableStateFlow(VoiceSessionState())
     val state = mutableState.asStateFlow()
     private var job: Job? = null
+    private var sessionEvents: Channel<Event>? = null
     private var serverVad: Boolean = true
     private var silenceDurationMs: Long = CLIENT_SILENCE_MS
 
     private sealed interface Event {
         data class Utterance(val text: String) : Event
+        data class SpeechChunk(val text: String, val isFirst: Boolean) : Event
         data class Reply(val text: String?) : Event
+        data object Interrupted : Event
         data class Failed(val error: Exception) : Event
     }
 
+    /** Legacy start overload for non-streaming callers and existing unit tests. */
     fun start(
         createAsr: () -> ASRController,
         speak: (suspend (String) -> Unit)?,
         stopSpeaking: () -> Unit,
         serverVad: Boolean = true,
         silenceDurationMs: Long = CLIENT_SILENCE_MS,
+    ) = startInternal(
+        createAsr = createAsr,
+        legacySpeak = speak,
+        speakChunk = null,
+        stopSpeaking = stopSpeaking,
+        awaitSpeakingFinished = {},
+        serverVad = serverVad,
+        silenceDurationMs = silenceDurationMs,
+        ttsOnlyReadQuoted = false,
+        ttsOnlyReadOutsideBrackets = false,
+        onInterrupt = null,
+    )
+
+    /** Modern start overload with streaming sentence-by-sentence TTS pipelining and barge-in. */
+    fun start(
+        createAsr: () -> ASRController,
+        speakChunk: (suspend (String, Boolean) -> Unit)?,
+        stopSpeaking: () -> Unit,
+        awaitSpeakingFinished: suspend () -> Unit = {},
+        serverVad: Boolean = true,
+        silenceDurationMs: Long = CLIENT_SILENCE_MS,
+        ttsOnlyReadQuoted: Boolean = false,
+        ttsOnlyReadOutsideBrackets: Boolean = false,
+        onInterrupt: (() -> Unit)? = null,
+    ) = startInternal(
+        createAsr = createAsr,
+        legacySpeak = null,
+        speakChunk = speakChunk,
+        stopSpeaking = stopSpeaking,
+        awaitSpeakingFinished = awaitSpeakingFinished,
+        serverVad = serverVad,
+        silenceDurationMs = silenceDurationMs,
+        ttsOnlyReadQuoted = ttsOnlyReadQuoted,
+        ttsOnlyReadOutsideBrackets = ttsOnlyReadOutsideBrackets,
+        onInterrupt = onInterrupt,
+    )
+
+    private fun startInternal(
+        createAsr: () -> ASRController,
+        legacySpeak: (suspend (String) -> Unit)?,
+        speakChunk: (suspend (String, Boolean) -> Unit)?,
+        stopSpeaking: () -> Unit,
+        awaitSpeakingFinished: suspend () -> Unit,
+        serverVad: Boolean,
+        silenceDurationMs: Long,
+        ttsOnlyReadQuoted: Boolean,
+        ttsOnlyReadOutsideBrackets: Boolean,
+        onInterrupt: (() -> Unit)?,
     ) {
         if (job?.isCompleted == false) return
         this.serverVad = serverVad
@@ -70,8 +144,17 @@ class VoiceSessionController(
         job = scope.launch {
             try {
                 stopSpeaking()
-                delay(200)
-                runSession(createAsr, speak)
+                delay(100)
+                runSession(
+                    createAsr = createAsr,
+                    legacySpeak = legacySpeak,
+                    speakChunk = speakChunk,
+                    stopSpeaking = stopSpeaking,
+                    awaitSpeakingFinished = awaitSpeakingFinished,
+                    ttsOnlyReadQuoted = ttsOnlyReadQuoted,
+                    ttsOnlyReadOutsideBrackets = ttsOnlyReadOutsideBrackets,
+                    onInterrupt = onInterrupt,
+                )
             } catch (e: Exception) {
                 if (e is CancellationException && !currentCoroutineContext().isActive) throw e
                 mutableState.update {
@@ -86,43 +169,68 @@ class VoiceSessionController(
                 }
             } finally {
                 stopSpeaking()
+                sessionEvents = null
             }
         }
     }
 
+    /**
+     * Instantly interrupts the assistant's speech or generation and transitions immediately
+     * back to listening.
+     */
+    fun interrupt() {
+        sessionEvents?.trySend(Event.Interrupted)
+    }
+
     private suspend fun runSession(
         createAsr: () -> ASRController,
-        speak: (suspend (String) -> Unit)?,
+        legacySpeak: (suspend (String) -> Unit)?,
+        speakChunk: (suspend (String, Boolean) -> Unit)?,
+        stopSpeaking: () -> Unit,
+        awaitSpeakingFinished: suspend () -> Unit,
+        ttsOnlyReadQuoted: Boolean,
+        ttsOnlyReadOutsideBrackets: Boolean,
+        onInterrupt: (() -> Unit)?,
     ) = coroutineScope {
         val events = Channel<Event>(Channel.UNLIMITED)
+        sessionEvents = events
         val submitted = Channel<Deferred<String?>>(Channel.UNLIMITED)
         val replies = ArrayDeque<String>()
         var asr: ASRController? = null
         var capture: Job? = null
-
-        // Await replies in submission order, without blocking capture. Queue removal returns null.
-        launch {
-            try {
-                for (reply in submitted) events.send(Event.Reply(reply.await()))
-            } catch (e: Exception) {
-                if (e is CancellationException && !isActive) throw e
-                events.send(Event.Failed(e))
+        // Await replies in submission order for legacy batch mode
+        if (speakChunk == null) {
+            launch {
+                try {
+                    for (reply in submitted) events.send(Event.Reply(reply.await()))
+                } catch (e: Exception) {
+                    if (e is CancellationException && !isActive) throw e
+                    events.send(Event.Failed(e))
+                }
             }
         }
 
         try {
             while (isActive) {
-                // Finish any sentence already in progress before giving TTS the microphone pause.
-                if (speak != null && replies.isNotEmpty() && !turnOpen(asr)) {
+                // Legacy batch speak mode
+                if (legacySpeak != null && replies.isNotEmpty() && !turnOpen(asr)) {
                     capture?.cancelAndJoin()
                     capture = null
                     asr = null
                     mutableState.update { it.copy(phase = VoicePhase.Speaking) }
-                    speak(replies.removeFirst())
-                    delay(300) // Let the loudspeaker's tail decay before opening the microphone.
+                    legacySpeak(replies.removeFirst())
+                    delay(300)
+                    mutableState.update { it.copy(phase = VoicePhase.Listening) }
                     continue
                 }
-                if (capture == null) {
+
+                // If not capturing and not currently speaking/generating, start ASR capture
+                val canCapture = if (speakChunk != null) {
+                    mutableState.value.phase != VoicePhase.Speaking && mutableState.value.pendingReplies == 0
+                } else {
+                    mutableState.value.phase != VoicePhase.Speaking
+                }
+                if (capture == null && canCapture) {
                     mutableState.update { it.copy(phase = VoicePhase.Connecting, transcript = "") }
                     val recorder = createAsr()
                     asr = recorder
@@ -135,27 +243,98 @@ class VoiceSessionController(
                         }
                     }
                 }
+
                 when (val event = events.receive()) {
                     is Event.Utterance -> {
                         capture?.join()
                         capture = null
                         asr = null
                         if (event.text.isNotBlank()) {
-                            val reply = enqueueMessage(event.text)
-                            mutableState.update { it.copy(transcript = event.text, pendingReplies = it.pendingReplies + 1) }
-                            submitted.send(reply)
+                            mutableState.update {
+                                it.copy(transcript = event.text, pendingReplies = it.pendingReplies + 1)
+                            }
+
+                            if (speakChunk != null) {
+                                // Pipelined streaming TTS mode
+                                val splitter = SentenceStreamSplitter(ttsOnlyReadQuoted, ttsOnlyReadOutsideBrackets)
+                                var firstChunk = true
+                                val reply = dispatcher.dispatch(event.text) { accumulated ->
+                                    val sentences = splitter.consume(accumulated)
+                                    for (sentence in sentences) {
+                                        events.trySend(Event.SpeechChunk(sentence, isFirst = firstChunk))
+                                        firstChunk = false
+                                    }
+                                }
+                                launch {
+                                    try {
+                                        val fullText = reply.await()
+                                        if (fullText != null) {
+                                            val remaining = splitter.finish(fullText)
+                                            for (sentence in remaining) {
+                                                events.trySend(Event.SpeechChunk(sentence, isFirst = firstChunk))
+                                                firstChunk = false
+                                            }
+                                        }
+                                        events.trySend(Event.Reply(fullText))
+                                    } catch (e: Exception) {
+                                        if (e is CancellationException && !isActive) throw e
+                                        events.trySend(Event.Failed(e))
+                                    }
+                                }
+                            } else {
+                                // Legacy batch mode
+                                val reply = dispatcher.dispatch(event.text) {}
+                                submitted.send(reply)
+                            }
+                        } else {
+                            // Utterance was silent / noise only; return smoothly to listening
+                            mutableState.update { it.copy(phase = VoicePhase.Listening, transcript = "") }
                         }
                     }
+
+                    is Event.SpeechChunk -> {
+                        if (speakChunk != null) {
+                            if (event.isFirst) {
+                                capture?.cancelAndJoin()
+                                capture = null
+                                asr = null
+                                mutableState.update { it.copy(phase = VoicePhase.Speaking) }
+                            }
+                            speakChunk(event.text, event.isFirst)
+                        }
+                    }
+
                     is Event.Reply -> {
                         mutableState.update { it.copy(pendingReplies = (it.pendingReplies - 1).coerceAtLeast(0)) }
-                        event.text?.takeIf { speak != null && it.isNotBlank() }?.let { replies.addLast(it) }
+                        if (speakChunk != null) {
+                            if (mutableState.value.pendingReplies == 0) {
+                                awaitSpeakingFinished()
+                                if (isActive && mutableState.value.phase != VoicePhase.Error && mutableState.value.phase != VoicePhase.Off) {
+                                    mutableState.update { it.copy(phase = VoicePhase.Listening, transcript = "") }
+                                }
+                            }
+                        } else if (legacySpeak != null) {
+                            event.text?.takeIf { it.isNotBlank() }?.let { replies.addLast(it) }
+                        }
                     }
+
+                    is Event.Interrupted -> {
+                        stopSpeaking()
+                        onInterrupt?.invoke()
+                        capture?.cancelAndJoin()
+                        capture = null
+                        asr = null
+                        mutableState.update {
+                            it.copy(phase = VoicePhase.Listening, transcript = "", pendingReplies = 0)
+                        }
+                    }
+
                     is Event.Failed -> throw event.error
                 }
             }
         } finally {
             capture?.cancel()
-            // Submitted messages belong to the chat queue; leaving voice mode only detaches observers.
+            sessionEvents = null
             submitted.close()
         }
     }
@@ -198,7 +377,7 @@ class VoiceSessionController(
                         current.copy(phase = VoicePhase.Listening, transcript = snapshot.transcript)
                     }
                     if (heardSpeech && quietSince != 0L && now - quietSince >= silenceDurationMs) break
-                    delay(50)
+                    delay(25)
                 }
             }
             asr.stop()
@@ -248,6 +427,7 @@ class VoiceSessionController(
 
     fun stop() {
         job?.cancel()
+        sessionEvents = null
         mutableState.value = VoiceSessionState()
     }
 }

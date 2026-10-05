@@ -320,6 +320,88 @@ class VoiceSessionControllerTest {
         } finally { rig.close() }
     }
 
+    @Test fun `streaming sentences are spoken as tokens arrive before reply completes`() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val spokenChunks = mutableListOf<String>()
+        val asrs = mutableListOf<FakeAsr>()
+        var onPartial: ((String) -> Unit)? = null
+        val replyDeferred = CompletableDeferred<String?>()
+
+        val voice = VoiceSessionController(scope, getString = { it.toString() }) { text, partial ->
+            onPartial = partial
+            replyDeferred
+        }
+
+        try {
+            voice.start(
+                createAsr = { FakeAsr().also { asrs.add(it) } },
+                speakChunk = { chunk, isFirst ->
+                    spokenChunks.add(chunk)
+                },
+                stopSpeaking = {},
+            )
+
+            awaitCondition { asrs.lastOrNull()?.state?.value?.status == ASRStatus.Listening }
+            val asr = asrs.last()
+            asr.end("tell me something")
+
+            awaitCondition { voice.state.value.pendingReplies == 1 && onPartial != null }
+
+            // Stream token for Sentence 1
+            onPartial!!.invoke("Here is sentence one! And now")
+            awaitCondition { spokenChunks.size == 1 }
+            assertEquals("Here is sentence one!", spokenChunks[0])
+            assertEquals(VoicePhase.Speaking, voice.state.value.phase)
+
+            // Complete generation
+            replyDeferred.complete("Here is sentence one! And now sentence two.")
+            awaitCondition { spokenChunks.size == 2 }
+            assertEquals("And now sentence two.", spokenChunks[1])
+        } finally {
+            voice.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test fun `interrupt cancels speaking and immediately resumes listening`() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val spokenChunks = mutableListOf<String>()
+        val asrs = mutableListOf<FakeAsr>()
+        var onPartial: ((String) -> Unit)? = null
+        var interrupted = false
+        val replyDeferred = CompletableDeferred<String?>()
+
+        val voice = VoiceSessionController(scope, getString = { it.toString() }) { _, partial ->
+            onPartial = partial
+            replyDeferred
+        }
+
+        try {
+            voice.start(
+                createAsr = { FakeAsr().also { asrs.add(it) } },
+                speakChunk = { chunk, _ -> spokenChunks.add(chunk) },
+                stopSpeaking = {},
+                onInterrupt = { interrupted = true },
+            )
+
+            awaitCondition { asrs.lastOrNull()?.state?.value?.status == ASRStatus.Listening }
+            val asr = asrs.last()
+            asr.end("question")
+
+            awaitCondition { onPartial != null }
+            onPartial!!.invoke("This is a long answer. ")
+            awaitCondition { voice.state.value.phase == VoicePhase.Speaking }
+
+            // User interrupts the assistant mid-speech
+            voice.interrupt()
+            awaitCondition { interrupted }
+            awaitCondition { voice.state.value.phase == VoicePhase.Listening }
+        } finally {
+            voice.stop()
+            scope.cancel()
+        }
+    }
+
     companion object {
         private suspend fun awaitCondition(predicate: () -> Boolean) {
             withTimeout(3000) { while (!predicate()) delay(1) }
