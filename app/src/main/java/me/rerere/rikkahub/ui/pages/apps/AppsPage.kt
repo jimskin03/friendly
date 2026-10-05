@@ -4,11 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -59,6 +62,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.FolderLabel
 import me.rerere.rikkahub.data.model.InstalledWebApp
 import me.rerere.rikkahub.data.model.WebAppLaunchMode
+import me.rerere.rikkahub.data.model.WebAppZoomMode
 import me.rerere.rikkahub.data.model.normalizeHttpsStartUrl
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FolderBadge
@@ -141,6 +145,7 @@ fun AppsPage(vm: AppsVM = koinViewModel()) {
             app = editing,
             onDismiss = { editingId = null },
             onLaunchMode = { vm.updateLaunchMode(editing.id, it) },
+            onZoomMode = { vm.updateZoomMode(editing.id, it) },
             onIcon = { vm.updateIcon(editing.id, it.id) },
             onFavorite = { favorite ->
                 if (!vm.setFavorite(editing.id, favorite)) {
@@ -242,11 +247,13 @@ private fun InstalledAppCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AppOptionsDialog(
     app: InstalledWebApp,
     onDismiss: () -> Unit,
     onLaunchMode: (WebAppLaunchMode) -> Unit,
+    onZoomMode: (WebAppZoomMode) -> Unit,
     onIcon: (FolderLabel) -> Unit,
     onFavorite: (Boolean) -> Unit,
 ) {
@@ -266,6 +273,14 @@ private fun AppOptionsDialog(
                 LaunchModePicker(
                     selected = app.launchMode,
                     onSelect = onLaunchMode,
+                )
+                Text(
+                    text = stringResource(R.string.apps_zoom),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                ZoomModePicker(
+                    selected = app.zoomMode,
+                    onSelect = onZoomMode,
                 )
                 Text(
                     text = stringResource(R.string.apps_assign_logo),
@@ -335,6 +350,37 @@ private fun LaunchModePicker(
                     maxLines = 1,
                 )
             }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ZoomModePicker(
+    selected: WebAppZoomMode,
+    onSelect: (WebAppZoomMode) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        WebAppZoomMode.entries.forEach { mode ->
+            val label = when (mode) {
+                WebAppZoomMode.AUTO -> stringResource(R.string.apps_zoom_auto)
+                WebAppZoomMode.FIT_WIDTH -> stringResource(R.string.apps_zoom_fit_width)
+                WebAppZoomMode.PERCENT_75 -> stringResource(R.string.apps_zoom_75)
+                WebAppZoomMode.PERCENT_90 -> stringResource(R.string.apps_zoom_90)
+                WebAppZoomMode.PERCENT_100 -> stringResource(R.string.apps_zoom_100)
+                WebAppZoomMode.PERCENT_110 -> stringResource(R.string.apps_zoom_110)
+                WebAppZoomMode.PERCENT_125 -> stringResource(R.string.apps_zoom_125)
+            }
+            FilterChip(
+                selected = mode == selected,
+                onClick = { onSelect(mode) },
+                label = { Text(label) },
+            )
         }
     }
 }

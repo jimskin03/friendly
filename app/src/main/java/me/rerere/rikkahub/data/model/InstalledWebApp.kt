@@ -11,6 +11,39 @@ enum class WebAppLaunchMode {
     FULLSCREEN,
 }
 
+/**
+ * Per-app WebView zoom for installed web apps.
+ *
+ * - [AUTO]: phone-first default — wide viewport + overview, no forced initial scale.
+ * - [FIT_WIDTH]: overview mode so content fits the WebView width.
+ * - Fixed percentages force [android.webkit.WebView.setInitialScale] and still allow pinch zoom.
+ */
+@Serializable
+enum class WebAppZoomMode {
+    AUTO,
+    FIT_WIDTH,
+    PERCENT_75,
+    PERCENT_90,
+    PERCENT_100,
+    PERCENT_110,
+    PERCENT_125,
+    ;
+
+    /** `0` means no forced scale (WebView default / overview). */
+    val initialScalePercent: Int
+        get() = when (this) {
+            AUTO, FIT_WIDTH -> 0
+            PERCENT_75 -> 75
+            PERCENT_90 -> 90
+            PERCENT_100 -> 100
+            PERCENT_110 -> 110
+            PERCENT_125 -> 125
+        }
+
+    val usesOverviewMode: Boolean
+        get() = this == AUTO || this == FIT_WIDTH
+}
+
 const val MAX_FAVORITE_WEB_APPS = 4
 
 @Serializable
@@ -25,6 +58,7 @@ data class InstalledWebApp(
     /** FolderLabel id. Empty until the user assigns one of the folder icons. */
     val iconId: String = "",
     val favorite: Boolean = false,
+    val zoomMode: WebAppZoomMode = WebAppZoomMode.AUTO,
 )
 
 fun canFavoriteWebApp(apps: List<InstalledWebApp>, id: Uuid, favorite: Boolean): Boolean {

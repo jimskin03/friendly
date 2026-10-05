@@ -59,4 +59,24 @@ class InstalledWebAppTest {
         assertTrue(canFavoriteWebApp(apps, apps.first().id, favorite = true))
         assertTrue(canFavoriteWebApp(apps, apps.last().id, favorite = false))
     }
+
+    @Test
+    fun `zoomMode defaults to Auto`() {
+        assertEquals(WebAppZoomMode.AUTO, InstalledWebApp().zoomMode)
+        assertTrue(defaultInstalledWebApps().all { it.zoomMode == WebAppZoomMode.AUTO })
+    }
+
+    @Test
+    fun `zoom mode scale and overview mapping`() {
+        assertEquals(0, WebAppZoomMode.AUTO.initialScalePercent)
+        assertEquals(0, WebAppZoomMode.FIT_WIDTH.initialScalePercent)
+        assertTrue(WebAppZoomMode.AUTO.usesOverviewMode)
+        assertTrue(WebAppZoomMode.FIT_WIDTH.usesOverviewMode)
+        assertEquals(75, WebAppZoomMode.PERCENT_75.initialScalePercent)
+        assertEquals(90, WebAppZoomMode.PERCENT_90.initialScalePercent)
+        assertEquals(100, WebAppZoomMode.PERCENT_100.initialScalePercent)
+        assertEquals(110, WebAppZoomMode.PERCENT_110.initialScalePercent)
+        assertEquals(125, WebAppZoomMode.PERCENT_125.initialScalePercent)
+        assertFalse(WebAppZoomMode.PERCENT_100.usesOverviewMode)
+    }
 }

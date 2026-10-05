@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.pages.apps
 
 import android.webkit.WebSettings
+import android.webkit.WebView
+import me.rerere.rikkahub.data.model.WebAppZoomMode
 
 /**
  * WebView settings for installed web apps (Apps tab / Favorites).
@@ -12,16 +14,25 @@ import android.webkit.WebSettings
  * - The user agent always advertises a phone (`Mobile`) so UA-sniffing sites serve their
  *   mobile layout even on OEM / large-screen WebView builds that drop the token (issue #7).
  * - Pinch zoom stays available; the on-screen +/- buttons stay hidden.
+ * - [WebAppZoomMode] chooses overview (Auto / Fit to width) or a fixed [WebView.setInitialScale].
  *
  * Kept separate from the general [me.rerere.rikkahub.ui.pages.webview.WebViewPage] browser so
  * changes here only affect installed web apps.
  */
-internal fun WebSettings.applyInstalledWebAppSettings() {
+internal fun WebSettings.applyInstalledWebAppSettings(zoom: WebAppZoomMode = WebAppZoomMode.AUTO) {
     builtInZoomControls = true
     displayZoomControls = false
     useWideViewPort = true
-    loadWithOverviewMode = true
+    loadWithOverviewMode = zoom.usesOverviewMode
     mobileUserAgent(userAgentString)?.let { userAgentString = it }
+}
+
+/**
+ * Applies the forced initial scale for fixed zoom levels. Call on the [WebView] (not
+ * [WebSettings]) before the first load. `0` leaves the WebView default for Auto / Fit.
+ */
+internal fun WebView.applyInstalledWebAppZoom(zoom: WebAppZoomMode = WebAppZoomMode.AUTO) {
+    setInitialScale(zoom.initialScalePercent)
 }
 
 /**

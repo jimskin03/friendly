@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.apps
 
+import android.webkit.WebView as AndroidWebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.rikkahub.data.model.InstalledWebApp
 import me.rerere.rikkahub.data.model.WebAppLaunchMode
+import me.rerere.rikkahub.data.model.WebAppZoomMode
 import me.rerere.rikkahub.ui.components.webview.WebViewState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,8 +45,8 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.components.webview.WebContent
 import me.rerere.rikkahub.ui.components.webview.WebView
-import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import org.koin.androidx.compose.koinViewModel
 import kotlin.uuid.Uuid
@@ -62,10 +65,18 @@ fun WebAppPage(
     var showMenu by remember { mutableStateOf(false) }
     var showRemoveConfirm by remember { mutableStateOf(false) }
 
-    val state = rememberWebViewState(
-        url = app?.startUrl?.takeIf { it.isNotBlank() } ?: "about:blank",
-        settings = { applyInstalledWebAppSettings() },
-    )
+    val startUrl = app?.startUrl?.takeIf { it.isNotBlank() } ?: "about:blank"
+    val zoomMode = app?.zoomMode ?: WebAppZoomMode.AUTO
+    // Key on zoom so changing Zoom in App options recreates WebSettings / initial scale.
+    val state = remember(startUrl, zoomMode) {
+        WebViewState(
+            initialContent = WebContent.Url(startUrl),
+            settings = { applyInstalledWebAppSettings(zoomMode) },
+        )
+    }
+    val onWebViewCreated: (AndroidWebView) -> Unit = remember(zoomMode) {
+        { webView -> webView.applyInstalledWebAppZoom(zoomMode) }
+    }
 
     BackHandler(enabled = app != null && state.canGoBack) {
         state.goBack()
@@ -96,16 +107,26 @@ fun WebAppPage(
             }
         }
     } else {
-        when (app.launchMode) {
-            WebAppLaunchMode.COMPACT -> CompactWebApp(
-                app = app,
-                state = state,
-                showMenu = showMenu,
-                onShowMenu = { showMenu = it },
-                onRemove = { showRemoveConfirm = true },
-            )
-            WebAppLaunchMode.FULLSIZE -> FullsizeWebApp(state = state)
-            WebAppLaunchMode.FULLSCREEN -> FullscreenWebApp(state = state)
+        // Recreate the WebView when zoom changes so setInitialScale / overview apply.
+        key(app.zoomMode) {
+            when (app.launchMode) {
+                WebAppLaunchMode.COMPACT -> CompactWebApp(
+                    app = app,
+                    state = state,
+                    onWebViewCreated = onWebViewCreated,
+                    showMenu = showMenu,
+                    onShowMenu = { showMenu = it },
+                    onRemove = { showRemoveConfirm = true },
+                )
+                WebAppLaunchMode.FULLSIZE -> FullsizeWebApp(
+                    state = state,
+                    onWebViewCreated = onWebViewCreated,
+                )
+                WebAppLaunchMode.FULLSCREEN -> FullscreenWebApp(
+                    state = state,
+                    onWebViewCreated = onWebViewCreated,
+                )
+            }
         }
         RikkaConfirmDialog(
             show = showRemoveConfirm,
@@ -131,6 +152,7 @@ fun WebAppPage(
 private fun CompactWebApp(
     app: InstalledWebApp,
     state: WebViewState,
+    onWebViewCreated: (AndroidWebView) -> Unit,
     showMenu: Boolean,
     onShowMenu: (Boolean) -> Unit,
     onRemove: () -> Unit,
@@ -176,12 +198,16 @@ private fun CompactWebApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+            onCreated = onWebViewCreated,
         )
     }
 }
 
 @Composable
-private fun FullsizeWebApp(state: WebViewState) {
+private fun FullsizeWebApp(
+    state: WebViewState,
+    onWebViewCreated: (AndroidWebView) -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         BackButton(modifier = Modifier.padding(8.dp))
         WebView(
@@ -189,17 +215,22 @@ private fun FullsizeWebApp(state: WebViewState) {
             modifier = Modifier
                 .weight(1f)
                 .fillMaxSize(),
+            onCreated = onWebViewCreated,
         )
     }
 }
 
 @Composable
-private fun FullscreenWebApp(state: WebViewState) {
+private fun FullscreenWebApp(
+    state: WebViewState,
+    onWebViewCreated: (AndroidWebView) -> Unit,
+) {
     val navController = LocalNavController.current
     Box(modifier = Modifier.fillMaxSize()) {
         WebView(
             state = state,
             modifier = Modifier.fillMaxSize(),
+            onCreated = onWebViewCreated,
         )
         IconButton(
             onClick = { navController.popBackStack() },

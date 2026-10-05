@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.InstalledWebApp
 import me.rerere.rikkahub.data.model.WebAppLaunchMode
+import me.rerere.rikkahub.data.model.WebAppZoomMode
 import me.rerere.rikkahub.data.model.canFavoriteWebApp
 import me.rerere.rikkahub.data.model.installedWebAppNameFromUrl
 import me.rerere.rikkahub.data.model.normalizeHttpsStartUrl
@@ -40,6 +41,10 @@ class AppsVM(
 
     fun updateLaunchMode(id: Uuid, mode: WebAppLaunchMode) {
         updateApp(id) { it.copy(launchMode = mode) }
+    }
+
+    fun updateZoomMode(id: Uuid, mode: WebAppZoomMode) {
+        updateApp(id) { it.copy(zoomMode = mode) }
     }
 
     fun updateIcon(id: Uuid, iconId: String) {

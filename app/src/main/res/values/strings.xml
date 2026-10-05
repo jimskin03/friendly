@@ -1430,6 +1430,14 @@
   <string name="apps_launch_compact">Compact</string>
   <string name="apps_launch_fullsize">Fullsize</string>
   <string name="apps_launch_fullscreen">Fullscreen</string>
+  <string name="apps_zoom">Zoom</string>
+  <string name="apps_zoom_auto">Auto</string>
+  <string name="apps_zoom_fit_width">Fit to width</string>
+  <string name="apps_zoom_75">75%</string>
+  <string name="apps_zoom_90">90%</string>
+  <string name="apps_zoom_100">100%</string>
+  <string name="apps_zoom_110">110%</string>
+  <string name="apps_zoom_125">125%</string>
   <string name="apps_assign_logo">Assign logo</string>
   <string name="apps_favorite">Favorite</string>
   <string name="apps_favorite_limit">You can favorite up to 4 apps.</string>
