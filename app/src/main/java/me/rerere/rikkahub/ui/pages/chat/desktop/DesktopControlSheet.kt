@@ -66,9 +66,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -138,6 +140,12 @@ private fun trackpadDelta(physicalDelta: Float, density: Float): Float {
     return css * scale
 }
 
+/**
+ * Two-finger scroll: finger travel (in dp) per remote wheel notch. noVNC's own
+ * touch gesture uses 50 CSS px; a smaller step keeps short swipes useful.
+ */
+private const val SCROLL_TICK_DP = 22f
+
 private fun WebView?.trackpad(call: String) {
     this?.evaluateJavascript(
         "window.FriendlyTrackpad&&FriendlyTrackpad.$call;",
@@ -151,7 +159,8 @@ private suspend fun PointerInputScope.trackpadGestures(
     onClick: (button: Int) -> Unit,
     onDragStart: () -> Unit,
     onDragEnd: () -> Unit,
-    onScroll: (Float, Float) -> Unit,
+    /** Whole wheel notches in finger direction (+y = fingers moved down). */
+    onScroll: (ticksX: Int, ticksY: Int) -> Unit,
     onZoom: (factor: Float, focusX: Float, focusY: Float) -> Unit,
     onInteraction: () -> Unit,
 ) {
@@ -171,6 +180,11 @@ private suspend fun PointerInputScope.trackpadGestures(
         var baselineSpan = -1f
         var baseMidX = 0f
         var baseMidY = 0f
+        var baseIdA: PointerId? = null
+        var baseIdB: PointerId? = null
+        var basePosA = Offset.Zero
+        var basePosB = Offset.Zero
+        var scrollVertical = true
         var dragging = false
         var longFired = false
         var scrollX = 0f
@@ -212,17 +226,43 @@ private suspend fun PointerInputScope.trackpadGestures(
                 ).coerceAtLeast(1f)
                 val midX = (a.position.x + b.position.x) / 2f
                 val midY = (a.position.y + b.position.y) / 2f
-                if (baselineSpan < 0f) {
+                if (baselineSpan < 0f || a.id != baseIdA || b.id != baseIdB) {
                     baselineSpan = span
                     baseMidX = midX
                     baseMidY = midY
+                    baseIdA = a.id
+                    baseIdB = b.id
+                    basePosA = a.position
+                    basePosB = b.position
                 } else if (!pinch && !scrollGesture) {
                     val grew = abs(span - baselineSpan)
-                    val slid = hypot(midX - baseMidX, midY - baseMidY)
+                    val slidX = midX - baseMidX
+                    val slidY = midY - baseMidY
+                    val slid = hypot(slidX, slidY)
+                    // Parallel = both fingers travelled the same way since they
+                    // landed (positive dot product). Opposite/apart stays pinch.
+                    val moveA = a.position - basePosA
+                    val moveB = b.position - basePosB
+                    val parallel = moveA.x * moveB.x + moveA.y * moveB.y > 0f
                     if (grew > slop * 2f && grew > slid) {
                         pinch = true
-                    } else if (slid > slop) {
+                        didTwoFinger = true
+                    } else if (slid > slop && parallel) {
                         scrollGesture = true
+                        didTwoFinger = true
+                        // Lock to the dominant axis; vertical wins ties.
+                        scrollVertical = abs(slidY) >= abs(slidX)
+                        // Count the travel used to recognise the gesture so the
+                        // first notch arrives quickly.
+                        scrollX = if (scrollVertical) 0f else slidX
+                        scrollY = if (scrollVertical) slidY else 0f
+                        emitScrollTicks(scrollX, scrollY, density)?.let { (tx, ty, restX, restY) ->
+                            scrollX = restX
+                            scrollY = restY
+                            onScroll(tx, ty)
+                        }
+                        pressed.forEach { it.consume() }
+                        continue
                     }
                 }
                 if (pinch) {
@@ -234,19 +274,21 @@ private suspend fun PointerInputScope.trackpadGestures(
                 } else if (scrollGesture) {
                     var dx = 0f
                     var dy = 0f
+                    var count = 0
                     pressed.forEach { change ->
-                        dx += change.position.x - change.previousPosition.x
-                        dy += change.position.y - change.previousPosition.y
+                        if (change.previousPressed) {
+                            dx += change.position.x - change.previousPosition.x
+                            dy += change.position.y - change.previousPosition.y
+                            count++
+                        }
                     }
-                    val count = pressed.size.coerceAtLeast(1)
-                    scrollX += dx / count
-                    scrollY += dy / count
-                    val step = 28f * density
-                    if (abs(scrollX) >= step || abs(scrollY) >= step) {
-                        didTwoFinger = true
-                        onScroll(scrollX, scrollY)
-                        scrollX = 0f
-                        scrollY = 0f
+                    if (count > 0) {
+                        if (scrollVertical) scrollY += dy / count else scrollX += dx / count
+                        emitScrollTicks(scrollX, scrollY, density)?.let { (tx, ty, restX, restY) ->
+                            scrollX = restX
+                            scrollY = restY
+                            onScroll(tx, ty)
+                        }
                     }
                 }
                 pressed.forEach { it.consume() }
@@ -286,6 +328,17 @@ private suspend fun PointerInputScope.trackpadGestures(
             !moved -> onClick(0)
         }
     }
+}
+
+private data class ScrollTicks(val x: Int, val y: Int, val restX: Float, val restY: Float)
+
+/** Whole notches from accumulated finger travel (physical px); keeps the remainder. */
+private fun emitScrollTicks(accX: Float, accY: Float, density: Float): ScrollTicks? {
+    val tick = SCROLL_TICK_DP * density.coerceAtLeast(1f)
+    val tx = (accX / tick).toInt()
+    val ty = (accY / tick).toInt()
+    if (tx == 0 && ty == 0) return null
+    return ScrollTicks(tx, ty, accX - tx * tick, accY - ty * tick)
 }
 
 private suspend fun DesktopControlClient.applyRemoteEdit(previous: String, next: String) {
@@ -780,12 +833,11 @@ fun DesktopControlSheet(
                                 onClick = ::clickMouse,
                                 onDragStart = { webViewInstance.trackpad("down(0)") },
                                 onDragEnd = { webViewInstance.trackpad("up(0)") },
-                                onScroll = { dx, dy ->
-                                    // Natural scroll: the page follows the fingers.
-                                    // Pass CSS pixels; the page turns each 50px into one wheel notch.
-                                    webViewInstance.trackpad(
-                                        "wheel(${(-dx / density).jsNum()},${(-dy / density).jsNum()})",
-                                    )
+                                onScroll = { tx, ty ->
+                                    // Natural scroll (same as noVNC's own touch
+                                    // gesture): fingers down -> wheel up, so the
+                                    // content follows the fingers.
+                                    webViewInstance.trackpad("wheelTicks(${-tx},${-ty})")
                                 },
                                 onZoom = { factor, x, y ->
                                     webViewInstance.trackpad(
@@ -1402,7 +1454,8 @@ private const val TRACKPAD_INSTALL_JS = """
   // Coord model grok-1: one logical desktop point drives both the drawn
   // cursor and RFB pointer events. CSS zoom/pan is view-only; never feed
   // CSS-transformed getBoundingClientRect coords back into noVNC absX.
-  if (window.FriendlyTrackpad && window.FriendlyTrackpad._coordModel === 'grok-1') return;
+  var prev = window.FriendlyTrackpad;
+  if (prev && prev._coordModel === 'grok-1' && prev._scrollRev === 2) return;
   function canvas() {
     var list = document.querySelectorAll('canvas');
     var best = null;
@@ -1435,6 +1488,7 @@ private const val TRACKPAD_INSTALL_JS = """
   }
   window.FriendlyTrackpad = {
     _coordModel: 'grok-1',
+    _scrollRev: 2,
     x: null,
     y: null,
     zoom: 1,
@@ -1663,54 +1717,97 @@ private const val TRACKPAD_INSTALL_JS = """
       this.down(button || 0);
       setTimeout(function() { self.up(button || 0); }, 40);
     },
-    wheel: function(dx, dy) {
+    // Raw RFB PointerEvent at a logical (pre-CSS-transform) canvas point,
+    // the same space sendPointer/clicks use; noVNC's absX/absY apply its
+    // own scale. _sendMouse exists in noVNC >= 1.2; older builds get the
+    // message written directly. Avoid _handleMouseButton: its signature
+    // changed (x,y,down,bmask) -> (x,y,bmask) between noVNC versions.
+    rawPointer: function(rfb, x, y, mask) {
+      if (!rfb || rfb.viewOnly) return false;
+      try {
+        if (typeof rfb._sendMouse === 'function') {
+          rfb._sendMouse(x, y, mask);
+          return true;
+        }
+        var msgs = rfb.constructor && rfb.constructor.messages;
+        var disp = rfb._display;
+        if (msgs && typeof msgs.pointerEvent === 'function' && rfb._sock &&
+            disp && typeof disp.absX === 'function') {
+          msgs.pointerEvent(rfb._sock, disp.absX(x), disp.absY(y), mask);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    },
+    // Whole wheel notches at the current logical cursor (scroll-at-pointer,
+    // like a desktop trackpad). ty < 0 = up, ty > 0 = down, tx < 0 = left,
+    // tx > 0 = right. RFB wheel buttons: 4=1<<3 up, 5=1<<4 down,
+    // 6=1<<5 left, 7=1<<6 right; each notch is press+release.
+    wheelTicks: function(tx, ty) {
+      tx = Math.max(-12, Math.min(12, Math.round(tx || 0)));
+      ty = Math.max(-12, Math.min(12, Math.round(ty || 0)));
+      if (!tx && !ty) return true;
       var placed = this.place();
       if (!placed) return false;
       var rfb = this.rfb();
-      var steps = Math.round(Math.max(Math.abs(dx), Math.abs(dy)) / 50);
-      if (steps < 1) steps = 1;
-      if (steps > 8) steps = 8;
       var base = this.vncMask();
-      var sx = dx === 0 ? 0 : (dx < 0 ? -1 : 1);
-      var sy = dy === 0 ? 0 : (dy < 0 ? -1 : 1);
-      for (var i = 0; i < steps; i++) {
-        if (rfb && typeof rfb._handleMouseButton === 'function') {
-          if (sy < 0) {
-            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 3));
-            rfb._handleMouseButton(placed.x, placed.y, base);
-          } else if (sy > 0) {
-            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 4));
-            rfb._handleMouseButton(placed.x, placed.y, base);
-          }
-          if (sx < 0) {
-            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 5));
-            rfb._handleMouseButton(placed.x, placed.y, base);
-          } else if (sx > 0) {
-            rfb._handleMouseButton(placed.x, placed.y, base | (1 << 6));
-            rfb._handleMouseButton(placed.x, placed.y, base);
-          }
-        } else {
-          var visual = placed.canvas.getBoundingClientRect();
-          var clientX = visual.left + placed.x;
-          var clientY = visual.top + placed.y;
-          placed.canvas.dispatchEvent(new WheelEvent('wheel', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            clientX: clientX,
-            clientY: clientY,
-            deltaX: sx * 50,
-            deltaY: sy * 50,
-            deltaMode: 0
-          }));
+      var x = placed.x;
+      var y = placed.y;
+      var self = this;
+      var sent = false;
+      if (rfb) {
+        if (typeof rfb._flushMouseMoveTimer === 'function') {
+          try { rfb._flushMouseMoveTimer(x, y); } catch (e) {}
         }
+        rfb._mousePos = { x: x, y: y };
+      }
+      function notch(bit, n) {
+        for (var i = 0; i < n; i++) {
+          if (!self.rawPointer(rfb, x, y, base | bit)) return;
+          self.rawPointer(rfb, x, y, base);
+          sent = true;
+        }
+      }
+      if (ty < 0) notch(1 << 3, -ty); else if (ty > 0) notch(1 << 4, ty);
+      if (tx < 0) notch(1 << 5, -tx); else if (tx > 0) notch(1 << 6, tx);
+      if (!sent) {
+        // No RFB hook: let noVNC's own wheel handler (50px per notch) do it.
+        // clientX/Y chosen so clientToElement yields the logical point.
+        var visual = placed.canvas.getBoundingClientRect();
+        placed.canvas.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: visual.left + x,
+          clientY: visual.top + y,
+          deltaX: tx * 50,
+          deltaY: ty * 50,
+          deltaMode: 0
+        }));
       }
       if (rfb && rfb._cursor && typeof rfb._cursor.move === 'function') {
         rfb._cursor.move(placed.clientX, placed.clientY);
       }
       return true;
+    },
+    // Legacy pixel API (CSS px, DOM wheel sign): 50px per notch, remainder kept.
+    wheel: function(dx, dy) {
+      this._wheelAccX = (this._wheelAccX || 0) + (dx || 0);
+      this._wheelAccY = (this._wheelAccY || 0) + (dy || 0);
+      var tx = this._wheelAccX < 0 ? Math.ceil(this._wheelAccX / 50) : Math.floor(this._wheelAccX / 50);
+      var ty = this._wheelAccY < 0 ? Math.ceil(this._wheelAccY / 50) : Math.floor(this._wheelAccY / 50);
+      this._wheelAccX -= tx * 50;
+      this._wheelAccY -= ty * 50;
+      return this.wheelTicks(tx, ty);
     }
   };
+  if (prev) {
+    // Re-install over an older script: keep the cursor and view state.
+    var keep = ['x', 'y', 'zoom', 'panX', 'panY'];
+    for (var k = 0; k < keep.length; k++) {
+      if (prev[keep[k]] != null) window.FriendlyTrackpad[keep[k]] = prev[keep[k]];
+    }
+  }
   function fitDesktop() {
     var ui = window.__novncUI;
     var rfb = ui && ui.rfb;
