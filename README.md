@@ -302,6 +302,7 @@ Friendly is licensed under the [GNU Affero General Public License v3.0](LICENSE)
 
 ## Links
 
+- X Profiles: [[github.com/jimskin03/friendly](https://x.com/cryptgreg)](https://[github.com/jimskin03/friendly](https://x.com/cryptgreg))
 - Repository: [github.com/jimskin03/friendly](https://github.com/jimskin03/friendly)
 - Branch: [`friendly-2.0`](https://github.com/jimskin03/friendly/tree/friendly-2.0)
 - Host setup: [`host/SETUP_UBUNTU.md`](host/SETUP_UBUNTU.md)
