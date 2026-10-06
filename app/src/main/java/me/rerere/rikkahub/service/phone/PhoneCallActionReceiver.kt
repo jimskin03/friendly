@@ -3,6 +3,9 @@ package me.rerere.rikkahub.service.phone
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
 
 /**
@@ -18,6 +21,14 @@ class PhoneCallActionReceiver : BroadcastReceiver() {
             ACTION_OPEN_DIALER -> controller.openDialer()
             ACTION_ANSWER -> controller.attemptAnswerFromNotification()
             ACTION_END -> controller.attemptEndFromNotification()
+            ACTION_AGENT_CALL_END -> {
+                runCatching {
+                    val manager = GlobalContext.get().get<me.rerere.rikkahub.service.phone.agentcall.AgentCallManager>()
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        manager.endCall()
+                    }
+                }
+            }
         }
     }
 
@@ -25,5 +36,6 @@ class PhoneCallActionReceiver : BroadcastReceiver() {
         const val ACTION_OPEN_DIALER = "me.rerere.rikkahub.action.PHONE_CALL_OPEN_DIALER"
         const val ACTION_ANSWER = "me.rerere.rikkahub.action.PHONE_CALL_ANSWER"
         const val ACTION_END = "me.rerere.rikkahub.action.PHONE_CALL_END"
+        const val ACTION_AGENT_CALL_END = "me.rerere.rikkahub.action.AGENT_CALL_END"
     }
 }

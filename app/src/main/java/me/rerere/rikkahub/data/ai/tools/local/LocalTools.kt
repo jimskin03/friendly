@@ -12,7 +12,7 @@ class LocalTools(
     private val ttsManager: TTSManager,
     private val settingsStore: SettingsStore,
     private val phoneCallController: me.rerere.rikkahub.service.phone.PhoneCallController,
-    private val callAudioBridge: me.rerere.rikkahub.service.phone.CallAudioBridge,
+    private val agentCallManager: me.rerere.rikkahub.service.phone.agentcall.AgentCallManager,
 ) {
     val javascriptTool by lazy { buildJavascriptTool() }
 
@@ -40,10 +40,12 @@ class LocalTools(
     val phoneLaunchAppTool by lazy { buildPhoneLaunchAppTool(context) }
     val phoneBringAppToFrontTool by lazy { buildPhoneBringAppToFrontTool(context) }
     val phoneScreenshotTool by lazy { buildPhoneScreenshotTool(org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.files.FilesManager>()) }
-    val placeCallTool by lazy { buildPlaceCallTool(phoneCallController, settingsStore) }
-    val endCallTool by lazy { buildEndCallTool(phoneCallController, settingsStore) }
-    val muteCallTool by lazy { buildMuteCallTool(phoneCallController, settingsStore) }
-    val readCallStateTool by lazy { buildReadCallStateTool(phoneCallController, settingsStore, callAudioBridge) }
+    val agentCallTool by lazy { buildAgentCallTool(agentCallManager) }
+    val agentCallStatusTool by lazy { buildAgentCallStatusTool(agentCallManager) }
+    val agentCallEndTool by lazy { buildAgentCallEndTool(agentCallManager) }
+    val placeCallTool by lazy { buildPlaceCallTool(phoneCallController) }
+    val endCallTool by lazy { buildEndCallTool(phoneCallController) }
+    val readCallStateTool by lazy { buildReadCallStateTool(phoneCallController, settingsStore, agentCallManager) }
     val phoneAssertVisibleTool by lazy { buildPhoneAssertVisibleTool() }
     val phoneScrollUntilVisibleTool by lazy { buildPhoneScrollUntilVisibleTool(context) }
     val phoneRunFlowTool by lazy { buildPhoneRunFlowTool(context) }
@@ -109,9 +111,11 @@ class LocalTools(
             tools.add(phoneLaunchAppTool.withPhoneAutomationTracking())
             tools.add(phoneBringAppToFrontTool.withPhoneAutomationTracking())
             tools.add(phoneScreenshotTool.withPhoneAutomationTracking())
+            tools.add(agentCallTool.withPhoneAutomationTracking())
+            tools.add(agentCallStatusTool.withPhoneAutomationTracking())
+            tools.add(agentCallEndTool.withPhoneAutomationTracking())
             tools.add(placeCallTool.withPhoneAutomationTracking())
             tools.add(endCallTool.withPhoneAutomationTracking())
-            tools.add(muteCallTool.withPhoneAutomationTracking())
             tools.add(readCallStateTool.withPhoneAutomationTracking())
             tools.add(phoneAssertVisibleTool.withPhoneAutomationTracking())
             tools.add(phoneScrollUntilVisibleTool.withPhoneAutomationTracking())

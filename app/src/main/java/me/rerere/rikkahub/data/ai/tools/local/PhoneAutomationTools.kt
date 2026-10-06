@@ -22,6 +22,7 @@ import me.rerere.rikkahub.service.phone.PhoneAutomationLoopGuard
 import me.rerere.rikkahub.service.phone.PhoneSearchHints
 import me.rerere.rikkahub.service.phone.PhoneAutomationService
 import me.rerere.rikkahub.service.phone.PhoneAutomationStep
+import me.rerere.rikkahub.data.datastore.isAgentCallActive
 import me.rerere.rikkahub.service.phone.PhoneCallController
 import me.rerere.rikkahub.service.phone.PhoneElementMatcher
 import me.rerere.rikkahub.service.phone.ScreenNodeInfo
@@ -917,14 +918,11 @@ internal fun buildPhoneManageFlowsTool(context: Context): Tool = Tool(
 
 internal fun buildPlaceCallTool(
     phoneCallController: PhoneCallController,
-    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
 ): Tool = Tool(
     name = "place_call",
     description = """
-        Place a cellular phone call using the system Phone app (outbound only; no auto-answer).
-        Requires Settings → Agent may speak on calls to be ON; refuses clearly when off.
-        Pass number (digits with optional +) or contact_query (name lookup is best-effort / may ask for a number).
-        Does not call WhatsApp. When the call becomes Active, CallAudioBridge starts Bluetooth SCO so ASR/TTS can speak on the call.
+        Place a cellular phone call using the system Phone app on the user's SIM (outbound only; the user speaks on this call).
+        Pass number (digits with optional leading +). Use agent_call instead if you want an autonomous AI voice agent to speak on the call.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -935,15 +933,13 @@ internal fun buildPlaceCallTool(
                 })
                 put("contact_query", buildJsonObject {
                     put("type", "string")
-                    put("description", "Optional contact name. This slice does not resolve contacts yet — prefer number.")
+                    put("description", "Optional contact name query. Prefer providing a direct phone number.")
                 })
             },
             required = emptyList()
         )
     },
     execute = { args ->
-        val refuse = refuseIfSpeakOnCallsOff(settingsStore, "place_call")
-        if (refuse != null) return@Tool listOf(UIMessagePart.Text(refuse))
         val number = args.jsonObject["number"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
         val contact = args.jsonObject["contact_query"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
         when {
@@ -958,7 +954,7 @@ internal fun buildPlaceCallTool(
                             me.rerere.rikkahub.service.phone.PhoneCallActionResult(
                                 success = false,
                                 action = "place_call",
-                                detail = "contact_query lookup is not implemented in this SCO foundation slice. Pass a phone number in \"number\". Queried: $contact",
+                                detail = "Contact query lookup is not implemented. Please pass a direct phone number in 'number'. Queried: $contact",
                             )
                         )
                     )
@@ -971,61 +967,163 @@ internal fun buildPlaceCallTool(
 
 internal fun buildEndCallTool(
     phoneCallController: PhoneCallController,
-    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
 ): Tool = Tool(
     name = "end_call",
     description = """
-        Hang up the current cellular call. Requires Agent may speak on calls ON.
-        Silent hang-up usually fails unless this app is the default dialer; falls back to accessibility End tap / dialer.
+        Hang up the current cellular call placed on the device.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {}, required = emptyList())
     },
     execute = {
-        val refuse = refuseIfSpeakOnCallsOff(settingsStore, "end_call")
-        if (refuse != null) return@Tool listOf(UIMessagePart.Text(refuse))
         val result = phoneCallController.endCall()
         listOf(UIMessagePart.Text(callActionJson(result)))
     }
 )
 
-internal fun buildMuteCallTool(
-    phoneCallController: PhoneCallController,
-    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+internal fun buildAgentCallTool(
+    agentCallManager: me.rerere.rikkahub.service.phone.agentcall.AgentCallManager,
 ): Tool = Tool(
-    name = "mute_call",
+    name = "agent_call",
     description = """
-        Mute or unmute the call microphone (best-effort AudioManager mute). Requires Agent may speak on calls ON.
+        Place an autonomous AI phone call to a recipient phone number (e.g. for booking appointments, checking store hours, or inquiring about products).
+        An AI voice agent will conduct the conversation over cloud telephony on your behalf and report back with a transcript and summary.
+        Requires AI Phone Calls enabled with a provider (e.g. Vapi) in Settings.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
-                put("muted", buildJsonObject {
+                put("number", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Phone number to call in E.164 format (e.g. +1234567890)")
+                })
+                put("goal", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Clear goal/instructions for what the AI agent should accomplish on the call")
+                })
+                put("context", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional relevant facts, constraints, or user details to provide to the caller")
+                })
+                put("first_message", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional custom greeting for the AI to speak when the call is answered")
+                })
+                put("wait", buildJsonObject {
                     put("type", "boolean")
-                    put("description", "true to mute uplink mic, false to unmute")
+                    put("description", "true (default) to wait for call completion and return transcript & summary; false to return immediately after dialing")
                 })
             },
-            required = listOf("muted")
+            required = listOf("number", "goal")
         )
     },
     execute = { args ->
-        val refuse = refuseIfSpeakOnCallsOff(settingsStore, "mute_call")
-        if (refuse != null) return@Tool listOf(UIMessagePart.Text(refuse))
-        val muted = args.jsonObject["muted"]?.jsonPrimitive?.booleanOrNull
-            ?: error("muted is required")
-        val result = phoneCallController.setMuted(muted)
-        listOf(UIMessagePart.Text(callActionJson(result)))
+        val number = args.jsonObject["number"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val goal = args.jsonObject["goal"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val context = args.jsonObject["context"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val firstMessage = args.jsonObject["first_message"]?.jsonPrimitive?.contentOrNull?.trim()
+        val wait = args.jsonObject["wait"]?.jsonPrimitive?.booleanOrNull ?: true
+
+        if (number.isBlank() || goal.isBlank()) {
+            val err = buildJsonObject {
+                put("success", false)
+                put("error", "'number' and 'goal' parameters are required for agent_call")
+            }
+            return@Tool listOf(UIMessagePart.Text(err.toString()))
+        }
+
+        val request = me.rerere.rikkahub.service.phone.agentcall.AgentCallRequest(
+            toNumber = number,
+            goal = goal,
+            context = context,
+            firstMessage = firstMessage,
+        )
+
+        val status = agentCallManager.executeCall(request, wait = wait)
+        val payload = buildJsonObject {
+            put("success", status.phase != me.rerere.rikkahub.service.phone.agentcall.AgentCallPhase.Failed)
+            put("call_id", status.callId)
+            put("phase", status.phase.name.lowercase())
+            put("number", status.toNumber)
+            if (status.durationSeconds > 0) put("duration_seconds", status.durationSeconds)
+            if (!status.endedReason.isNullOrBlank()) put("ended_reason", status.endedReason)
+            if (!status.summary.isNullOrBlank()) put("summary", status.summary)
+            if (!status.transcript.isNullOrBlank()) put("transcript", status.transcript)
+            if (status.cost != null) put("cost", status.cost)
+            if (!status.error.isNullOrBlank()) put("error", status.error)
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+internal fun buildAgentCallStatusTool(
+    agentCallManager: me.rerere.rikkahub.service.phone.agentcall.AgentCallManager,
+): Tool = Tool(
+    name = "agent_call_status",
+    description = "Check the live status, transcript, or summary of an active or recent autonomous AI phone call.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("call_id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional call ID returned by agent_call; omit to check the current/latest call")
+                })
+            },
+            required = emptyList()
+        )
+    },
+    execute = { args ->
+        val callId = args.jsonObject["call_id"]?.jsonPrimitive?.contentOrNull?.trim()
+        val status = agentCallManager.getCallStatus(callId)
+        val payload = buildJsonObject {
+            put("success", status.phase != me.rerere.rikkahub.service.phone.agentcall.AgentCallPhase.Failed)
+            put("call_id", status.callId)
+            put("phase", status.phase.name.lowercase())
+            if (status.durationSeconds > 0) put("duration_seconds", status.durationSeconds)
+            if (!status.endedReason.isNullOrBlank()) put("ended_reason", status.endedReason)
+            if (!status.summary.isNullOrBlank()) put("summary", status.summary)
+            if (!status.transcript.isNullOrBlank()) put("transcript", status.transcript)
+            if (!status.error.isNullOrBlank()) put("error", status.error)
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+internal fun buildAgentCallEndTool(
+    agentCallManager: me.rerere.rikkahub.service.phone.agentcall.AgentCallManager,
+): Tool = Tool(
+    name = "agent_call_end",
+    description = "Terminate an ongoing autonomous AI phone call.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("call_id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional call ID to terminate; omit to end the currently active call")
+                })
+            },
+            required = emptyList()
+        )
+    },
+    execute = { args ->
+        val callId = args.jsonObject["call_id"]?.jsonPrimitive?.contentOrNull?.trim()
+        val result = agentCallManager.endCall(callId)
+        val payload = buildJsonObject {
+            put("success", result.isSuccess)
+            if (result.isFailure) put("error", result.exceptionOrNull()?.message)
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
     }
 )
 
 internal fun buildReadCallStateTool(
     phoneCallController: PhoneCallController,
     settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
-    callAudioBridge: me.rerere.rikkahub.service.phone.CallAudioBridge,
+    agentCallManager: me.rerere.rikkahub.service.phone.agentcall.AgentCallManager,
 ): Tool = Tool(
     name = "read_call_state",
     description = """
-        Read cellular call session (idle/dialing/ringing/active/ended), telephony status, mute, speak-on-calls toggle, and CallAudioBridge SCO state.
+        Read cellular call session (idle/dialing/ringing/active/ended), telephony status, and autonomous AI call state.
         Does not report WhatsApp or other VoIP calls.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -1033,12 +1131,11 @@ internal fun buildReadCallStateTool(
     },
     execute = {
         val snap = phoneCallController.currentSnapshot()
-        val bridge = callAudioBridge.currentSnapshot()
-        val speakOn = settingsStore.settingsFlow.value.displaySetting.enableAgentSpeakOnCalls
+        val activeAgentCall = agentCallManager.activeCall.value
+        val displaySetting = settingsStore.settingsFlow.value.displaySetting
         val payload = buildJsonObject {
             put("access_enabled", snap.accessEnabled)
-            put("agent_speak_on_calls", speakOn)
-            put("auto_answer_attempt", snap.autoAnswerAttempt)
+            put("ai_phone_calls_enabled", displaySetting.isAgentCallActive)
             put("session", snap.session.name.lowercase())
             put("status", snap.status.name.lowercase())
             if (!snap.number.isNullOrBlank()) put("number", snap.number)
@@ -1046,41 +1143,20 @@ internal fun buildReadCallStateTool(
             put("muted", snap.muted)
             put("call_phone_granted", snap.callPhoneGranted)
             put("read_phone_state_granted", snap.readPhoneStateGranted)
-            put("answer_phone_calls_granted", snap.answerPhoneCallsGranted)
             put("accessibility_active", snap.accessibilityActive)
-            put("silent_answer_reliable", snap.silentAnswerReliable)
-            put("silent_hangup_reliable", snap.silentHangupReliable)
-            put("bridge_status", bridge.status.name.lowercase())
-            put("bridge_sco_on", bridge.scoOn)
-            put("bridge_detail", bridge.detail)
-            put("bluetooth_connect_granted", callAudioBridge.bluetoothConnectGranted())
-            put("bluetooth_adapter_enabled", callAudioBridge.bluetoothAdapterEnabled())
-            put(
-                "voice_path",
-                "When agent_speak_on_calls is on and session=active, CallAudioBridge starts Bluetooth SCO; " +
-                    "existing ASR (VOICE_COMMUNICATION) and TTS (USAGE_VOICE_COMMUNICATION) ride that path. " +
-                    "No full audio is logged.",
-            )
+            if (activeAgentCall != null) {
+                put("active_agent_call", buildJsonObject {
+                    put("call_id", activeAgentCall.callId)
+                    put("phase", activeAgentCall.phase.name.lowercase())
+                    put("number", activeAgentCall.toNumber)
+                    put("duration_seconds", activeAgentCall.durationSeconds)
+                })
+            }
             put("limitation", snap.limitation)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
-
-private fun refuseIfSpeakOnCallsOff(
-    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
-    action: String,
-): String? {
-    if (settingsStore.settingsFlow.value.displaySetting.enableAgentSpeakOnCalls) return null
-    return callActionJson(
-        me.rerere.rikkahub.service.phone.PhoneCallActionResult(
-            success = false,
-            action = action,
-            detail = "Refused: enable Settings → Agent may speak on calls before using $action. " +
-                "This hard gate prevents accidental on-call voice / dialing by the agent.",
-        )
-    )
-}
 
 private const val SCREEN_TEXT_NODE_LIMIT = 100
 private const val SCREEN_TEXT_CHAR_LIMIT = 200

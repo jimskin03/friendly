@@ -55,7 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import me.rerere.rikkahub.service.phone.PhoneCallController
 import android.os.Build
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionAnswerPhoneCalls
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionBluetoothConnect
+
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCallPhone
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionReadPhoneState
@@ -78,9 +78,6 @@ fun PhoneAutomationSheet(
             add(PermissionCallPhone)
             add(PermissionReadPhoneState)
             add(PermissionAnswerPhoneCalls)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                add(PermissionBluetoothConnect)
-            }
         }
     )
     PermissionManager(callPermissions)

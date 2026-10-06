@@ -93,11 +93,5 @@ val PermissionAnswerPhoneCalls = PermissionInfo(
     required = false
 )
 
-@RequiresApi(Build.VERSION_CODES.S)
-val PermissionBluetoothConnect = PermissionInfo(
-    permission = Manifest.permission.BLUETOOTH_CONNECT,
-    displayName = { Text(stringResource(R.string.permission_bluetooth_connect)) },
-    usage = { Text(stringResource(R.string.permission_bluetooth_connect_desc)) },
-    required = false
-)
+
 

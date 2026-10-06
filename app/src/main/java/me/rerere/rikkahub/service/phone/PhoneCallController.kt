@@ -103,9 +103,9 @@ class PhoneCallController(
     @Volatile
     private var outboundSawLive: Boolean = false
 
-    /** Latches Ended briefly after a live call returns to idle so UI/tools can observe it. */
+    /** Records when the last call ended so Ended is observed briefly without latching forever. */
     @Volatile
-    private var sessionEndedLatch: Boolean = false
+    private var sessionEndedAt: Long = 0L
 
     @Volatile
     private var mutedDesired: Boolean = false
@@ -182,7 +182,7 @@ class PhoneCallController(
                     val mode = if (granted) "action_call" else "action_dial"
                     if (mode == "action_call") {
                         outboundSawLive = false
-                        sessionEndedLatch = false
+                        sessionEndedAt = 0L
                         publishSnapshot(
                             status = _snapshot.value.status,
                             number = _snapshot.value.number,
@@ -194,9 +194,8 @@ class PhoneCallController(
                         action = "place_call",
                         mode = mode,
                         detail = if (granted) {
-                            "Started a cellular call to ${parsed.number} with the system phone app. " +
-                                "When Agent may speak on calls is on, CallAudioBridge starts SCO on Active " +
-                                "so ASR/TTS can ride the call path. WhatsApp and other VoIP apps are not used."
+                            "Started a cellular call to ${parsed.number} with the system phone app on the user's SIM. " +
+                                "The user speaks directly on this call. WhatsApp and other VoIP apps are not used."
                         } else {
                             "CALL_PHONE is not granted, so the system dialer was opened with ${parsed.number} filled in. " +
                                 "The user must tap call. Grant phone permissions in Phone Automation to place calls directly."
@@ -429,14 +428,14 @@ class PhoneCallController(
         val outbound = when (status) {
             CellularCallStatus.Ringing, CellularCallStatus.Offhook -> {
                 outboundSawLive = true
-                sessionEndedLatch = false
+                sessionEndedAt = 0L
                 if (status == CellularCallStatus.Offhook) mutedDesired = false
                 _snapshot.value.outboundNumber
             }
             else -> if (outboundSawLive) {
                 outboundSawLive = false
-                sessionEndedLatch = previous == CellularCallStatus.Offhook ||
-                    previous == CellularCallStatus.Ringing
+                val wasLive = previous == CellularCallStatus.Offhook || previous == CellularCallStatus.Ringing
+                sessionEndedAt = if (wasLive) android.os.SystemClock.elapsedRealtime() else 0L
                 mutedDesired = false
                 null
             } else {
@@ -548,9 +547,8 @@ class PhoneCallController(
         outboundNumber: String? = _snapshot.value.outboundNumber,
     ) {
         val session = resolveSessionPhase(status, outboundNumber)
-        if (session != CallSessionPhase.Ended) {
-            // Keep Ended only while idle right after a live call; clear once we leave idle.
-            if (status != CellularCallStatus.Idle) sessionEndedLatch = false
+        if (status != CellularCallStatus.Idle) {
+            sessionEndedAt = 0L
         }
         _snapshot.value = CellularCallSnapshot(
             accessEnabled = true,
@@ -578,12 +576,19 @@ class PhoneCallController(
         CellularCallStatus.Offhook -> CallSessionPhase.Active
         CellularCallStatus.Idle -> when {
             !outboundNumber.isNullOrBlank() -> CallSessionPhase.Dialing
-            sessionEndedLatch -> CallSessionPhase.Ended
+            sessionEndedAt > 0L && (android.os.SystemClock.elapsedRealtime() - sessionEndedAt < 10_000L) -> CallSessionPhase.Ended
             else -> CallSessionPhase.Idle
         }
         CellularCallStatus.Unknown -> when {
             !outboundNumber.isNullOrBlank() -> CallSessionPhase.Dialing
             else -> CallSessionPhase.Idle
+        }
+    }
+
+    fun resetSessionEndedLatch() {
+        sessionEndedAt = 0L
+        if (_snapshot.value.session == CallSessionPhase.Ended) {
+            _snapshot.value = _snapshot.value.copy(session = CallSessionPhase.Idle)
         }
     }
 

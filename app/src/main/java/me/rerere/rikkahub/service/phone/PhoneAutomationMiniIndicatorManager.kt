@@ -159,7 +159,7 @@ class PhoneAutomationMiniIndicatorManager(
     appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val phoneCallController: PhoneCallController,
-    private val callAudioBridge: CallAudioBridge,
+    private val agentCallManager: me.rerere.rikkahub.service.phone.agentcall.AgentCallManager,
 ) {
     companion object {
         const val NOTIFICATION_ID = 2003
@@ -337,23 +337,21 @@ class PhoneAutomationMiniIndicatorManager(
                         workStatus = workStatus,
                         appForeground = foreground,
                         call = call,
-                        bridgeLive = false, // filled below from CallAudioBridge
+                        agentCall = null,
                     )
                 },
-                callAudioBridge.snapshot,
+                agentCallManager.activeCall,
                 PhoneAutomationService.activity,
                 voicePhase,
-            ) { input, bridge, activity, voice ->
-                val bridgeLive = bridge.status == CallAudioBridgeStatus.Starting ||
-                    bridge.status == CallAudioBridgeStatus.Bridging
-                val synced = input.copy(bridgeLive = bridgeLive)
+            ) { input, agentCall, activity, voice ->
+                val synced = input.copy(agentCall = agentCall)
                 IndicatorState(
                     enabled = synced.enabled,
                     sessionActive = synced.sessionActive,
                     workStatus = synced.workStatus,
                     appForeground = synced.appForeground,
                     canDrawOverlays = Settings.canDrawOverlays(app),
-                    live = isAutoShowLive(synced.call, synced.workStatus, activity),
+                    live = isAutoShowLive(synced.call, synced.workStatus, activity, agentCall),
                     statusLine = formatMiniLiveLine(
                         app,
                         resolveMiniLive(
@@ -362,7 +360,7 @@ class PhoneAutomationMiniIndicatorManager(
                             call = synced.call,
                             voice = voice,
                             sessionActive = synced.sessionActive,
-                            bridgeLive = synced.bridgeLive,
+                            agentCall = agentCall,
                         ),
                     ),
                 )
@@ -406,6 +404,7 @@ class PhoneAutomationMiniIndicatorManager(
                 phoneCallController.snapshot.value,
                 PhoneAutomationService.workStatus.value,
                 PhoneAutomationService.activity.value,
+                agentCallManager.activeCall.value,
             )
         ) {
             suppressAutoShow = true
@@ -644,14 +643,12 @@ class PhoneAutomationMiniIndicatorManager(
                         val work by PhoneAutomationService.workStatus.collectAsState()
                         val activity by PhoneAutomationService.activity.collectAsState()
                         val call by phoneCallController.snapshot.collectAsState()
-                        val bridge by callAudioBridge.snapshot.collectAsState()
+                        val agentCall by agentCallManager.activeCall.collectAsState()
                         val voice by voicePhase.collectAsState()
                         val session by sessionActive.collectAsState()
                         val showOpt by showOptions.collectAsState()
                         val screenH = app.resources.displayMetrics.heightPixels.toFloat()
                         val menuAbove = (control?.position?.y ?: 0f) > screenH * 0.65f
-                        val bridgeLive = bridge.status == CallAudioBridgeStatus.Starting ||
-                            bridge.status == CallAudioBridgeStatus.Bridging
                         MiniIndicatorBubble(
                             status = miniIndicatorStatus(
                                 work = work,
@@ -659,7 +656,7 @@ class PhoneAutomationMiniIndicatorManager(
                                 call = call,
                                 voice = voice,
                                 sessionActive = session,
-                                bridgeLive = bridgeLive,
+                                agentCall = agentCall,
                             ),
                             showOptions = showOpt,
                             menuAbove = menuAbove,
@@ -768,7 +765,7 @@ private data class MiniSyncInput(
     val workStatus: PhoneAutomationWorkStatus,
     val appForeground: Boolean,
     val call: CellularCallSnapshot,
-    val bridgeLive: Boolean,
+    val agentCall: me.rerere.rikkahub.service.phone.agentcall.AgentCallSnapshot?,
 )
 
 private enum class MiniLiveKind {
@@ -799,7 +796,14 @@ private fun isAutoShowLive(
     call: CellularCallSnapshot,
     work: PhoneAutomationWorkStatus,
     activity: PhoneAutomationActivity,
+    agentCall: me.rerere.rikkahub.service.phone.agentcall.AgentCallSnapshot? = null,
 ): Boolean {
+    if (agentCall != null &&
+        agentCall.phase != me.rerere.rikkahub.service.phone.agentcall.AgentCallPhase.Ended &&
+        agentCall.phase != me.rerere.rikkahub.service.phone.agentcall.AgentCallPhase.Failed
+    ) {
+        return true
+    }
     if (call.status == CellularCallStatus.Ringing || call.status == CellularCallStatus.Offhook) return true
     if (!call.outboundNumber.isNullOrBlank()) return true
     if (activity.toolRunning || activity.holdingForGeneration) return true
@@ -833,7 +837,7 @@ private fun stepStatusRes(step: PhoneAutomationStep): Int = when (step) {
 }
 
 /**
- * First match wins. Cellular lines beat a phone-tool step. Voice is ignored when Off,
+ * First match wins. Cellular or agent call lines beat a phone-tool step. Voice is ignored when Off,
  * and voice Error never produces a line. Listening / Speaking are only returned when
  * a mini session is already active.
  */
@@ -843,28 +847,23 @@ private fun resolveMiniLive(
     call: CellularCallSnapshot,
     voice: VoicePhase,
     sessionActive: Boolean,
-    bridgeLive: Boolean = false,
+    agentCall: me.rerere.rikkahub.service.phone.agentcall.AgentCallSnapshot? = null,
 ): MiniLiveResolution {
+    if (agentCall != null &&
+        agentCall.phase != me.rerere.rikkahub.service.phone.agentcall.AgentCallPhase.Ended &&
+        agentCall.phase != me.rerere.rikkahub.service.phone.agentcall.AgentCallPhase.Failed
+    ) {
+        val (res, arg) = labeledNumber(
+            agentCall.toNumber,
+            R.string.phone_mini_status_on_call,
+            R.string.phone_mini_status_on_call_number,
+        )
+        return MiniLiveResolution(MiniLiveKind.OnCall, res, arg)
+    }
     val number = knownCallNumber(call)
     val outbound = call.outboundNumber?.takeIf { it.isNotBlank() }
     return when {
         call.status == CellularCallStatus.Offhook -> {
-            // When SCO bridge is live, surface On call + Listening/Speaking for agent-on-call.
-            if (bridgeLive && sessionActive) {
-                when (voice) {
-                    VoicePhase.Listening, VoicePhase.Transcribing, VoicePhase.Connecting ->
-                        return MiniLiveResolution(
-                            MiniLiveKind.Listening,
-                            R.string.phone_mini_status_on_call_listening,
-                        )
-                    VoicePhase.Speaking ->
-                        return MiniLiveResolution(
-                            MiniLiveKind.Speaking,
-                            R.string.phone_mini_status_on_call_speaking,
-                        )
-                    else -> Unit
-                }
-            }
             val (res, arg) = labeledNumber(
                 number,
                 R.string.phone_mini_status_on_call,
@@ -935,9 +934,9 @@ private fun miniIndicatorStatus(
     call: CellularCallSnapshot,
     voice: VoicePhase,
     sessionActive: Boolean,
-    bridgeLive: Boolean = false,
+    agentCall: me.rerere.rikkahub.service.phone.agentcall.AgentCallSnapshot? = null,
 ): MiniIndicatorStatus {
-    val resolved = resolveMiniLive(work, activity, call, voice, sessionActive, bridgeLive)
+    val resolved = resolveMiniLive(work, activity, call, voice, sessionActive, agentCall)
     val label = resolved.labelRes?.let { res ->
         val arg = resolved.numberArg
         if (arg != null) stringResource(res, arg) else stringResource(res)

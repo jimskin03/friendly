@@ -907,17 +907,35 @@ data class DisplaySetting(
      */
     val enablePhoneCallAutoAnswerAttempt: Boolean = false,
     /**
-     * Hard gate for agent-on-call voice (SCO CallAudioBridge + place_call/end_call/mute_call).
-     * Default OFF. When on and a cellular call is Active, CallAudioBridge starts Bluetooth SCO
-     * so existing ASR/TTS ride the call communication path. No auto-answer.
+     * Legacy toggle kept for backward compatibility with existing persisted settings.
      */
     val enableAgentSpeakOnCalls: Boolean = false,
+    /**
+     * Autonomous AI phone calling configuration (Vapi / ElevenLabs cloud telephony).
+     */
+    val agentCallSetting: AgentCallSetting = AgentCallSetting(),
     /**
      * Experimental. Off keeps a normal full-screen launch.
      * Split or Popup asks the system to open Phone Automation app launches
      * in that window mode, and the mini indicator stays off until this is Off again.
      */
     val phoneAutomationWindowMode: PhoneAutomationWindowMode = PhoneAutomationWindowMode.OFF,
+)
+
+val DisplaySetting.isAgentCallActive: Boolean
+    get() = agentCallSetting.enabled || enableAgentSpeakOnCalls
+
+@Serializable
+data class AgentCallSetting(
+    val enabled: Boolean = false,
+    val provider: String = "vapi", // "vapi" or "elevenlabs"
+    val apiKey: String = "",
+    val phoneNumberId: String = "",
+    val agentId: String = "",
+    val voiceId: String = "",
+    val ownerName: String = "",
+    val discloseAi: Boolean = true,
+    val maxDurationSec: Int = 600,
 )
 
 @Serializable

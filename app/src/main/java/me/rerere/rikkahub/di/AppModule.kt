@@ -100,11 +100,11 @@ val appModule = module {
     }
 
     single(createdAtStart = true) {
-        me.rerere.rikkahub.service.phone.CallAudioBridge(
+        me.rerere.rikkahub.service.phone.agentcall.AgentCallManager(
             app = get(),
             appScope = get(),
             settingsStore = get(),
-            phoneCallController = get(),
+            httpClient = get(),
         )
     }
 
@@ -114,7 +114,7 @@ val appModule = module {
             appScope = get(),
             settingsStore = get(),
             phoneCallController = get(),
-            callAudioBridge = get(),
+            agentCallManager = get(),
         )
     }
 

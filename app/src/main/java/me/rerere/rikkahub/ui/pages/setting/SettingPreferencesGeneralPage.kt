@@ -43,6 +43,17 @@ import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import com.dokar.sonner.ToastType
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.datastore.isAgentCallActive
+import me.rerere.rikkahub.service.phone.agentcall.AgentCallManager
+import me.rerere.rikkahub.ui.context.LocalToaster
+import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 
 @Composable
@@ -57,6 +68,12 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
         displaySetting = setting
         vm.updateSettings(settings.copy(displaySetting = setting))
     }
+
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    val agentCallManager = koinInject<AgentCallManager>()
+    var showAgentCallDialog by remember { mutableStateOf(false) }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -495,19 +512,192 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text(stringResource(R.string.agent_speak_on_calls_title)) },
-                        supportingContent = { Text(stringResource(R.string.agent_speak_on_calls_desc)) },
+                        headlineContent = { Text(stringResource(R.string.agent_call_setting_title)) },
+                        supportingContent = { Text(stringResource(R.string.agent_call_setting_desc)) },
                         trailingContent = {
-                            Switch(
-                                checked = displaySetting.enableAgentSpeakOnCalls,
-                                onCheckedChange = {
-                                    updateDisplaySetting(displaySetting.copy(enableAgentSpeakOnCalls = it))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                TextButton(
+                                    onClick = { showAgentCallDialog = true }
+                                ) {
+                                    Text(stringResource(R.string.configure))
                                 }
-                            )
+                                Switch(
+                                    checked = displaySetting.agentCallSetting.enabled,
+                                    onCheckedChange = { enabled ->
+                                        updateDisplaySetting(
+                                            displaySetting.copy(
+                                                agentCallSetting = displaySetting.agentCallSetting.copy(enabled = enabled)
+                                            )
+                                        )
+                                    }
+                                )
+                            }
                         },
                     )
                 }
             }
         }
+    }
+
+    if (showAgentCallDialog) {
+        var provider by remember { mutableStateOf(displaySetting.agentCallSetting.provider) }
+        var apiKey by remember { mutableStateOf(displaySetting.agentCallSetting.apiKey) }
+        var phoneNumberId by remember { mutableStateOf(displaySetting.agentCallSetting.phoneNumberId) }
+        var agentId by remember { mutableStateOf(displaySetting.agentCallSetting.agentId) }
+        var voiceId by remember { mutableStateOf(displaySetting.agentCallSetting.voiceId) }
+        var ownerName by remember { mutableStateOf(displaySetting.agentCallSetting.ownerName) }
+        var discloseAi by remember { mutableStateOf(displaySetting.agentCallSetting.discloseAi) }
+        var testing by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showAgentCallDialog = false },
+            title = { Text(stringResource(R.string.agent_call_dialog_title)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.agent_call_provider),
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                    )
+                    Select(
+                        options = listOf("vapi", "elevenlabs"),
+                        selectedOption = provider,
+                        onOptionSelected = { provider = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        optionToString = {
+                            when (it) {
+                                "vapi" -> "Vapi"
+                                "elevenlabs" -> "ElevenLabs"
+                                else -> it
+                            }
+                        }
+                    )
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it },
+                        label = { Text(stringResource(R.string.agent_call_api_key)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = phoneNumberId,
+                        onValueChange = { phoneNumberId = it },
+                        label = { Text(stringResource(R.string.agent_call_phone_number_id)) },
+                        placeholder = {
+                            Text(
+                                if (provider == "vapi") "Vapi Phone Number ID"
+                                else "Twilio / ElevenLabs Phone Number ID"
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = ownerName,
+                        onValueChange = { ownerName = it },
+                        label = { Text(stringResource(R.string.agent_call_owner_name)) },
+                        placeholder = { Text(stringResource(R.string.agent_call_owner_name_desc)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = agentId,
+                        onValueChange = { agentId = it },
+                        label = { Text(stringResource(R.string.agent_call_agent_id)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (provider == "vapi") {
+                        OutlinedTextField(
+                            value = voiceId,
+                            onValueChange = { voiceId = it },
+                            label = { Text(stringResource(R.string.agent_call_voice_id)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.agent_call_disclose_ai))
+                            Text(
+                                stringResource(R.string.agent_call_disclose_ai_desc),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        Switch(
+                            checked = discloseAi,
+                            onCheckedChange = { discloseAi = it }
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            testing = true
+                            scope.launch {
+                                val currentSetting = displaySetting.agentCallSetting.copy(
+                                    provider = provider,
+                                    apiKey = apiKey.trim(),
+                                    phoneNumberId = phoneNumberId.trim(),
+                                    agentId = agentId.trim(),
+                                    voiceId = voiceId.trim(),
+                                    ownerName = ownerName.trim(),
+                                    discloseAi = discloseAi,
+                                )
+                                val res = agentCallManager.testConnection(currentSetting)
+                                testing = false
+                                if (res.isSuccess) {
+                                    toaster.show(
+                                        message = context.getString(R.string.agent_call_test_success),
+                                        type = ToastType.Success
+                                    )
+                                } else {
+                                    val err = res.exceptionOrNull()?.message ?: "Unknown error"
+                                    toaster.show(message = err, type = ToastType.Error)
+                                }
+                            }
+                        },
+                        enabled = !testing && apiKey.isNotBlank() && phoneNumberId.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (testing) stringResource(R.string.calculating) else stringResource(R.string.agent_call_test_connection))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newSetting = displaySetting.agentCallSetting.copy(
+                            provider = provider,
+                            apiKey = apiKey.trim(),
+                            phoneNumberId = phoneNumberId.trim(),
+                            agentId = agentId.trim(),
+                            voiceId = voiceId.trim(),
+                            ownerName = ownerName.trim(),
+                            discloseAi = discloseAi,
+                        )
+                        updateDisplaySetting(displaySetting.copy(agentCallSetting = newSetting))
+                        showAgentCallDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAgentCallDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
