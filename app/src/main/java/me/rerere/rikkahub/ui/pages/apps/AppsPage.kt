@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -39,6 +40,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Grid
@@ -68,6 +71,7 @@ import me.rerere.rikkahub.data.model.normalizeHttpsStartUrl
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FolderBadge
 import me.rerere.rikkahub.ui.components.ui.FolderLabelPicker
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -80,8 +84,10 @@ fun AppsPage(vm: AppsVM = koinViewModel()) {
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showRemoveConfirm by rememberSaveable { mutableStateOf(false) }
     val favoriteLimit = stringResource(R.string.apps_favorite_limit)
 
     Scaffold(
@@ -142,21 +148,44 @@ fun AppsPage(vm: AppsVM = koinViewModel()) {
 
     val editing = settings.installedWebApps.firstOrNull { it.id.toString() == editingId }
     if (editing != null) {
-        AppOptionsDialog(
-            app = editing,
-            onDismiss = { editingId = null },
-            onLaunchMode = { vm.updateLaunchMode(editing.id, it) },
-            onZoomMode = { vm.updateZoomMode(editing.id, it) },
-            onCameraPermission = { vm.updateCameraPermission(editing.id, it) },
-            onMicrophonePermission = { vm.updateMicrophonePermission(editing.id, it) },
-            onLocationPermission = { vm.updateLocationPermission(editing.id, it) },
-            onIcon = { vm.updateIcon(editing.id, it.id) },
-            onFavorite = { favorite ->
-                if (!vm.setFavorite(editing.id, favorite)) {
-                    toaster.show(favoriteLimit, type = ToastType.Error)
+        if (!showRemoveConfirm) {
+            AppOptionsDialog(
+                app = editing,
+                onDismiss = {
+                    editingId = null
+                    showRemoveConfirm = false
+                },
+                onLaunchMode = { vm.updateLaunchMode(editing.id, it) },
+                onZoomMode = { vm.updateZoomMode(editing.id, it) },
+                onCameraPermission = { vm.updateCameraPermission(editing.id, it) },
+                onMicrophonePermission = { vm.updateMicrophonePermission(editing.id, it) },
+                onLocationPermission = { vm.updateLocationPermission(editing.id, it) },
+                onIcon = { vm.updateIcon(editing.id, it.id) },
+                onFavorite = { favorite ->
+                    if (!vm.setFavorite(editing.id, favorite)) {
+                        toaster.show(favoriteLimit, type = ToastType.Error)
+                    }
+                },
+                onRemove = { showRemoveConfirm = true },
+            )
+        }
+        RikkaConfirmDialog(
+            show = showRemoveConfirm,
+            title = stringResource(R.string.apps_page_remove_title),
+            confirmText = stringResource(R.string.apps_page_remove),
+            dismissText = stringResource(R.string.cancel),
+            onConfirm = {
+                showRemoveConfirm = false
+                val removingId = editing.id
+                editingId = null
+                scope.launch {
+                    vm.removeApp(removingId)
                 }
             },
-        )
+            onDismiss = { showRemoveConfirm = false },
+        ) {
+            Text(stringResource(R.string.apps_page_remove_message, editing.name))
+        }
     }
 
     if (showAddDialog) {
@@ -263,6 +292,7 @@ private fun AppOptionsDialog(
     onLocationPermission: (WebAppPermissionPolicy) -> Unit,
     onIcon: (FolderLabel) -> Unit,
     onFavorite: (Boolean) -> Unit,
+    onRemove: () -> Unit,
 ) {
     val selectedIcon = FolderLabel.entries.firstOrNull { it.id.equals(app.iconId, ignoreCase = true) }
     AlertDialog(
@@ -332,6 +362,16 @@ private fun AppOptionsDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.apps_edit_done))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onRemove,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Text(stringResource(R.string.apps_page_remove))
             }
         },
     )
