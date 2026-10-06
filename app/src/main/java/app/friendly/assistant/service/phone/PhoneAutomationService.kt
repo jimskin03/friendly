@@ -1,0 +1,922 @@
+﻿package app.friendly.assistant.service.phone
+
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Path
+import android.graphics.Rect
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.text.TextUtils
+import android.util.Log
+import android.view.Display
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import app.friendly.assistant.data.datastore.PhoneAutomationWindowMode
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+
+private const val TAG = "PhoneAutomationService"
+
+data class ScreenNodeInfo(
+    val id: Int,
+    val text: String,
+    val description: String,
+    val viewId: String,
+    val className: String,
+    val clickable: Boolean,
+    val editable: Boolean,
+    val scrollable: Boolean,
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+    val centerX: Int,
+    val centerY: Int,
+    val enabled: Boolean = true,
+    val checked: Boolean = false,
+    val focused: Boolean = false,
+    val selected: Boolean = false,
+)
+
+data class ScreenInspectionResult(
+    val packageName: String,
+    val windowTitle: String,
+    val interactiveElements: List<ScreenNodeInfo>,
+    val textElements: List<ScreenNodeInfo>,
+)
+
+
+enum class PhoneCallUiAction { Answer, End }
+
+data class CallControlPoint(val x: Float, val y: Float)
+
+enum class PhoneAutomationWorkStatus {
+    Idle,
+    Running,
+    Error,
+}
+
+enum class PhoneAutomationStep {
+    None,
+    LaunchApp,
+    Screenshot,
+    Inspect,
+    Click,
+    Swipe,
+    Type,
+    PressKey,
+    PlaceCall,
+    EndCall,
+    MuteCall,
+    ReadCall,
+    AssertVisible,
+    ScrollUntilVisible,
+    RunFlow,
+    ManageFlows,
+    Other,
+}
+
+data class PhoneAutomationActivity(
+    val toolRunning: Boolean = false,
+    val step: PhoneAutomationStep = PhoneAutomationStep.None,
+    val holdingForGeneration: Boolean = false,
+    val failed: Boolean = false,
+)
+
+class PhoneAutomationService : AccessibilityService() {
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        instance = this
+        _isConnected.value = true
+        _workStatus.value = PhoneAutomationWorkStatus.Idle
+        _activity.value = PhoneAutomationActivity()
+        Log.i(TAG, "PhoneAutomationService connected and active")
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // No-op for passive automation
+    }
+
+    override fun onInterrupt() {
+        Log.w(TAG, "PhoneAutomationService interrupted")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
+        _isConnected.value = false
+        _workStatus.value = PhoneAutomationWorkStatus.Idle
+        _activity.value = PhoneAutomationActivity()
+        Log.i(TAG, "PhoneAutomationService destroyed")
+    }
+
+    /**
+     * Inspects the best available application window hierarchy.
+     * Prefers the last launched target package, then any non-Friendly
+     * application window, then [rootInActiveWindow].
+     */
+    fun inspectScreen(): ScreenInspectionResult {
+        val root = resolveInspectionRoot() ?: return ScreenInspectionResult(
+            packageName = "",
+            windowTitle = "",
+            interactiveElements = emptyList(),
+            textElements = emptyList(),
+        )
+
+        val packageName = root.packageName?.toString().orEmpty()
+        val windowTitle = root.window?.title?.toString().orEmpty()
+
+        val interactive = mutableListOf<ScreenNodeInfo>()
+        val texts = mutableListOf<ScreenNodeInfo>()
+        val rect = Rect()
+        var currentId = 0
+
+        fun traverse(node: AccessibilityNodeInfo?) {
+            if (node == null || !node.isVisibleToUser) return
+
+            node.getBoundsInScreen(rect)
+            if (rect.width() > 0 && rect.height() > 0) {
+                val text = node.text?.toString().orEmpty().trim()
+                val desc = node.contentDescription?.toString().orEmpty().trim()
+                val viewId = node.viewIdResourceName.orEmpty()
+                val className = node.className?.toString().orEmpty().substringAfterLast('.')
+                val isClickable = node.isClickable
+                val isEditable = node.isEditable
+                val isScrollable = node.isScrollable
+                val isEnabled = node.isEnabled
+                val isChecked = node.isChecked
+                val isFocused = node.isFocused
+                val isSelected = node.isSelected
+
+                val hasContent = text.isNotEmpty() || desc.isNotEmpty() || viewId.isNotEmpty()
+                val isActionable = isClickable || isEditable || isScrollable
+
+                if (hasContent || isActionable) {
+                    val info = ScreenNodeInfo(
+                        id = currentId++,
+                        text = text,
+                        description = desc,
+                        viewId = viewId,
+                        className = className,
+                        clickable = isClickable,
+                        editable = isEditable,
+                        scrollable = isScrollable,
+                        left = rect.left,
+                        top = rect.top,
+                        right = rect.right,
+                        bottom = rect.bottom,
+                        centerX = rect.centerX(),
+                        centerY = rect.centerY(),
+                        enabled = isEnabled,
+                        checked = isChecked,
+                        focused = isFocused,
+                        selected = isSelected,
+                    )
+
+                    if (isActionable) {
+                        interactive.add(info)
+                    } else if (text.isNotEmpty() || desc.isNotEmpty()) {
+                        texts.add(info)
+                    }
+                }
+            }
+
+            for (i in 0 until node.childCount) {
+                traverse(node.getChild(i))
+            }
+        }
+
+        try {
+            traverse(root)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error traversing accessibility tree", e)
+        }
+
+        return ScreenInspectionResult(
+            packageName = packageName,
+            windowTitle = windowTitle,
+            interactiveElements = interactive,
+            textElements = texts,
+        )
+    }
+
+    /**
+     * Dispatches a tap gesture at the given screen coordinates.
+     */
+    suspend fun click(x: Float, y: Float): Boolean = suspendCancellableCoroutine { continuation ->
+        val path = Path().apply { moveTo(x, y) }
+        val stroke = GestureDescription.StrokeDescription(path, 0, 50)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    if (continuation.isActive) continuation.resume(true)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    if (continuation.isActive) continuation.resume(false)
+                }
+            },
+            null
+        )
+
+        if (!dispatched && continuation.isActive) {
+            continuation.resume(false)
+        }
+    }
+
+    /**
+     * Dispatches a swipe gesture between start and end screen coordinates.
+     */
+    suspend fun swipe(
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float,
+        durationMs: Long = 300L
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+        val path = Path().apply {
+            moveTo(startX, startY)
+            lineTo(endX, endY)
+        }
+        val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(100L))
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    if (continuation.isActive) continuation.resume(true)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    if (continuation.isActive) continuation.resume(false)
+                }
+            },
+            null
+        )
+
+        if (!dispatched && continuation.isActive) {
+            continuation.resume(false)
+        }
+    }
+
+    /**
+     * Enters text into an editable field.
+     * When [target] is set, focuses that node (by view id / bounds) and sets text
+     * on it; if that fails, falls back to the currently focused input.
+     * When [target] is null, types into the focused field only.
+     */
+    fun typeText(
+        text: String,
+        clearFirst: Boolean = false,
+        target: ScreenNodeInfo? = null,
+    ): Boolean {
+        val preferred = target?.let { findLiveNode(it) }
+        if (preferred != null) {
+            preferred.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            if (setTextOnNode(preferred, text, clearFirst)) return true
+        }
+        val root = rootInActiveWindow ?: return false
+        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        return setTextOnNode(focused, text, clearFirst)
+    }
+
+    private fun setTextOnNode(
+        node: AccessibilityNodeInfo,
+        text: String,
+        clearFirst: Boolean,
+    ): Boolean {
+        val currentText = if (clearFirst) "" else node.text?.toString().orEmpty()
+        val newText = currentText + text
+        val arguments = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
+        }
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+    }
+
+    /**
+     * Best-effort match of a [ScreenNodeInfo] to a live accessibility node under
+     * the preferred inspection root (then [rootInActiveWindow]).
+     */
+    private fun findLiveNode(target: ScreenNodeInfo): AccessibilityNodeInfo? {
+        val roots = listOfNotNull(resolveInspectionRoot(), rootInActiveWindow).distinct()
+        for (root in roots) {
+            findLiveNodeIn(root, target)?.let { return it }
+        }
+        return null
+    }
+
+    private fun findLiveNodeIn(
+        root: AccessibilityNodeInfo,
+        target: ScreenNodeInfo,
+    ): AccessibilityNodeInfo? {
+        val rect = Rect()
+        fun walk(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            if (node == null || !node.isVisibleToUser) return null
+            node.getBoundsInScreen(rect)
+            val viewId = node.viewIdResourceName.orEmpty()
+            val text = node.text?.toString().orEmpty().trim()
+            val desc = node.contentDescription?.toString().orEmpty().trim()
+            val boundsMatch = rect.left == target.left &&
+                rect.top == target.top &&
+                rect.right == target.right &&
+                rect.bottom == target.bottom
+            val viewIdMatch = target.viewId.isNotBlank() &&
+                viewId.isNotBlank() &&
+                (viewId == target.viewId ||
+                    viewId.substringAfter(":id/") == target.viewId.substringAfter(":id/"))
+            val labelMatch = (target.text.isNotBlank() && text == target.text) ||
+                (target.description.isNotBlank() && desc == target.description)
+            if (boundsMatch) return node
+            if (viewIdMatch && (node.isEditable || labelMatch)) return node
+            if (labelMatch && node.isEditable) return node
+            for (i in 0 until node.childCount) {
+                walk(node.getChild(i))?.let { return it }
+            }
+            return null
+        }
+        return walk(root)
+    }
+
+    /**
+     * Triggers a global system action (Back, Home, Recents, Notifications, Quick Settings).
+     */
+    fun pressKey(action: String): Boolean {
+        val globalAction = when (action.lowercase().trim()) {
+            "back" -> GLOBAL_ACTION_BACK
+            "home" -> GLOBAL_ACTION_HOME
+            "recents", "recent_apps" -> GLOBAL_ACTION_RECENTS
+            "notifications" -> GLOBAL_ACTION_NOTIFICATIONS
+            "quick_settings" -> GLOBAL_ACTION_QUICK_SETTINGS
+            else -> return false
+        }
+        return performGlobalAction(globalAction)
+    }
+
+    /**
+     * Waits for the UI to stabilize after an action.
+     */
+    suspend fun awaitIdle(durationMs: Long = 300L) {
+        kotlinx.coroutines.delay(durationMs.coerceIn(50L, 5000L))
+    }
+
+    /**
+     * Polls the active screen hierarchy until a node matching [predicate] is found or [timeoutMs] expires.
+     */
+    suspend fun waitForNode(
+        timeoutMs: Long = 3000L,
+        intervalMs: Long = 200L,
+        predicate: (ScreenNodeInfo) -> Boolean,
+    ): ScreenNodeInfo? {
+        val deadline = System.currentTimeMillis() + timeoutMs.coerceIn(100L, 30_000L)
+        while (System.currentTimeMillis() <= deadline) {
+            val inspection = inspectScreen()
+            val all = inspection.interactiveElements + inspection.textElements
+            val match = all.firstOrNull(predicate)
+            if (match != null) return match
+            kotlinx.coroutines.delay(intervalMs.coerceAtLeast(50L))
+        }
+        return null
+    }
+
+    /**
+     * Polls the active screen hierarchy until no node matching [predicate] is visible or [timeoutMs] expires.
+     */
+    suspend fun waitForNodeDisappear(
+        timeoutMs: Long = 3000L,
+        intervalMs: Long = 200L,
+        predicate: (ScreenNodeInfo) -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs.coerceIn(100L, 30_000L)
+        while (System.currentTimeMillis() <= deadline) {
+            val inspection = inspectScreen()
+            val all = inspection.interactiveElements + inspection.textElements
+            val match = all.firstOrNull(predicate)
+            if (match == null) return true
+            kotlinx.coroutines.delay(intervalMs.coerceAtLeast(50L))
+        }
+        return false
+    }
+
+
+    /**
+     * Picks the accessibility root for inspection / matching.
+     * [FlagRetrieveInteractiveWindows] is enabled so [windows] is populated.
+     */
+    fun resolveInspectionRoot(): AccessibilityNodeInfo? {
+        val own = packageName
+        val target = lastTargetPackage
+        val windowList = windows
+        if (!windowList.isNullOrEmpty()) {
+            if (!target.isNullOrBlank()) {
+                windowList.firstNotNullOfOrNull { window ->
+                    applicationRootMatching(window, target)
+                }?.let { return it }
+            }
+            windowList.firstNotNullOfOrNull { window ->
+                val root = applicationRoot(window) ?: return@firstNotNullOfOrNull null
+                val pkg = root.packageName?.toString().orEmpty()
+                if (pkg.isNotBlank() && pkg != own) root else null
+            }?.let { return it }
+        }
+        return rootInActiveWindow
+    }
+
+    private fun applicationRoot(window: AccessibilityWindowInfo): AccessibilityNodeInfo? {
+        if (window.type != AccessibilityWindowInfo.TYPE_APPLICATION) return null
+        return window.root
+    }
+
+    private fun applicationRootMatching(
+        window: AccessibilityWindowInfo,
+        targetPackage: String,
+    ): AccessibilityNodeInfo? {
+        val root = applicationRoot(window) ?: return null
+        return if (root.packageName?.toString() == targetPackage) root else null
+    }
+
+    fun activeWindowPackage(): String =
+        rootInActiveWindow?.packageName?.toString().orEmpty()
+
+    fun windowPackageAt(x: Float, y: Float): String? {
+        val windowList = windows ?: return null
+        val px = x.toInt()
+        val py = y.toInt()
+        val bounds = Rect()
+        return windowList
+            .asSequence()
+            .filter { window ->
+                window.getBoundsInScreen(bounds)
+                bounds.contains(px, py)
+            }
+            .maxByOrNull { it.layer }
+            ?.root
+            ?.packageName
+            ?.toString()
+    }
+
+    /**
+     * Passive guardrail: refuse mutative gestures when they would hit Friendly
+     * itself. Prefer returning this error over yanking focus back to the target.
+     */
+    fun refuseIfActingOnFriendly(x: Float? = null, y: Float? = null): String? {
+        val own = packageName
+        val pkg = if (x != null && y != null) {
+            windowPackageAt(x, y) ?: activeWindowPackage()
+        } else {
+            activeWindowPackage()
+        }
+        return if (pkg.isNotBlank() && pkg == own) {
+            FRIENDLY_IN_FRONT_ERROR
+        } else {
+            null
+        }
+    }
+
+    fun isOwnPackage(pkg: String): Boolean =
+        pkg.isNotBlank() && pkg == packageName
+
+    /**
+     * Best-effort tap of an in-call Answer / End control. Returns false when no
+     * matching visible control is found. Not reliable across OEM dialers.
+     */
+    fun performCallUiAction(action: PhoneCallUiAction): Boolean {
+        val target = findCallControlNode(action) ?: return false
+        if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        var parent = target.parent
+        while (parent != null) {
+            if (parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
+            parent = parent.parent
+        }
+        return false
+    }
+
+    fun findCallControl(action: PhoneCallUiAction): CallControlPoint? {
+        val target = findCallControlNode(action) ?: return null
+        val rect = Rect()
+        target.getBoundsInScreen(rect)
+        if (rect.width() <= 0 || rect.height() <= 0) return null
+        return CallControlPoint(rect.centerX().toFloat(), rect.centerY().toFloat())
+    }
+
+    private fun findCallControlNode(action: PhoneCallUiAction): AccessibilityNodeInfo? {
+        val labels = when (action) {
+            PhoneCallUiAction.Answer -> listOf("answer", "accept", "接听", "接聽", "jawab")
+            PhoneCallUiAction.End -> listOf(
+                "end call", "endcall", "hang up", "hangup", "disconnect",
+                "挂断", "掛斷", "结束通话", "結束通話",
+            )
+        }
+        val idHints = when (action) {
+            PhoneCallUiAction.Answer -> listOf("answer", "accept")
+            PhoneCallUiAction.End -> listOf("end_call", "endcall", "endbutton", "hangup", "disconnect")
+        }
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        rootInActiveWindow?.let { roots.add(it) }
+        windows?.forEach { window -> window.root?.let { roots.add(it) } }
+        for (root in roots) {
+            findMatchingCallNode(root, labels, idHints)?.let { return it }
+        }
+        return null
+    }
+
+    private fun findMatchingCallNode(
+        node: AccessibilityNodeInfo?,
+        labels: List<String>,
+        idHints: List<String>,
+    ): AccessibilityNodeInfo? {
+        if (node == null || !node.isVisibleToUser) return null
+        val text = node.text?.toString().orEmpty().trim().lowercase()
+        val desc = node.contentDescription?.toString().orEmpty().trim().lowercase()
+        val viewId = node.viewIdResourceName.orEmpty().lowercase()
+        val labelHit = labels.any { label ->
+            text == label || desc == label || text.contains(label) || desc.contains(label)
+        }
+        val idHit = idHints.any { hint -> viewId.contains(hint) }
+        if ((labelHit || idHit) && (node.isClickable || node.isEnabled)) return node
+        for (i in 0 until node.childCount) {
+            findMatchingCallNode(node.getChild(i), labels, idHints)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Takes a screenshot on Android 11+ (API 30+).
+     */
+    suspend fun takeScreenshot(): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            Log.w(TAG, "takeScreenshot requires Android 11 (API 30)+")
+            return null
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                mainExecutor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshotResult: ScreenshotResult) {
+                        try {
+                            val hardwareBuffer = screenshotResult.hardwareBuffer
+                            val colorSpace = screenshotResult.colorSpace
+                            val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            // Convert to software bitmap for serialization/saving
+                            val softwareBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                            hardwareBuffer.close()
+                            if (continuation.isActive) continuation.resume(softwareBitmap ?: bitmap)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to convert screenshot buffer", e)
+                            if (continuation.isActive) continuation.resume(null)
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        Log.e(TAG, "Accessibility takeScreenshot failed with error code $errorCode")
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+                }
+            )
+        }
+    }
+
+    companion object {
+        const val FRIENDLY_IN_FRONT_ERROR =
+            "Friendly is in front; call phone_bring_app_to_front to restore the last target app " +
+                "(or phone_launch_app if you still need to open an app)."
+
+        @Volatile
+        var instance: PhoneAutomationService? = null
+            private set
+
+        private val _isConnected = MutableStateFlow(false)
+        val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+        private val _workStatus = MutableStateFlow(PhoneAutomationWorkStatus.Idle)
+        val workStatus: StateFlow<PhoneAutomationWorkStatus> = _workStatus.asStateFlow()
+
+        private val _activity = MutableStateFlow(PhoneAutomationActivity())
+        val activity: StateFlow<PhoneAutomationActivity> = _activity.asStateFlow()
+
+        /** Conversation to reopen when the mini indicator is tapped (best-effort). */
+        @Volatile
+        var lastConversationId: String? = null
+
+        /**
+         * Last successfully launched target package from [launchApp] /
+         * [DirectAppIntents]. Never stores Friendly's own package.
+         */
+        @Volatile
+        var lastTargetPackage: String? = null
+            private set
+
+        fun isRunning(): Boolean = instance != null
+
+        /**
+         * Remember a launched app package for inspect preference / focus checks.
+         * Ignores blank values and Friendly's own [Context.getPackageName].
+         */
+        fun rememberTargetPackage(context: Context, pkg: String?) {
+            val trimmed = pkg?.trim().orEmpty()
+            if (trimmed.isEmpty()) return
+            val own = context.packageName
+            if (trimmed == own) return
+            lastTargetPackage = trimmed
+            PhoneAutomationLoopGuard.reset()
+        }
+
+        /** No-arg starts [PhoneAutomationStep.Other]. Phone tools pass a real step. */
+        fun reportWorkStarted(step: PhoneAutomationStep = PhoneAutomationStep.Other) {
+            val previous = _activity.value
+            // New phone-work generation: reset loop detector once per reply.
+            if (!previous.holdingForGeneration && !previous.toolRunning) {
+                PhoneAutomationLoopGuard.reset()
+            }
+            _activity.value = PhoneAutomationActivity(
+                toolRunning = true,
+                step = step,
+                holdingForGeneration = true,
+                failed = false,
+            )
+            _workStatus.value = PhoneAutomationWorkStatus.Running
+        }
+
+        /**
+         * Tool returned. Keeps the reply "in progress" for the pill.
+         * [workStatus] goes Idle so the gap is not a hard error; [activity.failed]
+         * is only shown once generation ends.
+         */
+        fun reportWorkFinished(success: Boolean) {
+            _activity.value = PhoneAutomationActivity(
+                toolRunning = false,
+                step = PhoneAutomationStep.None,
+                holdingForGeneration = true,
+                failed = !success,
+            )
+            _workStatus.value = PhoneAutomationWorkStatus.Idle
+        }
+
+        /**
+         * Reply that used a phone tool has ended.
+         * [aborted] is a non-cancellation failure of generation.
+         * [cancelled] (user [kotlinx.coroutines.CancellationException]) returns to idle
+         * and does not surface "Didn't finish", even if the last tool failed.
+         *
+         * @return true when this generation included phone automation (holding for the
+         * reply, or a phone tool still running) and was not cancelled. The caller should
+         * then bring Friendly back to that chat. A failed finish still returns true so
+         * the user can see "Didn't finish". Cancelled generations and ordinary replies
+         * return false and must not take the screen.
+         */
+        fun reportGenerationFinished(aborted: Boolean, cancelled: Boolean = false): Boolean {
+            val previous = _activity.value
+            if (!previous.holdingForGeneration && !previous.toolRunning) return false
+            val failed = !cancelled && (previous.failed || aborted)
+            _activity.value = PhoneAutomationActivity(
+                toolRunning = false,
+                step = PhoneAutomationStep.None,
+                holdingForGeneration = false,
+                failed = failed,
+            )
+            _workStatus.value = if (failed) {
+                PhoneAutomationWorkStatus.Error
+            } else {
+                PhoneAutomationWorkStatus.Idle
+            }
+            return !cancelled
+        }
+
+        suspend fun <T> trackWork(conversationId: String? = null, block: suspend () -> T): T {
+            if (conversationId != null) {
+                lastConversationId = conversationId
+            }
+            _workStatus.value = PhoneAutomationWorkStatus.Running
+            return try {
+                val result = block()
+                _workStatus.value = PhoneAutomationWorkStatus.Idle
+                result
+            } catch (e: Exception) {
+                _workStatus.value = PhoneAutomationWorkStatus.Error
+                throw e
+            }
+        }
+
+        /**
+         * Checks whether PhoneAutomationService is enabled in Android Accessibility settings.
+         */
+        fun isAccessibilityEnabled(context: Context): Boolean {
+            val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+                ?: return false
+            val enabledServices = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+
+            val colonSplitter = TextUtils.SimpleStringSplitter(':')
+            colonSplitter.setString(enabledServices)
+            val expected = ComponentName(context, PhoneAutomationService::class.java).flattenToString()
+
+            while (colonSplitter.hasNext()) {
+                val component = colonSplitter.next()
+                if (component.equals(expected, ignoreCase = true)) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        /**
+         * Bring a remembered (or named) third-party app to the front using only
+         * [Intent.FLAG_ACTIVITY_NEW_TASK] on [PackageManager.getLaunchIntentForPackage].
+         * Never re-fires [DirectAppIntents] deep links. Skipped entirely in Split /
+         * Popup window mode. Tool-driven only — not called on focus loss.
+         *
+         * @param packageOrName optional package id or launcher label; when blank,
+         * uses [lastTargetPackage].
+         */
+        fun bringTargetAppToFront(
+            context: Context,
+            packageOrName: String? = null,
+        ): Pair<Boolean, String> {
+            val mode = currentPhoneAutomationWindowMode()
+            if (mode == PhoneAutomationWindowMode.SPLIT || mode == PhoneAutomationWindowMode.POPUP) {
+                return false to
+                    "phone_bring_app_to_front is skipped in ${mode.name.lowercase()} window mode"
+            }
+
+            val resolved = resolvePackageForBringToFront(context, packageOrName)
+                ?: return false to if (packageOrName.isNullOrBlank()) {
+                    "No lastTargetPackage; launch an app first with phone_launch_app, " +
+                        "or pass app_name/package."
+                } else {
+                    "App not found matching '$packageOrName'"
+                }
+
+            if (resolved == context.packageName) {
+                return false to "Refusing to bring Friendly itself to front with this tool."
+            }
+
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(resolved)
+                ?: return false to "No launch intent for package: $resolved"
+
+            // ONLY NEW_TASK for third-party apps — no REORDER_TO_FRONT / SINGLE_TOP / CLEAR_TOP.
+            launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            return try {
+                context.startActivity(launchIntent)
+                rememberTargetPackage(context, resolved)
+                true to "Brought app to front: $resolved"
+            } catch (e: Exception) {
+                false to "Failed to bring app to front: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+
+        /**
+         * Resolves a package for [bringTargetAppToFront]. Blank input uses
+         * [lastTargetPackage]. Otherwise matches package id, then launcher label
+         * (same scoring as [launchAppByName]) without launching or deep-linking.
+         */
+        private fun resolvePackageForBringToFront(
+            context: Context,
+            packageOrName: String?,
+        ): String? {
+            val trimmed = packageOrName?.trim().orEmpty()
+            if (trimmed.isEmpty()) {
+                return lastTargetPackage?.takeIf { it.isNotBlank() }
+            }
+            val pm = context.packageManager
+            if (pm.getLaunchIntentForPackage(trimmed) != null) {
+                return trimmed
+            }
+            val needle = trimmed.lowercase()
+            val words = needle.split(Regex("[^a-z0-9]+")).filter { it.length >= 2 }
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            val matched = pm.queryIntentActivities(mainIntent, 0)
+                .map { info ->
+                    val label = info.loadLabel(pm).toString().lowercase()
+                    val pkgWords = info.activityInfo.packageName.lowercase().replace('.', ' ')
+                    val score = when {
+                        label == needle -> 1000
+                        needle.length >= 2 && label.contains(needle) -> 800
+                        words.isNotEmpty() && words.all { label.contains(it) } -> 700
+                        words.isNotEmpty() && words.all { word ->
+                            label.contains(word) || pkgWords.contains(word)
+                        } -> 600
+                        else -> 0
+                    }
+                    Triple(score, label, info)
+                }
+                .filter { it.first > 0 }
+                .maxWithOrNull(
+                    compareBy<Triple<Int, String, android.content.pm.ResolveInfo>> { it.first }
+                        .thenBy { if (words.any { word -> word == it.second }) 1 else 0 }
+                        .thenByDescending { it.second.length },
+                )
+                ?.third
+            return matched?.activityInfo?.packageName
+        }
+
+        /**
+         * Launches an app by package id or home-screen name.
+         * Known actions (WhatsApp chat, Maps search/directions, dialer) open
+         * by intent first. Everything else matches by name or package.
+         * "Google Maps" matches the app labeled Maps, because every word has to
+         * show up in the label or the package, and the closest label wins.
+         */
+        fun launchApp(
+            context: Context,
+            query: String,
+            phone: String? = null,
+            placeQuery: String? = null,
+        ): Pair<Boolean, String> {
+            val primary = query.trim()
+            val phoneArg = phone?.trim().orEmpty()
+            val placeArg = placeQuery?.trim().orEmpty()
+            if (primary.isEmpty() && phoneArg.isEmpty() && placeArg.isEmpty()) {
+                return false to "App not found matching '$query'"
+            }
+            when (val direct = DirectAppIntents.resolve(context, primary, phoneArg, placeArg)) {
+                is DirectAppIntents.Result.Launched -> {
+                    rememberTargetPackage(context, direct.packageName)
+                    return true to direct.message
+                }
+                is DirectAppIntents.Result.Blocked -> return false to direct.message
+                is DirectAppIntents.Result.Fallback -> return launchAppByName(context, direct.query)
+                null -> Unit
+            }
+            return launchAppByName(context, primary.ifEmpty { query })
+        }
+
+        private fun launchAppByName(context: Context, query: String): Pair<Boolean, String> {
+            val pm = context.packageManager
+            val trimmed = query.trim().lowercase()
+            if (trimmed.isEmpty()) return false to "App not found matching '$query'"
+
+            val directIntent = pm.getLaunchIntentForPackage(query.trim())
+            if (directIntent != null) {
+                directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startPhoneAutomationActivity(directIntent)
+                rememberTargetPackage(context, query.trim())
+                return true to "Launched app with package: $query"
+            }
+
+            val words = trimmed.split(Regex("[^a-z0-9]+")).filter { it.length >= 2 }
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            val matched = pm.queryIntentActivities(mainIntent, 0)
+                .map { info ->
+                    val label = info.loadLabel(pm).toString().lowercase()
+                    val pkgWords = info.activityInfo.packageName.lowercase().replace('.', ' ')
+                    val score = when {
+                        label == trimmed -> 1000
+                        trimmed.length >= 2 && label.contains(trimmed) -> 800
+                        words.isNotEmpty() && words.all { label.contains(it) } -> 700
+                        words.isNotEmpty() && words.all { word ->
+                            label.contains(word) || pkgWords.contains(word)
+                        } -> 600
+                        else -> 0
+                    }
+                    Triple(score, label, info)
+                }
+                .filter { it.first > 0 }
+                .maxWithOrNull(
+                    compareBy<Triple<Int, String, android.content.pm.ResolveInfo>> { it.first }
+                        .thenBy { if (words.any { word -> word == it.second }) 1 else 0 }
+                        .thenByDescending { it.second.length },
+                )
+                ?.third
+
+            if (matched != null) {
+                val launchIntent = pm.getLaunchIntentForPackage(matched.activityInfo.packageName)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startPhoneAutomationActivity(launchIntent)
+                    rememberTargetPackage(context, matched.activityInfo.packageName)
+                    val label = matched.loadLabel(pm).toString()
+                    return true to "Launched app: $label (${matched.activityInfo.packageName})"
+                }
+            }
+
+            return false to "App not found matching '$query'"
+        }
+    }
+}

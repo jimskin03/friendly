@@ -7,8 +7,8 @@
         android:shortcutShortLabel="@string/shortcut_new_prompt"
         android:shortcutLongLabel="@string/shortcut_new_prompt">
         <intent
-            android:action="me.rerere.rikkahub.action.NEW_PROMPT"
-            android:targetClass="me.rerere.rikkahub.RouteActivity" />
+            android:action="app.friendly.assistant.action.NEW_PROMPT"
+            android:targetClass="app.friendly.assistant.RouteActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
     <shortcut
@@ -18,8 +18,8 @@
         android:shortcutShortLabel="@string/shortcut_new_voice"
         android:shortcutLongLabel="@string/shortcut_new_voice">
         <intent
-            android:action="me.rerere.rikkahub.action.NEW_VOICE"
-            android:targetClass="me.rerere.rikkahub.RouteActivity" />
+            android:action="app.friendly.assistant.action.NEW_VOICE"
+            android:targetClass="app.friendly.assistant.RouteActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>

@@ -29,7 +29,7 @@ if (hasGoogleServices) {
 }
 
 android {
-    namespace = "me.rerere.rikkahub"
+    namespace = "app.friendly.assistant"
     compileSdk {
         version = release(37) {
             minorApiLevel = 2
@@ -40,8 +40,8 @@ android {
         applicationId = "app.friendly.assistant"
         minSdk = 26
         targetSdk = 37
-        versionCode = 200
-        versionName = "4.2.1"
+        versionCode = 300
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -310,8 +310,7 @@ dependencies {
     // image viewer
     implementation(libs.image.viewer)
 
-    // JLatexMath
-    // https://github.com/rikkahub/jlatexmath-android
+    // JLatexMath (LaTeX rendering)
     implementation(libs.jlatexmath)
     implementation(libs.jlatexmath.font.greek)
     implementation(libs.jlatexmath.font.cyrillic)

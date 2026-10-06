@@ -6,6 +6,14 @@
   <string name="about_page_title">About</string>
   <string name="about_page_version">Version</string>
   <string name="about_page_website">Website</string>
+  <string name="about_page_developer">Developed by</string>
+  <string name="about_page_developer_name">Cryptgreg Research</string>
+  <string name="about_page_friendly_version">Friendly Version</string>
+  <string name="about_page_website_url">cryptgregresearch.org</string>
+  <string name="about_page_contact">Contact</string>
+  <string name="about_page_contact_email">info@cryptgregresearch.org</string>
+  <string name="setting_page_about">About</string>
+  <string name="setting_page_about_desc">Cryptgreg Research</string>
   <string name="active">Active</string>
   <string name="add">Add</string>
   <string name="app_name">Friendly</string>
