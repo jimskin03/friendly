@@ -181,6 +181,18 @@ tasks.register("buildAll") {
     description = "Build nightly APK and AAB (full features)"
 }
 
+// Legacy CI path: softprops publish still looks under apk/release/*.apk until
+// daily-build.yml can be updated to assembleNightlyRelease (needs workflow OAuth scope).
+tasks.register<Copy>("syncNightlyReleaseApksToLegacyPath") {
+    from(layout.buildDirectory.dir("outputs/apk/nightly/release"))
+    into(layout.buildDirectory.dir("outputs/apk/release"))
+    include("*.apk")
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+tasks.matching { it.name == "assembleNightlyRelease" }.configureEach {
+    finalizedBy("syncNightlyReleaseApksToLegacyPath")
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }

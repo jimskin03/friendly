@@ -243,7 +243,7 @@ cd web-ui && pnpm install --frozen-lockfile && cd ..
 ./gradlew :app:assemblePlayDebug
 ```
 
-APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. Release: `assembleNightlyRelease` / `assemblePlayRelease` (CI nightly uses `assembleNightlyRelease`). Both flavors share `applicationId` `app.friendly.assistant` — Play and sideload builds cannot both be installed with different signing under the same ID.
+APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. Release: `assembleNightlyRelease` / `assemblePlayRelease`. Daily CI still invokes `assembleRelease` (builds all release flavors); nightly APKs are also synced to `app/build/outputs/apk/release/` for the existing publish path. Prefer `assembleNightlyRelease` locally. Both flavors share `applicationId` `app.friendly.assistant` — Play and sideload builds cannot both be installed with different signing under the same ID.
 
 Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
 
