@@ -1,6 +1,7 @@
 ﻿package app.friendly.assistant.data.ai.tools.local
 
 import android.content.Context
+import app.friendly.assistant.BuildConfig
 import me.rerere.ai.core.Tool
 import app.friendly.assistant.data.datastore.SettingsStore
 import app.friendly.assistant.data.event.AppEventBus
@@ -77,32 +78,40 @@ class LocalTools(
 
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
-        if (options.contains(LocalToolOption.JavascriptEngine)) {
+        // Play flavor gates phone automation, cellular call tools, and usage-stats screen time.
+        val effective = if (BuildConfig.IS_PLAY_BUILD) {
+            options.filterNot {
+                it == LocalToolOption.PhoneAutomation || it == LocalToolOption.ScreenTime
+            }
+        } else {
+            options
+        }
+        if (effective.contains(LocalToolOption.JavascriptEngine)) {
             tools.add(javascriptTool)
         }
-        if (options.contains(LocalToolOption.TimeInfo)) {
+        if (effective.contains(LocalToolOption.TimeInfo)) {
             tools.add(timeTool)
         }
-        if (options.contains(LocalToolOption.Clipboard)) {
+        if (effective.contains(LocalToolOption.Clipboard)) {
             tools.add(clipboardTool)
         }
-        if (options.contains(LocalToolOption.Tts)) {
+        if (effective.contains(LocalToolOption.Tts)) {
             tools.add(ttsTool)
         }
-        if (options.contains(LocalToolOption.AskUser)) {
+        if (effective.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)
         }
-        if (options.contains(LocalToolOption.ScreenTime)) {
+        if (effective.contains(LocalToolOption.ScreenTime)) {
             tools.add(screenTimeTool)
         }
-        if (options.contains(LocalToolOption.Calendar)) {
+        if (effective.contains(LocalToolOption.Calendar)) {
             tools.add(calendarQueryTool)
             tools.add(calendarCreateTool)
         }
-        if (options.contains(LocalToolOption.ChartDisplay)) {
+        if (effective.contains(LocalToolOption.ChartDisplay)) {
             tools.add(chartDisplayTool)
         }
-        if (options.contains(LocalToolOption.PhoneAutomation)) {
+        if (effective.contains(LocalToolOption.PhoneAutomation)) {
             tools.add(phoneInspectScreenTool.withPhoneAutomationTracking())
             tools.add(phoneClickTool.withPhoneAutomationTracking())
             tools.add(phoneSwipeTool.withPhoneAutomationTracking())
@@ -122,7 +131,7 @@ class LocalTools(
             tools.add(phoneRunFlowTool.withPhoneAutomationTracking())
             tools.add(phoneManageFlowsTool.withPhoneAutomationTracking())
         }
-        if (options.contains(LocalToolOption.DesktopControl)) {
+        if (effective.contains(LocalToolOption.DesktopControl)) {
             tools.add(desktopScreenshotTool)
             tools.add(desktopClickTool)
             tools.add(desktopTypeTool)

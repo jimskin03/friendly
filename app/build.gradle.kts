@@ -62,6 +62,19 @@ android {
         }
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("nightly") {
+            dimension = "distribution"
+            isDefault = true
+            buildConfigField("boolean", "IS_PLAY_BUILD", "false")
+        }
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("boolean", "IS_PLAY_BUILD", "true")
+        }
+    }
+
     signingConfigs {
         create("release") {
             val localProperties = Properties()
@@ -164,8 +177,8 @@ composeCompiler {
 }
 
 tasks.register("buildAll") {
-    dependsOn("assembleRelease", "bundleRelease")
-    description = "Build both APK and AAB"
+    dependsOn("assembleNightlyRelease", "bundleNightlyRelease")
+    description = "Build nightly APK and AAB (full features)"
 }
 
 ksp {

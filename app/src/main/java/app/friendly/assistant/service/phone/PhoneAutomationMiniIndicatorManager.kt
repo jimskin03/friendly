@@ -1,5 +1,7 @@
 ﻿package app.friendly.assistant.service.phone
 
+import app.friendly.assistant.BuildConfig
+
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
@@ -331,7 +333,8 @@ class PhoneAutomationMiniIndicatorManager(
                     phoneCallController.snapshot,
                 ) { settings, session, workStatus, foreground, call ->
                     MiniSyncInput(
-                        enabled = settings.displaySetting.enablePhoneAutomationMiniIndicator &&
+                        enabled = !BuildConfig.IS_PLAY_BUILD &&
+                            settings.displaySetting.enablePhoneAutomationMiniIndicator &&
                             settings.displaySetting.phoneAutomationWindowMode == PhoneAutomationWindowMode.OFF,
                         sessionActive = session,
                         workStatus = workStatus,
@@ -384,6 +387,10 @@ class PhoneAutomationMiniIndicatorManager(
 
     /** Start a mini session (caller may minimize Friendly after this). Clears auto-show suppress. */
     fun activate() {
+        if (BuildConfig.IS_PLAY_BUILD) {
+            Log.i(TAG, "activate ignored — play build has no overlay automation")
+            return
+        }
         val display = settingsStore.settingsFlow.value.displaySetting
         if (
             !display.enablePhoneAutomationMiniIndicator ||

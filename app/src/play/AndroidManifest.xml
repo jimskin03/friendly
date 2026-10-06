@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Play Store distribution: cleartext off; phone automation / call / overlay not merged. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <application
+    android:usesCleartextTraffic="false"
+    tools:replace="android:usesCleartextTraffic" />
+
+</manifest>

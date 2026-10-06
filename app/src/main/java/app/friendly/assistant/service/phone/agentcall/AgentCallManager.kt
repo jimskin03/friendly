@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import app.friendly.assistant.AppScope
+import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.PHONE_CALL_NOTIFICATION_CHANNEL_ID
 import app.friendly.assistant.R
 import app.friendly.assistant.RouteActivity
@@ -56,6 +57,13 @@ class AgentCallManager(
         request: AgentCallRequest,
         wait: Boolean = true,
     ): AgentCallStatus {
+        if (BuildConfig.IS_PLAY_BUILD) {
+            return AgentCallStatus(
+                callId = "",
+                phase = AgentCallPhase.Failed,
+                error = "AI Phone Calls are unavailable in the Play Store build.",
+            )
+        }
         val displaySetting = settingsStore.settingsFlow.value.displaySetting
         if (!displaySetting.isAgentCallActive) {
             return AgentCallStatus(

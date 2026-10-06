@@ -3,6 +3,7 @@
 import android.net.Uri
 import android.content.Intent
 import android.provider.Settings as AndroidSettings
+import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.service.phone.PhoneAutomationMiniIndicatorManager
 import app.friendly.assistant.service.VoiceCaptureForegroundService
 import androidx.activity.compose.BackHandler
@@ -377,6 +378,10 @@ private fun ChatPageContent(
     }
 
     fun activatePhoneMiniMode(requireOverlay: Boolean = true) {
+        if (BuildConfig.IS_PLAY_BUILD) {
+            pendingPhoneMiniActivate = false
+            return
+        }
         if (setting.displaySetting.phoneAutomationWindowMode != PhoneAutomationWindowMode.OFF) {
             pendingPhoneMiniActivate = false
             return
@@ -552,12 +557,18 @@ private fun ChatPageContent(
                         onOpenComputer = {
                             showDesktopSheet = true
                         },
-                        onOpenPhone = {
-                            showPhoneAutomationSheet = true
+                        onOpenPhone = if (!BuildConfig.IS_PLAY_BUILD) {
+                            { showPhoneAutomationSheet = true }
+                        } else {
+                            null
                         },
-                        onLongOpenPhone = {
-                            // Explicit secondary action: long-press starts mini indicator.
-                            activatePhoneMiniMode()
+                        onLongOpenPhone = if (!BuildConfig.IS_PLAY_BUILD) {
+                            {
+                                // Explicit secondary action: long-press starts mini indicator.
+                                activatePhoneMiniMode()
+                            }
+                        } else {
+                            null
                         },
                         state = inputState,
                         messageQueue = messageQueue,
@@ -800,7 +811,7 @@ private fun ChatPageContent(
             )
         }
 
-        if (showPhoneAutomationSheet) {
+        if (!BuildConfig.IS_PLAY_BUILD && showPhoneAutomationSheet) {
             PhoneAutomationSheet(
                 assistant = assistant,
                 onUpdateAssistant = { updatedAssistant ->

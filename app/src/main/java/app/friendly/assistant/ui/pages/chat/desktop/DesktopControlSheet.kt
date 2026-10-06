@@ -119,6 +119,7 @@ import me.rerere.hugeicons.stroke.Stop
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import app.friendly.assistant.R
+import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.data.ai.tools.local.LocalToolOption
 import app.friendly.assistant.data.datastore.NetworkSetting
 import app.friendly.assistant.data.model.Assistant
@@ -753,7 +754,7 @@ fun DesktopControlSheet(
                             isVerticalScrollBarEnabled = false
                             isHorizontalScrollBarEnabled = false
                             overScrollMode = android.view.View.OVER_SCROLL_NEVER
-                            WebView.setWebContentsDebuggingEnabled(true)
+                            WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
                             @SuppressLint("SetJavaScriptEnabled")
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true

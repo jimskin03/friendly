@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.R
 import app.friendly.assistant.data.ai.tools.local.LocalToolOption
 import app.friendly.assistant.data.model.Assistant
@@ -210,20 +211,22 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
-            item(
-                headlineContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_screen_time_title))
-                },
-                supportingContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_screen_time_desc))
-                },
-                trailingContent = {
-                    Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.ScreenTime),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.ScreenTime, it) }
-                    )
-                }
-            )
+            if (!BuildConfig.IS_PLAY_BUILD) {
+                item(
+                    headlineContent = {
+                        Text(stringResource(R.string.assistant_page_local_tools_screen_time_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.assistant_page_local_tools_screen_time_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = assistant.localTools.contains(LocalToolOption.ScreenTime),
+                            onCheckedChange = { toggleLocalTool(LocalToolOption.ScreenTime, it) }
+                        )
+                    }
+                )
+            }
             item(
                 headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_calendar_title))
@@ -252,20 +255,22 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
-            item(
-                headlineContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_phone_automation_title))
-                },
-                supportingContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_phone_automation_desc))
-                },
-                trailingContent = {
-                    Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.PhoneAutomation),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.PhoneAutomation, it) }
-                    )
-                }
-            )
+            if (!BuildConfig.IS_PLAY_BUILD) {
+                item(
+                    headlineContent = {
+                        Text(stringResource(R.string.assistant_page_local_tools_phone_automation_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.assistant_page_local_tools_phone_automation_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = assistant.localTools.contains(LocalToolOption.PhoneAutomation),
+                            onCheckedChange = { toggleLocalTool(LocalToolOption.PhoneAutomation, it) }
+                        )
+                    }
+                )
+            }
             item(
                 headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_desktop_control_title))

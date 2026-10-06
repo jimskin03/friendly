@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.friendly.assistant.AppScope
+import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.PHONE_CALL_NOTIFICATION_CHANNEL_ID
 import app.friendly.assistant.R
 import app.friendly.assistant.data.datastore.SettingsStore
@@ -156,6 +157,13 @@ class PhoneCallController(
     }
 
     suspend fun placeCall(rawNumber: String): PhoneCallActionResult = withContext(Dispatchers.Main) {
+        if (BuildConfig.IS_PLAY_BUILD) {
+            return@withContext PhoneCallActionResult(
+                success = false,
+                action = "place_call",
+                detail = "Cellular calling is unavailable in the Play Store build.",
+            )
+        }
         when (val parsed = parseNumber(rawNumber)) {
             is ParsedNumber.Emergency -> PhoneCallActionResult(
                 success = false,
@@ -222,6 +230,13 @@ class PhoneCallController(
     }
 
     suspend fun endCall(): PhoneCallActionResult = withContext(Dispatchers.Main) {
+        if (BuildConfig.IS_PLAY_BUILD) {
+            return@withContext PhoneCallActionResult(
+                success = false,
+                action = "end_call",
+                detail = "Cellular calling is unavailable in the Play Store build.",
+            )
+        }
         val status = _snapshot.value.status
         if (status == CellularCallStatus.Idle) {
             return@withContext PhoneCallActionResult(

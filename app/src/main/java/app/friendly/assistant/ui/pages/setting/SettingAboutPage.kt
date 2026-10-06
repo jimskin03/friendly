@@ -149,10 +149,14 @@ fun SettingAboutPage() {
                             headlineContent = { Text(stringResource(R.string.about_page_developer)) },
                         )
                         item(
-                            modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onLongClick = { navController.navigate(Screen.Debug) },
-                            ),
+                            modifier = if (BuildConfig.DEBUG) {
+                                Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClick = { navController.navigate(Screen.Debug) },
+                                )
+                            } else {
+                                Modifier
+                            },
                             leadingContent = { Icon(HugeIcons.Code, null) },
                             supportingContent = { Text(BuildConfig.VERSION_NAME) },
                             headlineContent = { Text(stringResource(R.string.about_page_friendly_version)) },

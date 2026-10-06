@@ -126,11 +126,12 @@ Declared in the app manifest; optional features only work when you grant the mat
 | Notifications | Generation / foreground service updates |
 | Foreground services | Long-running chat generation / web server |
 | Calendar (read/write) | Calendar tools when enabled |
-| Usage access | Screen-time style features when enabled |
+| Usage access | Screen-time style features when enabled (**nightly** flavor only) |
 | Storage (legacy, max SDK 28) | Older Android file access |
-| **Accessibility service** | Phone Automation (inspect / gestures) — user must enable explicitly |
+| **Accessibility service** | Phone Automation (inspect / gestures) — user must enable explicitly (**nightly** flavor only; not registered in Play builds) |
+| Overlay / phone call permissions | Mini indicator + cellular place/answer call paths (**nightly** only) |
 
-Core chat works without accessibility, camera, or calendar. Review each provider’s privacy policy before sending prompts or attachments.
+Core chat works without accessibility, camera, or calendar. Review each provider’s privacy policy before sending prompts or attachments. The **play** product flavor omits or gates policy-risky phone automation, overlay, call, and usage-stats features for store submission.
 
 ---
 
@@ -236,17 +237,22 @@ corepack enable
 corepack prepare pnpm@11 --activate
 cd web-ui && pnpm install --frozen-lockfile && cd ..
 
-./gradlew :app:assembleDebug
+# Nightly (full features: phone automation, overlay, cellular calls, LAN cleartext)
+./gradlew :app:assembleNightlyDebug
+# Play-safer (gates a11y phone automation, overlay, call APIs, usage-stats screen time; cleartext off)
+./gradlew :app:assemblePlayDebug
 ```
 
-Install from `app/build/outputs/apk/debug/`. Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
+APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. Release: `assembleNightlyRelease` / `assemblePlayRelease` (CI nightly uses `assembleNightlyRelease`). Both flavors share `applicationId` `app.friendly.assistant` — Play and sideload builds cannot both be installed with different signing under the same ID.
+
+Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
 
 ### Tests
 
 ```bash
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testNightlyDebugUnitTest
 ./gradlew test
-./gradlew :app:connectedDebugAndroidTest   # device/emulator required
+./gradlew :app:connectedNightlyDebugAndroidTest   # device/emulator required
 ```
 
 ### Troubleshooting

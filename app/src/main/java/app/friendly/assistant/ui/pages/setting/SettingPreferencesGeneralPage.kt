@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.R
 import app.friendly.assistant.data.datastore.BackgroundEffectType
 import app.friendly.assistant.data.datastore.DisplaySetting
@@ -424,6 +425,7 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
+            if (!BuildConfig.IS_PLAY_BUILD) {
             item {
                 val context = LocalContext.current
                 var showOverlayPermissionDialog by remember { mutableStateOf(false) }
@@ -539,10 +541,11 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                     )
                 }
             }
+            }
         }
     }
 
-    if (showAgentCallDialog) {
+    if (!BuildConfig.IS_PLAY_BUILD && showAgentCallDialog) {
         var provider by remember { mutableStateOf(displaySetting.agentCallSetting.provider) }
         var apiKey by remember { mutableStateOf(displaySetting.agentCallSetting.apiKey) }
         var phoneNumberId by remember { mutableStateOf(displaySetting.agentCallSetting.phoneNumberId) }
