@@ -19,8 +19,6 @@ import me.rerere.rikkahub.ui.components.webview.WebViewState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,24 +28,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.webview.WebContent
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -61,12 +51,8 @@ fun WebAppPage(
     vm: AppsVM = koinViewModel(),
 ) {
     val settings = vm.settings.collectAsStateWithLifecycle().value
-    val navController = LocalNavController.current
-    val scope = rememberCoroutineScope()
     val id = remember(appId) { runCatching { Uuid.parse(appId) }.getOrNull() }
     val app = settings.installedWebApps.firstOrNull { it.id == id }
-    var showMenu by remember { mutableStateOf(false) }
-    var showRemoveConfirm by remember { mutableStateOf(false) }
 
     val startUrl = app?.startUrl?.takeIf { it.isNotBlank() } ?: "about:blank"
     val zoomMode = app?.zoomMode ?: WebAppZoomMode.AUTO
@@ -124,9 +110,6 @@ fun WebAppPage(
                     app = app,
                     state = state,
                     onWebViewCreated = onWebViewCreated,
-                    showMenu = showMenu,
-                    onShowMenu = { showMenu = it },
-                    onRemove = { showRemoveConfirm = true },
                 )
                 WebAppLaunchMode.FULLSIZE -> FullsizeWebApp(
                     state = state,
@@ -138,23 +121,6 @@ fun WebAppPage(
                 )
             }
         }
-        RikkaConfirmDialog(
-            show = showRemoveConfirm,
-            title = stringResource(R.string.apps_page_remove_title),
-            confirmText = stringResource(R.string.apps_page_remove),
-            dismissText = stringResource(R.string.cancel),
-            onConfirm = {
-                showRemoveConfirm = false
-                val removingId = app.id
-                scope.launch {
-                    vm.removeApp(removingId)
-                    navController.popBackStack()
-                }
-            },
-            onDismiss = { showRemoveConfirm = false },
-        ) {
-            Text(stringResource(R.string.apps_page_remove_message, app.name))
-        }
     }
 }
 
@@ -163,9 +129,6 @@ private fun CompactWebApp(
     app: InstalledWebApp,
     state: WebViewState,
     onWebViewCreated: (AndroidWebView) -> Unit,
-    showMenu: Boolean,
-    onShowMenu: (Boolean) -> Unit,
-    onRemove: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -179,27 +142,6 @@ private fun CompactWebApp(
                     )
                 },
                 navigationIcon = { BackButton() },
-                actions = {
-                    IconButton(onClick = { onShowMenu(true) }) {
-                        Icon(
-                            HugeIcons.MoreVertical,
-                            contentDescription = stringResource(R.string.apps_page_remove),
-                        )
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { onShowMenu(false) },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.apps_page_remove)) },
-                                leadingIcon = { Icon(HugeIcons.Delete01, contentDescription = null) },
-                                onClick = {
-                                    onShowMenu(false)
-                                    onRemove()
-                                },
-                            )
-                        }
-                    }
-                },
             )
         },
     ) { innerPadding ->
