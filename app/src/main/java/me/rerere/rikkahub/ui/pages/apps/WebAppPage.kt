@@ -12,7 +12,9 @@ import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.rikkahub.data.model.InstalledWebApp
 import me.rerere.rikkahub.data.model.WebAppLaunchMode
+import me.rerere.rikkahub.data.model.WebAppPermissionPolicy
 import me.rerere.rikkahub.data.model.WebAppZoomMode
+import me.rerere.rikkahub.ui.components.webview.WebViewSitePermissionPolicy
 import me.rerere.rikkahub.ui.components.webview.WebViewState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +77,13 @@ fun WebAppPage(
             settings = { applyInstalledWebAppSettings(zoomMode) },
         )
     }
+    // Per-app App options: Block denies the site's request without prompting.
+    val sitePermissionPolicy = WebViewSitePermissionPolicy(
+        camera = app?.cameraPermission != WebAppPermissionPolicy.BLOCK,
+        microphone = app?.microphonePermission != WebAppPermissionPolicy.BLOCK,
+        location = app?.locationPermission != WebAppPermissionPolicy.BLOCK,
+    )
+    SideEffect { state.sitePermissionPolicy = sitePermissionPolicy }
     val onWebViewCreated: (AndroidWebView) -> Unit = remember(zoomMode) {
         { webView -> webView.applyInstalledWebAppZoom(zoomMode) }
     }

@@ -44,6 +44,18 @@ enum class WebAppZoomMode {
         get() = this == AUTO || this == FIT_WIDTH
 }
 
+/**
+ * Per-app policy for a site permission (camera, microphone, location).
+ *
+ * - [ASK]: when the site asks, Friendly prompts the user (and Android if needed).
+ * - [BLOCK]: deny silently without prompting.
+ */
+@Serializable
+enum class WebAppPermissionPolicy {
+    ASK,
+    BLOCK,
+}
+
 const val MAX_FAVORITE_WEB_APPS = 4
 
 @Serializable
@@ -59,6 +71,9 @@ data class InstalledWebApp(
     val iconId: String = "",
     val favorite: Boolean = false,
     val zoomMode: WebAppZoomMode = WebAppZoomMode.AUTO,
+    val cameraPermission: WebAppPermissionPolicy = WebAppPermissionPolicy.ASK,
+    val microphonePermission: WebAppPermissionPolicy = WebAppPermissionPolicy.ASK,
+    val locationPermission: WebAppPermissionPolicy = WebAppPermissionPolicy.ASK,
 )
 
 fun canFavoriteWebApp(apps: List<InstalledWebApp>, id: Uuid, favorite: Boolean): Boolean {

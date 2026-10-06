@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.util.Log
 import android.view.ViewGroup.LayoutParams
 import android.webkit.ConsoleMessage
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,6 +48,57 @@ internal class MyWebChromeClient(private val state: WebViewState) : WebChromeCli
             )
         }
         return super.onConsoleMessage(consoleMessage);
+    }
+
+    override fun onPermissionRequest(request: PermissionRequest) {
+        val allowed = state.sitePermissionPolicy.allowedResources(request.resources)
+        if (allowed.isEmpty()) {
+            Log.i(TAG, "onPermissionRequest: blocked ${request.resources?.toList()} for ${request.origin}")
+            request.deny()
+            return
+        }
+        val pending = PendingSitePermission.Media(request, allowed)
+        val context = state.webView?.context
+        if (context != null && state.hasSessionGrant(pending.origin, allowed) &&
+            allowed.all { context.hasAndroidPermissionFor(it) }
+        ) {
+            request.grant(allowed.toTypedArray())
+            return
+        }
+        state.enqueueSitePermission(pending)
+    }
+
+    override fun onPermissionRequestCanceled(request: PermissionRequest) {
+        state.pendingSitePermissions
+            .filter { it is PendingSitePermission.Media && it.request === request }
+            .forEach { state.removeSitePermission(it) }
+    }
+
+    override fun onGeolocationPermissionsShowPrompt(
+        origin: String?,
+        callback: GeolocationPermissions.Callback?,
+    ) {
+        if (origin == null || callback == null) return
+        if (!state.sitePermissionPolicy.location) {
+            Log.i(TAG, "onGeolocationPermissionsShowPrompt: blocked for $origin")
+            callback.invoke(origin, false, false)
+            return
+        }
+        val pending = PendingSitePermission.Geolocation(origin, callback)
+        val context = state.webView?.context
+        if (context != null && state.hasSessionGrant(pending.origin, pending.resources) &&
+            context.hasAndroidPermissionFor(SITE_RESOURCE_GEOLOCATION)
+        ) {
+            callback.invoke(origin, true, false)
+            return
+        }
+        state.enqueueSitePermission(pending)
+    }
+
+    override fun onGeolocationPermissionsHidePrompt() {
+        state.pendingSitePermissions
+            .filter { it is PendingSitePermission.Geolocation }
+            .forEach { state.removeSitePermission(it) }
     }
 }
 
@@ -125,6 +179,7 @@ fun WebView(
                     settings.javaScriptEnabled = true // Enable JavaScript
                     settings.domStorageEnabled = true
                     settings.allowContentAccess = true
+                    settings.setGeolocationEnabled(true)
                     settings.apply(state.settings)
 
                     // Use the created clients
@@ -144,6 +199,9 @@ fun WebView(
             onRelease = {
                 if (state.webView === it) {
                     state.webView = null
+                    state.pendingSitePermissions.toList().forEach { pending ->
+                        state.denySitePermission(pending)
+                    }
                 }
                 it.release(state.interfaces)
                 Log.d(TAG, "AndroidView: Releasing WebView")
@@ -203,6 +261,11 @@ fun WebView(
             )
         }
     }
+
+    // Camera / microphone / location prompts for sites (only composed while one is queued).
+    if (state.pendingSitePermissions.isNotEmpty()) {
+        WebViewSitePermissionHandler(state)
+    }
 }
 
 // --- State and Content Definition ---
@@ -259,6 +322,35 @@ class WebViewState(
 
     // --- Settings ---
     var javaScriptEnabled: Boolean by mutableStateOf(true) // Example setting
+
+    // --- Site permissions (camera / microphone / location) ---
+    /** What sites in this WebView may ask for. Blocked kinds are denied without a prompt. */
+    var sitePermissionPolicy: WebViewSitePermissionPolicy by mutableStateOf(WebViewSitePermissionPolicy())
+
+    /** Site requests waiting for the user. The first one is shown. */
+    val pendingSitePermissions = mutableStateListOf<PendingSitePermission>()
+
+    /** origin -> resources the user allowed during this WebView session (not persisted). */
+    private val sessionSiteGrants = mutableMapOf<String, MutableSet<String>>()
+
+    internal fun enqueueSitePermission(pending: PendingSitePermission) {
+        pendingSitePermissions.add(pending)
+    }
+
+    /** Returns false when [pending] was no longer queued (already answered or cancelled). */
+    internal fun removeSitePermission(pending: PendingSitePermission): Boolean =
+        pendingSitePermissions.remove(pending)
+
+    internal fun rememberSessionGrant(origin: String, resources: Collection<String>) {
+        if (origin.isBlank()) return
+        sessionSiteGrants.getOrPut(origin) { mutableSetOf() }.addAll(resources)
+    }
+
+    internal fun hasSessionGrant(origin: String, resources: Collection<String>): Boolean {
+        if (origin.isBlank()) return false
+        val granted = sessionSiteGrants[origin] ?: return false
+        return granted.containsAll(resources)
+    }
 
     // --- WebView Instance ---
     // Hold the WebView instance internally to perform actions.

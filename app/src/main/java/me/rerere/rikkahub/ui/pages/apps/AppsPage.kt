@@ -62,6 +62,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.FolderLabel
 import me.rerere.rikkahub.data.model.InstalledWebApp
 import me.rerere.rikkahub.data.model.WebAppLaunchMode
+import me.rerere.rikkahub.data.model.WebAppPermissionPolicy
 import me.rerere.rikkahub.data.model.WebAppZoomMode
 import me.rerere.rikkahub.data.model.normalizeHttpsStartUrl
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -146,6 +147,9 @@ fun AppsPage(vm: AppsVM = koinViewModel()) {
             onDismiss = { editingId = null },
             onLaunchMode = { vm.updateLaunchMode(editing.id, it) },
             onZoomMode = { vm.updateZoomMode(editing.id, it) },
+            onCameraPermission = { vm.updateCameraPermission(editing.id, it) },
+            onMicrophonePermission = { vm.updateMicrophonePermission(editing.id, it) },
+            onLocationPermission = { vm.updateLocationPermission(editing.id, it) },
             onIcon = { vm.updateIcon(editing.id, it.id) },
             onFavorite = { favorite ->
                 if (!vm.setFavorite(editing.id, favorite)) {
@@ -254,6 +258,9 @@ private fun AppOptionsDialog(
     onDismiss: () -> Unit,
     onLaunchMode: (WebAppLaunchMode) -> Unit,
     onZoomMode: (WebAppZoomMode) -> Unit,
+    onCameraPermission: (WebAppPermissionPolicy) -> Unit,
+    onMicrophonePermission: (WebAppPermissionPolicy) -> Unit,
+    onLocationPermission: (WebAppPermissionPolicy) -> Unit,
     onIcon: (FolderLabel) -> Unit,
     onFavorite: (Boolean) -> Unit,
 ) {
@@ -281,6 +288,25 @@ private fun AppOptionsDialog(
                 ZoomModePicker(
                     selected = app.zoomMode,
                     onSelect = onZoomMode,
+                )
+                Text(
+                    text = stringResource(R.string.apps_site_permissions),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                SitePermissionPicker(
+                    label = stringResource(R.string.apps_permission_camera),
+                    selected = app.cameraPermission,
+                    onSelect = onCameraPermission,
+                )
+                SitePermissionPicker(
+                    label = stringResource(R.string.apps_permission_microphone),
+                    selected = app.microphonePermission,
+                    onSelect = onMicrophonePermission,
+                )
+                SitePermissionPicker(
+                    label = stringResource(R.string.apps_permission_location),
+                    selected = app.locationPermission,
+                    onSelect = onLocationPermission,
                 )
                 Text(
                     text = stringResource(R.string.apps_assign_logo),
@@ -381,6 +407,39 @@ private fun ZoomModePicker(
                 onClick = { onSelect(mode) },
                 label = { Text(label) },
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SitePermissionPicker(
+    label: String,
+    selected: WebAppPermissionPolicy,
+    onSelect: (WebAppPermissionPolicy) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            WebAppPermissionPolicy.entries.forEach { policy ->
+                val text = when (policy) {
+                    WebAppPermissionPolicy.ASK -> stringResource(R.string.apps_permission_ask)
+                    WebAppPermissionPolicy.BLOCK -> stringResource(R.string.apps_permission_block)
+                }
+                FilterChip(
+                    selected = policy == selected,
+                    onClick = { onSelect(policy) },
+                    label = { Text(text) },
+                )
+            }
         }
     }
 }
