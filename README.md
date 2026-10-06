@@ -110,7 +110,7 @@ Full host docs: [`host/README.md`](host/README.md) · [`host/SETUP_UBUNTU.md`](h
 | | |
 |---|---|
 | **Android** | 8.0 (API 26) or newer · `targetSdk` 37 |
-| **Application ID** | `app.friendly.assistant` (debug builds use `.debug`) |
+| **Application ID** | `friendly.cryptgregresearch.org` (debug builds use `.debug` → `friendly.cryptgregresearch.org.debug`) |
 | **Version** | 2.0.0 (`versionCode` 200) |
 | **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358`, Node.js 22 + pnpm 11 |
 
@@ -243,7 +243,7 @@ cd web-ui && pnpm install --frozen-lockfile && cd ..
 ./gradlew :app:assemblePlayDebug
 ```
 
-APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. Release: `assembleNightlyRelease` / `assemblePlayRelease`. Daily CI still invokes `assembleRelease` (builds all release flavors); nightly APKs are also synced to `app/build/outputs/apk/release/` for the existing publish path. Prefer `assembleNightlyRelease` locally. Both flavors share `applicationId` `app.friendly.assistant` — Play and sideload builds cannot both be installed with different signing under the same ID.
+APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. Release: `assembleNightlyRelease` / `assemblePlayRelease`. Daily CI still invokes `assembleRelease` (builds all release flavors); nightly APKs are also synced to `app/build/outputs/apk/release/` for the existing publish path. Prefer `assembleNightlyRelease` locally. Both flavors share `applicationId` `friendly.cryptgregresearch.org` — Play and sideload builds cannot both be installed with different signing under the same ID.
 
 Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
 

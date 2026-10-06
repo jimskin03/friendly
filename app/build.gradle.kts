@@ -37,7 +37,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.friendly.assistant"
+        applicationId = "friendly.cryptgregresearch.org"
         minSdk = 26
         targetSdk = 37
         versionCode = 300
