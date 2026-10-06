@@ -158,7 +158,10 @@ fun SettingAboutPage() {
                                 Modifier
                             },
                             leadingContent = { Icon(HugeIcons.Code, null) },
-                            supportingContent = { Text(BuildConfig.VERSION_NAME) },
+                            supportingContent = {
+                                val distribution = if (BuildConfig.IS_PLAY_BUILD) "Play" else "Nightly"
+                                Text("${BuildConfig.VERSION_NAME} · $distribution")
+                            },
                             headlineContent = { Text(stringResource(R.string.about_page_friendly_version)) },
                         )
                         item(
