@@ -907,6 +907,12 @@ data class DisplaySetting(
      */
     val enablePhoneCallAutoAnswerAttempt: Boolean = false,
     /**
+     * Hard gate for agent-on-call voice (SCO CallAudioBridge + place_call/end_call/mute_call).
+     * Default OFF. When on and a cellular call is Active, CallAudioBridge starts Bluetooth SCO
+     * so existing ASR/TTS ride the call communication path. No auto-answer.
+     */
+    val enableAgentSpeakOnCalls: Boolean = false,
+    /**
      * Experimental. Off keeps a normal full-screen launch.
      * Split or Popup asks the system to open Phone Automation app launches
      * in that window mode, and the mini indicator stays off until this is Off again.

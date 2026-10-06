@@ -915,12 +915,16 @@ internal fun buildPhoneManageFlowsTool(context: Context): Tool = Tool(
 
 
 
-internal fun buildPlaceCallTool(phoneCallController: PhoneCallController): Tool = Tool(
+internal fun buildPlaceCallTool(
+    phoneCallController: PhoneCallController,
+    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+): Tool = Tool(
     name = "place_call",
     description = """
-        Place a cellular phone call to a phone number using the system Phone app.
-        Uses the system Phone app and CALL_PHONE. Does not call WhatsApp or other chat apps.
-        Refuses emergency numbers. Voice speech-to-text stays on during the call.
+        Place a cellular phone call using the system Phone app (outbound only; no auto-answer).
+        Requires Settings → Agent may speak on calls to be ON; refuses clearly when off.
+        Pass number (digits with optional +) or contact_query (name lookup is best-effort / may ask for a number).
+        Does not call WhatsApp. When the call becomes Active, CallAudioBridge starts Bluetooth SCO so ASR/TTS can speak on the call.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -929,61 +933,154 @@ internal fun buildPlaceCallTool(phoneCallController: PhoneCallController): Tool 
                     put("type", "string")
                     put("description", "Phone number to call, digits with optional leading +")
                 })
+                put("contact_query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional contact name. This slice does not resolve contacts yet — prefer number.")
+                })
             },
-            required = listOf("number")
+            required = emptyList()
         )
     },
     execute = { args ->
-        val number = args.jsonObject["number"]?.jsonPrimitive?.contentOrNull ?: error("number is required")
-        val result = phoneCallController.placeCall(number)
-        listOf(UIMessagePart.Text(callActionJson(result)))
+        val refuse = refuseIfSpeakOnCallsOff(settingsStore, "place_call")
+        if (refuse != null) return@Tool listOf(UIMessagePart.Text(refuse))
+        val number = args.jsonObject["number"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val contact = args.jsonObject["contact_query"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        when {
+            number.isNotBlank() -> {
+                val result = phoneCallController.placeCall(number)
+                listOf(UIMessagePart.Text(callActionJson(result)))
+            }
+            contact.isNotBlank() -> {
+                listOf(
+                    UIMessagePart.Text(
+                        callActionJson(
+                            me.rerere.rikkahub.service.phone.PhoneCallActionResult(
+                                success = false,
+                                action = "place_call",
+                                detail = "contact_query lookup is not implemented in this SCO foundation slice. Pass a phone number in \"number\". Queried: $contact",
+                            )
+                        )
+                    )
+                )
+            }
+            else -> error("number or contact_query is required")
+        }
     }
 )
 
-internal fun buildEndCallTool(phoneCallController: PhoneCallController): Tool = Tool(
+internal fun buildEndCallTool(
+    phoneCallController: PhoneCallController,
+    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+): Tool = Tool(
     name = "end_call",
     description = """
-        Try to hang up the current cellular call. Silent hang-up usually fails unless this app is the default dialer.
-        Falls back to tapping End in the phone UI via accessibility, then opens the dialer. Not for WhatsApp.
+        Hang up the current cellular call. Requires Agent may speak on calls ON.
+        Silent hang-up usually fails unless this app is the default dialer; falls back to accessibility End tap / dialer.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {}, required = emptyList())
     },
     execute = {
+        val refuse = refuseIfSpeakOnCallsOff(settingsStore, "end_call")
+        if (refuse != null) return@Tool listOf(UIMessagePart.Text(refuse))
         val result = phoneCallController.endCall()
         listOf(UIMessagePart.Text(callActionJson(result)))
     }
 )
 
-internal fun buildReadCallStateTool(phoneCallController: PhoneCallController): Tool = Tool(
+internal fun buildMuteCallTool(
+    phoneCallController: PhoneCallController,
+    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+): Tool = Tool(
+    name = "mute_call",
+    description = """
+        Mute or unmute the call microphone (best-effort AudioManager mute). Requires Agent may speak on calls ON.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("muted", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "true to mute uplink mic, false to unmute")
+                })
+            },
+            required = listOf("muted")
+        )
+    },
+    execute = { args ->
+        val refuse = refuseIfSpeakOnCallsOff(settingsStore, "mute_call")
+        if (refuse != null) return@Tool listOf(UIMessagePart.Text(refuse))
+        val muted = args.jsonObject["muted"]?.jsonPrimitive?.booleanOrNull
+            ?: error("muted is required")
+        val result = phoneCallController.setMuted(muted)
+        listOf(UIMessagePart.Text(callActionJson(result)))
+    }
+)
+
+internal fun buildReadCallStateTool(
+    phoneCallController: PhoneCallController,
+    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+    callAudioBridge: me.rerere.rikkahub.service.phone.CallAudioBridge,
+): Tool = Tool(
     name = "read_call_state",
     description = """
-        Read the cellular call state (idle, ringing, offhook) and whether call permissions are granted.
-        The phone number is often hidden by Android. Does not report WhatsApp or other VoIP calls.
+        Read cellular call session (idle/dialing/ringing/active/ended), telephony status, mute, speak-on-calls toggle, and CallAudioBridge SCO state.
+        Does not report WhatsApp or other VoIP calls.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {}, required = emptyList())
     },
     execute = {
         val snap = phoneCallController.currentSnapshot()
+        val bridge = callAudioBridge.currentSnapshot()
+        val speakOn = settingsStore.settingsFlow.value.displaySetting.enableAgentSpeakOnCalls
         val payload = buildJsonObject {
             put("access_enabled", snap.accessEnabled)
+            put("agent_speak_on_calls", speakOn)
             put("auto_answer_attempt", snap.autoAnswerAttempt)
+            put("session", snap.session.name.lowercase())
             put("status", snap.status.name.lowercase())
             if (!snap.number.isNullOrBlank()) put("number", snap.number)
+            if (!snap.outboundNumber.isNullOrBlank()) put("outbound_number", snap.outboundNumber)
+            put("muted", snap.muted)
             put("call_phone_granted", snap.callPhoneGranted)
             put("read_phone_state_granted", snap.readPhoneStateGranted)
             put("answer_phone_calls_granted", snap.answerPhoneCallsGranted)
             put("accessibility_active", snap.accessibilityActive)
             put("silent_answer_reliable", snap.silentAnswerReliable)
             put("silent_hangup_reliable", snap.silentHangupReliable)
-            put("voice_stt", "Mini-indicator voice mode stays running. STT pauses only while the cellular call is off-hook, then resumes.")
+            put("bridge_status", bridge.status.name.lowercase())
+            put("bridge_sco_on", bridge.scoOn)
+            put("bridge_detail", bridge.detail)
+            put("bluetooth_connect_granted", callAudioBridge.bluetoothConnectGranted())
+            put("bluetooth_adapter_enabled", callAudioBridge.bluetoothAdapterEnabled())
+            put(
+                "voice_path",
+                "When agent_speak_on_calls is on and session=active, CallAudioBridge starts Bluetooth SCO; " +
+                    "existing ASR (VOICE_COMMUNICATION) and TTS (USAGE_VOICE_COMMUNICATION) ride that path. " +
+                    "No full audio is logged.",
+            )
             put("limitation", snap.limitation)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
 
+private fun refuseIfSpeakOnCallsOff(
+    settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+    action: String,
+): String? {
+    if (settingsStore.settingsFlow.value.displaySetting.enableAgentSpeakOnCalls) return null
+    return callActionJson(
+        me.rerere.rikkahub.service.phone.PhoneCallActionResult(
+            success = false,
+            action = action,
+            detail = "Refused: enable Settings → Agent may speak on calls before using $action. " +
+                "This hard gate prevents accidental on-call voice / dialing by the agent.",
+        )
+    )
+}
 
 private const val SCREEN_TEXT_NODE_LIMIT = 100
 private const val SCREEN_TEXT_CHAR_LIMIT = 200
@@ -1218,6 +1315,7 @@ private fun phoneAutomationStepFor(name: String, args: kotlinx.serialization.jso
         "phone_manage_flows" -> PhoneAutomationStep.ManageFlows
         "place_call" -> PhoneAutomationStep.PlaceCall
         "end_call" -> PhoneAutomationStep.EndCall
+        "mute_call" -> PhoneAutomationStep.MuteCall
         "read_call_state" -> PhoneAutomationStep.ReadCall
         else -> PhoneAutomationStep.Other
     }

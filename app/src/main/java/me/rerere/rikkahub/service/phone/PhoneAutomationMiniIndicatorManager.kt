@@ -159,6 +159,7 @@ class PhoneAutomationMiniIndicatorManager(
     appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val phoneCallController: PhoneCallController,
+    private val callAudioBridge: CallAudioBridge,
 ) {
     companion object {
         const val NOTIFICATION_ID = 2003
@@ -336,26 +337,32 @@ class PhoneAutomationMiniIndicatorManager(
                         workStatus = workStatus,
                         appForeground = foreground,
                         call = call,
+                        bridgeLive = false, // filled below from CallAudioBridge
                     )
                 },
+                callAudioBridge.snapshot,
                 PhoneAutomationService.activity,
                 voicePhase,
-            ) { input, activity, voice ->
+            ) { input, bridge, activity, voice ->
+                val bridgeLive = bridge.status == CallAudioBridgeStatus.Starting ||
+                    bridge.status == CallAudioBridgeStatus.Bridging
+                val synced = input.copy(bridgeLive = bridgeLive)
                 IndicatorState(
-                    enabled = input.enabled,
-                    sessionActive = input.sessionActive,
-                    workStatus = input.workStatus,
-                    appForeground = input.appForeground,
+                    enabled = synced.enabled,
+                    sessionActive = synced.sessionActive,
+                    workStatus = synced.workStatus,
+                    appForeground = synced.appForeground,
                     canDrawOverlays = Settings.canDrawOverlays(app),
-                    live = isAutoShowLive(input.call, input.workStatus, activity),
+                    live = isAutoShowLive(synced.call, synced.workStatus, activity),
                     statusLine = formatMiniLiveLine(
                         app,
                         resolveMiniLive(
-                            work = input.workStatus,
+                            work = synced.workStatus,
                             activity = activity,
-                            call = input.call,
+                            call = synced.call,
                             voice = voice,
-                            sessionActive = input.sessionActive,
+                            sessionActive = synced.sessionActive,
+                            bridgeLive = synced.bridgeLive,
                         ),
                     ),
                 )
@@ -637,11 +644,14 @@ class PhoneAutomationMiniIndicatorManager(
                         val work by PhoneAutomationService.workStatus.collectAsState()
                         val activity by PhoneAutomationService.activity.collectAsState()
                         val call by phoneCallController.snapshot.collectAsState()
+                        val bridge by callAudioBridge.snapshot.collectAsState()
                         val voice by voicePhase.collectAsState()
                         val session by sessionActive.collectAsState()
                         val showOpt by showOptions.collectAsState()
                         val screenH = app.resources.displayMetrics.heightPixels.toFloat()
                         val menuAbove = (control?.position?.y ?: 0f) > screenH * 0.65f
+                        val bridgeLive = bridge.status == CallAudioBridgeStatus.Starting ||
+                            bridge.status == CallAudioBridgeStatus.Bridging
                         MiniIndicatorBubble(
                             status = miniIndicatorStatus(
                                 work = work,
@@ -649,6 +659,7 @@ class PhoneAutomationMiniIndicatorManager(
                                 call = call,
                                 voice = voice,
                                 sessionActive = session,
+                                bridgeLive = bridgeLive,
                             ),
                             showOptions = showOpt,
                             menuAbove = menuAbove,
@@ -757,6 +768,7 @@ private data class MiniSyncInput(
     val workStatus: PhoneAutomationWorkStatus,
     val appForeground: Boolean,
     val call: CellularCallSnapshot,
+    val bridgeLive: Boolean,
 )
 
 private enum class MiniLiveKind {
@@ -810,6 +822,7 @@ private fun stepStatusRes(step: PhoneAutomationStep): Int = when (step) {
     PhoneAutomationStep.PressKey -> R.string.phone_mini_status_press_key
     PhoneAutomationStep.PlaceCall -> R.string.phone_mini_status_calling
     PhoneAutomationStep.EndCall -> R.string.phone_mini_status_ending_call
+    PhoneAutomationStep.MuteCall -> R.string.phone_mini_status_checking_call
     PhoneAutomationStep.ReadCall -> R.string.phone_mini_status_checking_call
     PhoneAutomationStep.AssertVisible -> R.string.phone_mini_status_inspect
     PhoneAutomationStep.ScrollUntilVisible -> R.string.phone_mini_status_swiping
@@ -830,11 +843,28 @@ private fun resolveMiniLive(
     call: CellularCallSnapshot,
     voice: VoicePhase,
     sessionActive: Boolean,
+    bridgeLive: Boolean = false,
 ): MiniLiveResolution {
     val number = knownCallNumber(call)
     val outbound = call.outboundNumber?.takeIf { it.isNotBlank() }
     return when {
         call.status == CellularCallStatus.Offhook -> {
+            // When SCO bridge is live, surface On call + Listening/Speaking for agent-on-call.
+            if (bridgeLive && sessionActive) {
+                when (voice) {
+                    VoicePhase.Listening, VoicePhase.Transcribing, VoicePhase.Connecting ->
+                        return MiniLiveResolution(
+                            MiniLiveKind.Listening,
+                            R.string.phone_mini_status_on_call_listening,
+                        )
+                    VoicePhase.Speaking ->
+                        return MiniLiveResolution(
+                            MiniLiveKind.Speaking,
+                            R.string.phone_mini_status_on_call_speaking,
+                        )
+                    else -> Unit
+                }
+            }
             val (res, arg) = labeledNumber(
                 number,
                 R.string.phone_mini_status_on_call,
@@ -905,8 +935,9 @@ private fun miniIndicatorStatus(
     call: CellularCallSnapshot,
     voice: VoicePhase,
     sessionActive: Boolean,
+    bridgeLive: Boolean = false,
 ): MiniIndicatorStatus {
-    val resolved = resolveMiniLive(work, activity, call, voice, sessionActive)
+    val resolved = resolveMiniLive(work, activity, call, voice, sessionActive, bridgeLive)
     val label = resolved.labelRes?.let { res ->
         val arg = resolved.numberArg
         if (arg != null) stringResource(res, arg) else stringResource(res)

@@ -30,6 +30,12 @@
   <string name="phone_automation_window_mode_off">Off</string>
   <string name="phone_automation_window_mode_split">Split window</string>
   <string name="phone_automation_window_mode_popup">Popup window</string>
+  <string name="agent_speak_on_calls_title">Agent may speak on calls</string>
+  <string name="agent_speak_on_calls_desc">Allow the agent to place cellular calls and speak with the other person using voice (Bluetooth SCO audio bridge). Default: off. Requires phone permissions; SCO routing is OEM-dependent.</string>
+  <string name="notification_call_audio_bridge_title">On-call voice bridge</string>
+  <string name="notification_call_audio_bridge_content">Friendly is bridging call audio for the agent — tap to return</string>
+  <string name="phone_mini_status_on_call_listening">On call · Listening</string>
+  <string name="phone_mini_status_on_call_speaking">On call · Speaking</string>
   <string name="phone_mini_indicator_title">Phone Automation mini indicator</string>
   <string name="phone_mini_indicator_desc">When enabled, you can minimize Friendly into a floating status indicator (from the Phone sheet or by long-pressing the phone icon). The indicator also appears on its own during a call or while the agent is working, and shows the live status. An ongoing notification is used as backup. Default: on.</string>
   <string name="phone_mini_indicator_running">Running</string>
@@ -76,6 +82,8 @@
   <string name="permission_read_phone_state_desc">Allow Friendly to see whether a cellular call is ringing, active, or idle</string>
   <string name="permission_answer_phone_calls">Answer calls</string>
   <string name="permission_answer_phone_calls_desc">Legacy permission used only as a best-effort answer or hang-up. Android 10+ still requires the default dialer for silent control.</string>
+  <string name="permission_bluetooth_connect">Bluetooth connect</string>
+  <string name="permission_bluetooth_connect_desc">Needed so the on-call SCO audio bridge can start Bluetooth SCO for agent voice on cellular calls</string>
     <string name="desktop_action_snap">Snap to Chat</string>
     <string name="desktop_action_stop">Stop Stream</string>
   <string name="desktop_action_reconnect">Reconnect</string>

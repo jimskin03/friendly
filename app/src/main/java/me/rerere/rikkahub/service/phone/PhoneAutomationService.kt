@@ -78,6 +78,7 @@ enum class PhoneAutomationStep {
     PressKey,
     PlaceCall,
     EndCall,
+    MuteCall,
     ReadCall,
     AssertVisible,
     ScrollUntilVisible,

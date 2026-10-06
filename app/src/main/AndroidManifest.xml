@@ -29,6 +29,12 @@
   <uses-permission android:name="android.permission.READ_PHONE_STATE" />
   <!-- Best-effort answer/end on API 26–28. Android 10+ still limits these to the default dialer. -->
   <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+  <!-- CallAudioBridge SCO: route call audio toward ASR/TTS communication streams -->
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+  <uses-permission
+    android:name="android.permission.BLUETOOTH"
+    android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
   <uses-feature
     android:name="android.hardware.camera"
@@ -151,6 +157,10 @@
       android:foregroundServiceType="dataSync" />
     <service
       android:name=".service.VoiceCaptureForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="microphone" />
+    <service
+      android:name=".service.phone.CallAudioBridgeService"
       android:exported="false"
       android:foregroundServiceType="microphone" />
     <service

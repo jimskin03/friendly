@@ -35,13 +35,28 @@ enum class CellularCallStatus {
     Offhook,
 }
 
+/**
+ * Higher-level call session for agent-on-call UX / tools.
+ * Maps telephony idle/ringing/offhook plus outbound dial tracking.
+ */
+enum class CallSessionPhase {
+    Idle,
+    Dialing,
+    Ringing,
+    Active,
+    Ended,
+}
+
 data class CellularCallSnapshot(
     val accessEnabled: Boolean = false,
     val autoAnswerAttempt: Boolean = false,
     val status: CellularCallStatus = CellularCallStatus.Unknown,
+    /** Agent-facing session phase (idle / dialing / ringing / active / ended). */
+    val session: CallSessionPhase = CallSessionPhase.Idle,
     val number: String? = null,
     /** Dialed number for an ACTION_CALL that has not yet gone live and then idle. */
     val outboundNumber: String? = null,
+    val muted: Boolean = false,
     val callPhoneGranted: Boolean = false,
     val readPhoneStateGranted: Boolean = false,
     val answerPhoneCallsGranted: Boolean = false,
@@ -87,6 +102,13 @@ class PhoneCallController(
     /** True after Ringing or Offhook has been seen for the current outbound attempt. */
     @Volatile
     private var outboundSawLive: Boolean = false
+
+    /** Latches Ended briefly after a live call returns to idle so UI/tools can observe it. */
+    @Volatile
+    private var sessionEndedLatch: Boolean = false
+
+    @Volatile
+    private var mutedDesired: Boolean = false
 
     @Suppress("DEPRECATION")
     private val legacyListener = object : PhoneStateListener() {
@@ -160,6 +182,7 @@ class PhoneCallController(
                     val mode = if (granted) "action_call" else "action_dial"
                     if (mode == "action_call") {
                         outboundSawLive = false
+                        sessionEndedLatch = false
                         publishSnapshot(
                             status = _snapshot.value.status,
                             number = _snapshot.value.number,
@@ -172,8 +195,8 @@ class PhoneCallController(
                         mode = mode,
                         detail = if (granted) {
                             "Started a cellular call to ${parsed.number} with the system phone app. " +
-                                "Voice input remains active while the cellular call is in progress. " +
-                                "WhatsApp and other VoIP apps are not used."
+                                "When Agent may speak on calls is on, CallAudioBridge starts SCO on Active " +
+                                "so ASR/TTS can ride the call path. WhatsApp and other VoIP apps are not used."
                         } else {
                             "CALL_PHONE is not granted, so the system dialer was opened with ${parsed.number} filled in. " +
                                 "The user must tap call. Grant phone permissions in Phone Automation to place calls directly."
@@ -276,6 +299,44 @@ class PhoneCallController(
         )
     }
 
+    /**
+     * Best-effort mute of the uplink microphone while on a cellular call.
+     * Uses [android.media.AudioManager.setMicrophoneMute]. Not reliable as a
+     * dialer-owned InCallService mute; SCO bridge TTS still uses the playback path.
+     */
+    suspend fun setMuted(muted: Boolean): PhoneCallActionResult = withContext(Dispatchers.Main) {
+        val status = _snapshot.value.status
+        if (status != CellularCallStatus.Offhook && status != CellularCallStatus.Ringing) {
+            return@withContext PhoneCallActionResult(
+                success = false,
+                action = "mute_call",
+                detail = "No active cellular call to mute (state=${status.name.lowercase()}).",
+            )
+        }
+        val audio = app.getSystemService(android.media.AudioManager::class.java)
+        return@withContext try {
+            audio.isMicrophoneMute = muted
+            mutedDesired = muted
+            publishSnapshot(_snapshot.value.status, _snapshot.value.number)
+            PhoneCallActionResult(
+                success = true,
+                action = "mute_call",
+                mode = "audio_manager_mic_mute",
+                detail = if (muted) {
+                    "Requested microphone mute via AudioManager. OEM/dialer may still show unmuted; confirm on device."
+                } else {
+                    "Cleared AudioManager microphone mute."
+                },
+            )
+        } catch (e: Exception) {
+            PhoneCallActionResult(
+                success = false,
+                action = "mute_call",
+                detail = "Mute failed (${e.javaClass.simpleName}): ${e.message?.take(120).orEmpty()}",
+            )
+        }
+    }
+
     fun currentSnapshot(): CellularCallSnapshot {
         publishSnapshot(_snapshot.value.status, _snapshot.value.number)
         return _snapshot.value
@@ -368,10 +429,15 @@ class PhoneCallController(
         val outbound = when (status) {
             CellularCallStatus.Ringing, CellularCallStatus.Offhook -> {
                 outboundSawLive = true
+                sessionEndedLatch = false
+                if (status == CellularCallStatus.Offhook) mutedDesired = false
                 _snapshot.value.outboundNumber
             }
             else -> if (outboundSawLive) {
                 outboundSawLive = false
+                sessionEndedLatch = previous == CellularCallStatus.Offhook ||
+                    previous == CellularCallStatus.Ringing
+                mutedDesired = false
                 null
             } else {
                 _snapshot.value.outboundNumber
@@ -380,7 +446,7 @@ class PhoneCallController(
         val shownNumber = number?.takeIf { it.isNotBlank() }
             ?: _snapshot.value.number?.takeIf { status != CellularCallStatus.Idle }
         publishSnapshot(status, shownNumber, outboundNumber = outbound)
-        Log.i(TAG, "Call state $previous -> $status")
+        Log.i(TAG, "Call state $previous -> $status session=${_snapshot.value.session}")
 
         if (status == CellularCallStatus.Ringing && previous != CellularCallStatus.Ringing) {
             answerAttemptedForRing = false
@@ -481,12 +547,19 @@ class PhoneCallController(
         number: String?,
         outboundNumber: String? = _snapshot.value.outboundNumber,
     ) {
+        val session = resolveSessionPhase(status, outboundNumber)
+        if (session != CallSessionPhase.Ended) {
+            // Keep Ended only while idle right after a live call; clear once we leave idle.
+            if (status != CellularCallStatus.Idle) sessionEndedLatch = false
+        }
         _snapshot.value = CellularCallSnapshot(
             accessEnabled = true,
             autoAnswerAttempt = false,
             status = status,
+            session = session,
             number = number,
             outboundNumber = outboundNumber,
+            muted = mutedDesired,
             callPhoneGranted = hasPermission(Manifest.permission.CALL_PHONE),
             readPhoneStateGranted = hasPermission(Manifest.permission.READ_PHONE_STATE),
             answerPhoneCallsGranted = hasPermission(Manifest.permission.ANSWER_PHONE_CALLS),
@@ -495,6 +568,23 @@ class PhoneCallController(
             silentHangupReliable = false,
             limitation = LIMITATION,
         )
+    }
+
+    private fun resolveSessionPhase(
+        status: CellularCallStatus,
+        outboundNumber: String?,
+    ): CallSessionPhase = when (status) {
+        CellularCallStatus.Ringing -> CallSessionPhase.Ringing
+        CellularCallStatus.Offhook -> CallSessionPhase.Active
+        CellularCallStatus.Idle -> when {
+            !outboundNumber.isNullOrBlank() -> CallSessionPhase.Dialing
+            sessionEndedLatch -> CallSessionPhase.Ended
+            else -> CallSessionPhase.Idle
+        }
+        CellularCallStatus.Unknown -> when {
+            !outboundNumber.isNullOrBlank() -> CallSessionPhase.Dialing
+            else -> CallSessionPhase.Idle
+        }
     }
 
     private fun hasPermission(permission: String): Boolean =

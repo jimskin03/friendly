@@ -494,6 +494,18 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.agent_speak_on_calls_title)) },
+                        supportingContent = { Text(stringResource(R.string.agent_speak_on_calls_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableAgentSpeakOnCalls,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(enableAgentSpeakOnCalls = it))
+                                }
+                            )
+                        },
+                    )
                 }
             }
         }

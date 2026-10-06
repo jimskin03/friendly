@@ -33,7 +33,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get())
     }
 
     single {
@@ -100,11 +100,21 @@ val appModule = module {
     }
 
     single(createdAtStart = true) {
+        me.rerere.rikkahub.service.phone.CallAudioBridge(
+            app = get(),
+            appScope = get(),
+            settingsStore = get(),
+            phoneCallController = get(),
+        )
+    }
+
+    single(createdAtStart = true) {
         PhoneAutomationMiniIndicatorManager(
             app = get(),
             appScope = get(),
             settingsStore = get(),
             phoneCallController = get(),
+            callAudioBridge = get(),
         )
     }
 
