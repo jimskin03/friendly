@@ -71,14 +71,30 @@ fun FriendlyTheme(
             theme.getColorScheme(dark = darkTheme)
         }
     }
-    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
-        if (darkTheme && amoledDarkMode) {
+    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme, catStyle) {
+        val amoled = if (darkTheme && amoledDarkMode) {
             colorScheme.copy(
                 background = AMOLED_DARK_BACKGROUND,
                 surface = AMOLED_DARK_BACKGROUND,
             )
         } else {
             colorScheme
+        }
+        // Settings and non-home screens: solid theme colors only (never a cat photo wallpaper).
+        when (catStyle) {
+            CatHomeStyleId.CUTE_MINIMAL, CatHomeStyleId.PLAYFUL_DOODLE -> amoled.copy(
+                background = Color(0xFFF7F1E6),
+                surface = Color(0xFFFFFBF5),
+            )
+            CatHomeStyleId.COZY_NIGHT -> amoled.copy(
+                background = Color(0xFF140E0C),
+                surface = Color(0xFF1A1210),
+            )
+            CatHomeStyleId.GLASS_FROST -> amoled.copy(
+                background = Color(0xFF1A1210),
+                surface = Color(0xFF211814),
+            )
+            CatHomeStyleId.NONE -> amoled
         }
     }
     val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors

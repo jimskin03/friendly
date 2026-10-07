@@ -21,6 +21,8 @@ import app.friendly.assistant.ui.theme.homeChromeFor
 
 @Composable
 fun AssistantBackground(setting: Settings, modifier: Modifier) {
+    // Photo wallpapers apply on the chat/home canvas only — Settings uses solid MaterialTheme colors.
+
     val chrome = homeChromeFor(catHomeStyleId(setting.themeId))
     if (chrome.backgroundRes != null) {
         Box(modifier = modifier.fillMaxSize()) {

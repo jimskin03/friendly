@@ -172,16 +172,6 @@ fun AssistantHome(
                         .fillMaxWidth(0.72f)
                         .height(96.dp),
                 )
-                if (chrome.styleId == CatHomeStyleId.PLAYFUL_DOODLE) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_cat_heart),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(start = 36.dp, top = 4.dp)
-                            .size(22.dp),
-                    )
-                }
             }
         }
 
