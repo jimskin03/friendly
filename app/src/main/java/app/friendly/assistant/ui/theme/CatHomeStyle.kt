@@ -123,7 +123,6 @@ fun homeChromeFor(styleId: CatHomeStyleId): HomeChrome = when (styleId) {
         chevron = Color(0xFFA89888),
         time = Color(0xFFA89888),
         darkChrome = true,
-        headerImageRes = R.drawable.theme_cat_cozy_header,
         backgroundRes = R.drawable.theme_cat_cozy_bg,
     )
 

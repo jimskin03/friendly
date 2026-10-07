@@ -33,9 +33,10 @@ fun AssistantBackground(setting: Settings, modifier: Modifier) {
                 modifier = Modifier.fillMaxSize(),
             )
             // Soft veil so chrome cards stay readable
+            // Soft atmospheric presence: cat faintly suggested, never competing with cards.
             val veil = when (chrome.styleId) {
-                CatHomeStyleId.GLASS_FROST -> Color(0x33000000)
-                CatHomeStyleId.COZY_NIGHT -> Color(0x66000000)
+                CatHomeStyleId.GLASS_FROST -> Color(0x6614100C)
+                CatHomeStyleId.COZY_NIGHT -> Color(0x99100A08)
                 else -> Color.Transparent
             }
             if (veil.alpha > 0f) {
