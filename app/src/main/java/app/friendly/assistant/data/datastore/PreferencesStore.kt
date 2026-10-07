@@ -198,6 +198,7 @@ class SettingsStore(
 
 
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
+        val PAID_THEMES_UNLOCKED = booleanPreferencesKey("paid_themes_unlocked")
 
         // Uses the same DataStore singleton without starting settings flows or requiring Koin.
         internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings) {
@@ -272,6 +273,7 @@ class SettingsStore(
                 preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
                 preferences[LAUNCH_COUNT] = settings.launchCount
                 preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+                preferences[PAID_THEMES_UNLOCKED] = settings.paidThemesUnlocked
             }
         }
 
@@ -426,6 +428,7 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                paidThemesUnlocked = preferences[PAID_THEMES_UNLOCKED] == true,
             )
         }
         .map {
@@ -773,6 +776,8 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    /** Play unlock flag for paid theme pack. Nightly ignores this and always unlocks. */
+    val paidThemesUnlocked: Boolean = false,
 ) {
     companion object {
 

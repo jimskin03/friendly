@@ -984,6 +984,9 @@
   <string name="setting_page_theme_setting_desc">Customize app color scheme</string>
   <string name="setting_theme_page_preset_themes">Preset Themes</string>
   <string name="setting_theme_page_custom_themes">Custom Themes</string>
+  <string name="setting_theme_page_paid_themes">Paid Themes</string>
+  <string name="setting_theme_page_paid_locked_title">Paid theme</string>
+  <string name="setting_theme_page_paid_locked_message">These themes are part of the paid theme pack. Unlock will be available via Play billing in a future update. Nightly builds include them free.</string>
   <string name="setting_theme_page_add_theme">New</string>
   <string name="setting_theme_page_no_custom_themes">No custom themes yet</string>
   <string name="setting_theme_page_create_theme">Create Theme</string>
@@ -997,7 +1000,7 @@
   <string name="setting_theme_page_import_theme">Import</string>
   <string name="setting_theme_page_export_success">Theme JSON copied to clipboard</string>
   <string name="setting_theme_page_import_success">Theme imported successfully</string>
-  <string name="setting_theme_page_dynamic_color_hint">Dynamic color is enabled. Disable it in Preferences &gt; Theme to use custom themes.</string>
+  <string name="setting_theme_page_dynamic_color_hint">Dynamic color is enabled. Disable it in Preferences &gt; Theme to use preset and paid themes.</string>
   <string name="setting_page_tts_service">Speech Services</string>
   <string name="setting_page_tts_service_desc">Configure text-to-speech and speech recognition providers</string>
   <string name="setting_page_tts_settings">TTS Settings</string>
@@ -1216,6 +1219,10 @@
   <string name="theme_name_ocean">Ocean Blue</string>
   <string name="theme_name_sakura">Sakura Pink</string>
   <string name="theme_name_spring">Meadow Green</string>
+  <string name="theme_name_azure_soft">Azure Soft</string>
+  <string name="theme_name_matcha_leaf">Matcha Leaf</string>
+  <string name="theme_name_olive_honey">Olive Honey</string>
+  <string name="theme_name_rose_quartz">Rose Quartz</string>
   <string name="title_activity_safe_mode">Safe Mode</string>
   <string name="tools_warning">The current model does not have tool calling enabled. Please enable the model\'s tool capabilities in the settings to use features like search/MCP.</string>
     <string name="tts">TTS</string>

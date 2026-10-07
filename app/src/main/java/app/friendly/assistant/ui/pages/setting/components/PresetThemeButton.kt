@@ -1,9 +1,11 @@
-﻿package app.friendly.assistant.ui.pages.setting.components
+package app.friendly.assistant.ui.pages.setting.components
 
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.MoneyBag02
 import me.rerere.hugeicons.stroke.Tick01
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -37,12 +39,14 @@ import androidx.compose.ui.util.fastForEach
 import app.friendly.assistant.ui.theme.LocalDarkMode
 import app.friendly.assistant.ui.theme.PresetTheme
 import app.friendly.assistant.ui.theme.PresetThemes
+import app.friendly.assistant.ui.theme.presets.PaidThemes
 
 @Composable
 fun PresetThemeButton(
     theme: PresetTheme,
     selected: Boolean,
     modifier: Modifier = Modifier,
+    locked: Boolean = false,
     onClick: () -> Unit
 ) {
     val darkMode = LocalDarkMode.current
@@ -99,12 +103,29 @@ fun PresetThemeButton(
                     )
                 )
             }
-            if (selected) {
+            if (selected && !locked) {
                 Icon(
                     HugeIcons.Tick01,
                     contentDescription = null,
                     tint = scheme.contentColorFor(scheme.onPrimary)
                 )
+            }
+            if (locked) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        HugeIcons.MoneyBag02,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
             }
         }
         ProvideTextStyle(
@@ -124,7 +145,10 @@ private const val THEME_GRID_COLUMNS = 4
 fun PresetThemeButtonGroup(
     themeId: String,
     modifier: Modifier = Modifier,
+    themes: List<PresetTheme> = PresetThemes,
+    lockedThemeIds: Set<String> = emptySet(),
     onChangeTheme: (String) -> Unit,
+    onLockedClick: ((String) -> Unit)? = null,
 ) {
     FlowRow(
         modifier = modifier
@@ -134,20 +158,26 @@ fun PresetThemeButtonGroup(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         maxItemsInEachRow = THEME_GRID_COLUMNS,
     ) {
-        PresetThemes.fastForEach { theme ->
+        themes.fastForEach { theme ->
             key(theme.id) {
+                val locked = theme.id in lockedThemeIds
                 PresetThemeButton(
                     theme = theme,
                     selected = theme.id == themeId,
+                    locked = locked,
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        onChangeTheme(theme.id)
+                        if (locked) {
+                            onLockedClick?.invoke(theme.id)
+                        } else {
+                            onChangeTheme(theme.id)
+                        }
                     },
                 )
             }
         }
 
-        repeat((THEME_GRID_COLUMNS - PresetThemes.size % THEME_GRID_COLUMNS) % THEME_GRID_COLUMNS) {
+        repeat((THEME_GRID_COLUMNS - themes.size % THEME_GRID_COLUMNS) % THEME_GRID_COLUMNS) {
             Spacer(modifier = Modifier.weight(1f))
         }
     }
@@ -157,8 +187,17 @@ fun PresetThemeButtonGroup(
 @Composable
 fun PresetThemeButtonPreview() {
     var themeId by remember { mutableStateOf("ocean") }
-    PresetThemeButtonGroup(
-        themeId = themeId,
-        onChangeTheme = { themeId = it }
-    )
+    Column {
+        PresetThemeButtonGroup(
+            themeId = themeId,
+            onChangeTheme = { themeId = it }
+        )
+        PresetThemeButtonGroup(
+            themeId = themeId,
+            themes = PaidThemes,
+            lockedThemeIds = PaidThemes.map { it.id }.toSet(),
+            onChangeTheme = { themeId = it },
+            onLockedClick = {},
+        )
+    }
 }
