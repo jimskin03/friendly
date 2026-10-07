@@ -7,9 +7,8 @@ import app.friendly.assistant.ui.theme.CustomTheme
 import app.friendly.assistant.ui.theme.PresetTheme
 
 /**
- * Paid theme pack — circular swatch accents: blue, green, yellow/olive, pink/rose.
- * Color schemes are Material tonal-spot generated from seed hues so they stay
- * consistent with free presets and flow into Compose + WebView/markdown theming.
+ * Paid cat home themes — each drives MaterialTheme (app menus + web CSS tokens)
+ * and a matching home/dashboard chrome via [app.friendly.assistant.ui.theme.CatHomeStyleId].
  */
 private fun paidThemeFromSeed(
     id: String,
@@ -34,51 +33,55 @@ private fun paidThemeFromSeed(
     )
 }
 
-val AzureSoftThemePreset by lazy {
+/** Warm cream + ginger orange — peeking tabby home. */
+val CuteMinimalThemePreset by lazy {
     paidThemeFromSeed(
-        id = "azure_soft",
-        nameRes = R.string.theme_name_azure_soft,
-        primaryArgb = 0xFF4A90D9,
-        secondaryArgb = 0xFF6B8FA8,
-        tertiaryArgb = 0xFF7B6BB0,
+        id = "cute_minimal",
+        nameRes = R.string.theme_name_cute_minimal,
+        primaryArgb = 0xFFE67A3A,
+        secondaryArgb = 0xFFC4A484,
+        tertiaryArgb = 0xFFD4A574,
     )
 }
 
-val MatchaLeafThemePreset by lazy {
+/** Immersive night — sleeping tabby photo header. */
+val CozyNightThemePreset by lazy {
     paidThemeFromSeed(
-        id = "matcha_leaf",
-        nameRes = R.string.theme_name_matcha_leaf,
-        primaryArgb = 0xFF6B9F7A,
-        secondaryArgb = 0xFF8FA37A,
-        tertiaryArgb = 0xFF5A8F8A,
+        id = "cozy_night",
+        nameRes = R.string.theme_name_cozy_night,
+        primaryArgb = 0xFFFF9A4A,
+        secondaryArgb = 0xFF8B5A3C,
+        tertiaryArgb = 0xFFC4784A,
     )
 }
 
-val OliveHoneyThemePreset by lazy {
+/** Hand-drawn doodle — cartoon tabby + pastel accents. */
+val PlayfulDoodleThemePreset by lazy {
     paidThemeFromSeed(
-        id = "olive_honey",
-        nameRes = R.string.theme_name_olive_honey,
-        primaryArgb = 0xFFA89B3D,
-        secondaryArgb = 0xFF8B7355,
-        tertiaryArgb = 0xFF6B7A3D,
+        id = "playful_doodle",
+        nameRes = R.string.theme_name_playful_doodle,
+        primaryArgb = 0xFFE67A3A,
+        secondaryArgb = 0xFF7EB8A0,
+        tertiaryArgb = 0xFFE8A0B0,
     )
 }
 
-val RoseQuartzThemePreset by lazy {
+/** Frosted glass over blurred tabby photo. */
+val GlassFrostThemePreset by lazy {
     paidThemeFromSeed(
-        id = "rose_quartz",
-        nameRes = R.string.theme_name_rose_quartz,
-        primaryArgb = 0xFFC97B8A,
-        secondaryArgb = 0xFFB08A8F,
-        tertiaryArgb = 0xFFD4A08A,
+        id = "glass_frost",
+        nameRes = R.string.theme_name_glass_frost,
+        primaryArgb = 0xFFFF9A4A,
+        secondaryArgb = 0xFFD4A574,
+        tertiaryArgb = 0xFFB88860,
     )
 }
 
 val PaidThemes by lazy {
     listOf(
-        AzureSoftThemePreset,
-        MatchaLeafThemePreset,
-        OliveHoneyThemePreset,
-        RoseQuartzThemePreset,
+        CuteMinimalThemePreset,
+        CozyNightThemePreset,
+        PlayfulDoodleThemePreset,
+        GlassFrostThemePreset,
     )
 }

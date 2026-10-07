@@ -1219,10 +1219,10 @@
   <string name="theme_name_ocean">Ocean Blue</string>
   <string name="theme_name_sakura">Sakura Pink</string>
   <string name="theme_name_spring">Meadow Green</string>
-  <string name="theme_name_azure_soft">Azure Soft</string>
-  <string name="theme_name_matcha_leaf">Matcha Leaf</string>
-  <string name="theme_name_olive_honey">Olive Honey</string>
-  <string name="theme_name_rose_quartz">Rose Quartz</string>
+  <string name="theme_name_cute_minimal">Cute Minimal</string>
+  <string name="theme_name_cozy_night">Cozy Night</string>
+  <string name="theme_name_playful_doodle">Playful Doodle</string>
+  <string name="theme_name_glass_frost">Glass Frost</string>
   <string name="title_activity_safe_mode">Safe Mode</string>
   <string name="tools_warning">The current model does not have tool calling enabled. Please enable the model\'s tool capabilities in the settings to use features like search/MCP.</string>
     <string name="tts">TTS</string>

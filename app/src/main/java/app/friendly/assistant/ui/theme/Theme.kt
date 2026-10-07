@@ -47,10 +47,16 @@ fun FriendlyTheme(
 ) {
     val settings by rememberUserSettingsState()
 
-    val darkTheme = when (colorMode) {
-        ColorMode.SYSTEM -> isSystemInDarkTheme()
-        ColorMode.LIGHT -> false
-        ColorMode.DARK -> true
+    // Paid cat themes lock light/dark so home chrome + Material menus stay coherent.
+    val catStyle = catHomeStyleId(settings.themeId)
+    val darkTheme = when (catStyle) {
+        CatHomeStyleId.CUTE_MINIMAL, CatHomeStyleId.PLAYFUL_DOODLE -> false
+        CatHomeStyleId.COZY_NIGHT, CatHomeStyleId.GLASS_FROST -> true
+        CatHomeStyleId.NONE -> when (colorMode) {
+            ColorMode.SYSTEM -> isSystemInDarkTheme()
+            ColorMode.LIGHT -> false
+            ColorMode.DARK -> true
+        }
     }
     val amoledDarkMode by rememberAmoledDarkMode()
 
