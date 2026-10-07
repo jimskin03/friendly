@@ -26,7 +26,7 @@
 
 ## What is Friendly?
 
-Friendly is an open-source **Android AI Catsistant** (Kotlin, Material 3) that goes beyond chat. Bring your own model providers, organize conversations, and optionally let the assistant:
+Friendly (a Rikka Hub fork) is an open-source **Android AI Catsistant** (Kotlin, Material 3) that goes beyond chat. Bring your own model providers, organize conversations, and optionally let the assistant:
 
 - **Automate your phone** — inspect the screen, tap, swipe, type, and launch apps (TikTok, Grab, and more) via an Accessibility service you control
 - **Control a remote Linux computer** — connect over a private network (Tailscale recommended) to a self-hosted Control API, live desktop stream, and MCP tools
