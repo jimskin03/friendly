@@ -113,6 +113,24 @@ jobs:
           # Nightly flavor is default; shim copies APKs to apk/release/ for softprops publish
           ./gradlew assembleNightlyRelease
 
+      # Drop every asset on the fixed nightly tag first. softprops only overwrites
+      # same-named files, so renamed APKs (e.g. app-* → app-nightly-*) would otherwise linger.
+      - name: Clear previous nightly assets
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api "repos/${{ github.repository }}/releases/tags/nightly"             --jq '.assets[].id' 2>/dev/null || true)
+          if [ -z "${ids}" ]; then
+            echo "No existing nightly release assets to clear."
+            exit 0
+          fi
+          for id in ${ids}; do
+            echo "Deleting release asset id=${id}"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/${id}"
+          done
+
       # Publish the APKs as a prerelease so each file can be downloaded directly
       - name: Publish nightly prerelease
         uses: softprops/action-gh-release@v2
