@@ -5,7 +5,7 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
     <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84.svg" alt="Android 8+" />
-    <img src="https://img.shields.io/badge/version-2.0.0-informational.svg" alt="Version 2.0.0" />
+    <img src="https://img.shields.io/badge/version-3.0.0-informational.svg" alt="Version 3.0.0" />
     <img src="https://img.shields.io/badge/language-Kotlin-7F52FF.svg" alt="Kotlin" />
   </p>
 </div>
@@ -111,7 +111,7 @@ Full host docs: [`host/README.md`](host/README.md) · [`host/SETUP_UBUNTU.md`](h
 |---|---|
 | **Android** | 8.0 (API 26) or newer · `targetSdk` 37 |
 | **Application ID** | `friendly.cryptgregresearch.org` (debug builds use `.debug` → `friendly.cryptgregresearch.org.debug`) |
-| **Version** | 2.0.0 (`versionCode` 200) |
+| **Version** | 3.0.0 (`versionCode` 300) |
 | **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358`, Node.js 22 + pnpm 11 |
 
 ### Permissions (honest summary)
@@ -137,7 +137,7 @@ Core chat works without accessibility, camera, or calendar. Review each provider
 
 ## Quick start (end users)
 
-1. Install from [GitHub Releases](https://github.com/jimskin03/friendly/releases) (Play Store listing TBD) or [build from source](#build-from-source).
+1. Install **3.0.0** from the [nightly release](https://github.com/jimskin03/friendly/releases/tag/nightly) (Play Store listing TBD) or [build from source](#build-from-source). Prefer `app-nightly-arm64-v8a-release.apk` on most phones.
 2. Open Friendly → **Settings → Providers** → add a provider and API key.
 3. Pick a model and start chatting or create an assistant.
 4. Optional:
