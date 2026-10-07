@@ -48,7 +48,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          # Daemon requires JVM 21 (gradle/gradle-daemon-jvm.properties). Compile target stays 17.
+          java-version: '21'
 
       # The web module's preBuild runs `pnpm run build`, so Node and pnpm must be ready
       - name: Set up pnpm
@@ -109,7 +110,8 @@ jobs:
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          # Nightly flavor is default; shim copies APKs to apk/release/ for softprops publish
+          ./gradlew assembleNightlyRelease
 
       # Publish the APKs as a prerelease so each file can be downloaded directly
       - name: Publish nightly prerelease
