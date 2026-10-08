@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
@@ -44,23 +45,38 @@ import app.friendly.assistant.ui.theme.catHomeStyleId
 import app.friendly.assistant.ui.theme.homeChromeFor
 import coil3.compose.AsyncImage
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.MoneyBag02
+import me.rerere.hugeicons.stroke.Clock02
+import me.rerere.hugeicons.stroke.SquareLock02
 import me.rerere.hugeicons.stroke.Tick01
 
 private const val PREVIEW_COLUMNS = 2
 private val LightCatCanvas = Color(0xFFF7F1E6)
 
+/** Lock state of one paid theme card. */
+sealed interface PaidCardLock {
+    data object None : PaidCardLock
+
+    /** Not owned. [price] is the localized Play price, or null when unknown. */
+    data class Locked(val price: String?) : PaidCardLock
+
+    /** Payment started but not confirmed yet. */
+    data object Pending : PaidCardLock
+
+    /** Play purchase sheet is open for this theme. */
+    data class Purchasing(val price: String?) : PaidCardLock
+}
+
 /**
  * Simple visual picker for the paid cat themes: a 2-column grid of rounded thumbnails, each a
  * tiny mock of that theme's home screen (photo / cream canvas + header, cards and input bar in
- * the theme's own colors), with the name underneath.
+ * the theme's own colors), with the name and, while locked, the Play price underneath.
  */
 @Composable
 fun PaidThemePreviewGrid(
     themeId: String,
     themes: List<PresetTheme>,
     modifier: Modifier = Modifier,
-    lockedThemeIds: Set<String> = emptySet(),
+    lockFor: (String) -> PaidCardLock = { PaidCardLock.None },
     onChangeTheme: (String) -> Unit,
     onLockedClick: (String) -> Unit = {},
 ) {
@@ -77,14 +93,14 @@ fun PaidThemePreviewGrid(
             ) {
                 rowThemes.forEach { theme ->
                     key(theme.id) {
-                        val locked = theme.id in lockedThemeIds
+                        val lock = lockFor(theme.id)
                         PaidThemePreviewCard(
                             theme = theme,
                             selected = theme.id == themeId,
-                            locked = locked,
+                            lock = lock,
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                if (locked) onLockedClick(theme.id) else onChangeTheme(theme.id)
+                                if (lock == PaidCardLock.None) onChangeTheme(theme.id) else onLockedClick(theme.id)
                             },
                         )
                     }
@@ -101,7 +117,7 @@ fun PaidThemePreviewGrid(
 private fun PaidThemePreviewCard(
     theme: PresetTheme,
     selected: Boolean,
-    locked: Boolean,
+    lock: PaidCardLock,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,11 +125,13 @@ private fun PaidThemePreviewCard(
     val primary = MaterialTheme.colorScheme.primary
     val ringShape = RoundedCornerShape(22.dp)
     val thumbShape = RoundedCornerShape(18.dp)
+    val locked = lock != PaidCardLock.None
+    val active = selected && !locked
 
     Column(
         modifier = modifier
             .clip(ringShape)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+            .selectable(selected = active, role = Role.RadioButton, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -122,7 +140,7 @@ private fun PaidThemePreviewCard(
                 .fillMaxWidth()
                 .border(
                     width = 2.dp,
-                    color = if (selected && !locked) primary else Color.Transparent,
+                    color = if (active) primary else Color.Transparent,
                     shape = ringShape,
                 )
                 .padding(4.dp),
@@ -137,27 +155,37 @@ private fun PaidThemePreviewCard(
                 ThemeMiniHome(chrome = chrome)
 
                 if (locked) {
-                    Row(
+                    Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(8.dp)
+                            .size(26.dp)
                             .clip(CircleShape)
                             .background(Color(0x99000000))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .border(0.5.dp, Color(0x40FFFFFF), CircleShape),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = HugeIcons.MoneyBag02,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.setting_theme_page_paid_badge),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                        )
+                        when (lock) {
+                            is PaidCardLock.Purchasing -> CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 1.5.dp,
+                                modifier = Modifier.size(14.dp),
+                            )
+
+                            PaidCardLock.Pending -> Icon(
+                                imageVector = HugeIcons.Clock02,
+                                contentDescription = stringResource(R.string.setting_theme_page_paid_pending),
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+
+                            else -> Icon(
+                                imageVector = HugeIcons.SquareLock02,
+                                contentDescription = stringResource(R.string.setting_theme_page_paid_locked),
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                     }
                 } else if (selected) {
                     Box(
@@ -180,18 +208,49 @@ private fun PaidThemePreviewCard(
             }
         }
 
-        ProvideTextStyle(
-            value = MaterialTheme.typography.labelLarge.copy(
-                color = if (selected && !locked) primary else MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (selected && !locked) FontWeight.SemiBold else FontWeight.Medium,
-                textAlign = TextAlign.Center,
-            )
+        Column(
+            modifier = Modifier.padding(bottom = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(modifier = Modifier.padding(bottom = 6.dp)) {
+            ProvideTextStyle(
+                value = MaterialTheme.typography.labelLarge.copy(
+                    color = if (active) primary else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                )
+            ) {
                 theme.name()
+            }
+            when (lock) {
+                is PaidCardLock.Locked -> lock.price?.let { PricePill(text = it, emphasized = true) }
+                is PaidCardLock.Purchasing -> lock.price?.let { PricePill(text = it, emphasized = true) }
+                PaidCardLock.Pending -> PricePill(
+                    text = stringResource(R.string.setting_theme_page_paid_pending),
+                    emphasized = false,
+                )
+
+                else -> Unit
             }
         }
     }
+}
+
+@Composable
+private fun PricePill(text: String, emphasized: Boolean) {
+    val container = if (emphasized) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
+    val content = if (emphasized) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = content,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(container)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    )
 }
 
 /** Tiny static mock of the theme's home screen. */

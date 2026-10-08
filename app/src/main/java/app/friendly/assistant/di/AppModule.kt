@@ -8,6 +8,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.crashlytics.crashlytics
 import kotlinx.serialization.json.Json
 import app.friendly.assistant.AppScope
+import app.friendly.assistant.data.billing.PaidThemeStore
 import app.friendly.assistant.data.ai.tools.local.LocalTools
 import app.friendly.assistant.data.ai.tools.ChatToolFactory
 import app.friendly.assistant.data.event.AppEventBus
@@ -45,6 +46,10 @@ val appModule = module {
 
     single {
         AppScope()
+    }
+
+    single {
+        PaidThemeStore(context = get(), scope = get<AppScope>(), settingsStore = get())
     }
 
     single<EmojiData> {

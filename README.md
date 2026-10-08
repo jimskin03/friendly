@@ -247,6 +247,22 @@ APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. For signed nightl
 
 Release builds need your own signing config (`keystore.properties`, see `keystore.properties.example`) — keep keystores, `local.properties`, and `google-services.json` out of git.
 
+### Play bundle and paid themes
+
+The **play** flavor sells the four paid themes through Google Play Billing (one non-consumable in-app product per theme, plus a bundle):
+
+| Theme | Product ID |
+|---|---|
+| Cute Minimal | `theme_cute_minimal` |
+| Cozy Night | `theme_cozy_night` |
+| Playful Doodle | `theme_playful_doodle` |
+| Glass Frost | `theme_glass_frost` |
+| All four | `theme_pack_all` |
+
+The **nightly** flavor has no Play billing and keeps the themes unlocked (`BuildConfig.UNLOCK_PAID_THEMES`).
+
+To build an upload bundle, run the **Build** workflow with `channel=release` (see `docs/RELEASE.md`), or locally `scripts/build.sh release --version-code N` (`scripts\build.ps1 release -VersionCode N` on Windows).
+
 ### Tests
 
 ```bash

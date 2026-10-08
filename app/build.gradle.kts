@@ -69,10 +69,14 @@ android {
             dimension = "distribution"
             isDefault = true
             buildConfigField("boolean", "IS_PLAY_BUILD", "false")
+            // Sideloaded nightly has no Play billing: paid themes stay usable for testing.
+            buildConfigField("boolean", "UNLOCK_PAID_THEMES", "true")
         }
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "IS_PLAY_BUILD", "true")
+            // Play build: paid themes unlock only through Play billing purchases.
+            buildConfigField("boolean", "UNLOCK_PAID_THEMES", "false")
         }
     }
 
@@ -258,6 +262,9 @@ dependencies {
     implementation(libs.haze.blur.material3)
     implementation(libs.haze.glass)
     implementation(libs.haze.glass.material3)
+
+    // Google Play Billing (paid themes). Merges com.android.vending.BILLING into the manifest.
+    implementation(libs.billing.ktx)
 
     // koin
     implementation(platform(libs.koin.bom))
