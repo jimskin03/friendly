@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.R
 import app.friendly.assistant.ui.components.nav.BackButton
+import app.friendly.assistant.ui.pages.setting.components.PaidThemePreviewGrid
 import app.friendly.assistant.ui.pages.setting.components.PresetThemeButtonGroup
 import app.friendly.assistant.ui.theme.CustomColors
 import app.friendly.assistant.ui.theme.PresetThemes
@@ -127,7 +128,7 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(MaterialTheme.colorScheme.surfaceBright)
                         ) {
-                            PresetThemeButtonGroup(
+                            PaidThemePreviewGrid(
                                 themeId = settings.themeId,
                                 themes = PaidThemes,
                                 lockedThemeIds = if (paidUnlocked) {

@@ -66,7 +66,7 @@ val PlayfulDoodleThemePreset by lazy {
     )
 }
 
-/** Frosted glass over blurred tabby photo. */
+/** Frosted glass cards over a crisp tabby photo. */
 val GlassFrostThemePreset by lazy {
     paidThemeFromSeed(
         id = "glass_frost",

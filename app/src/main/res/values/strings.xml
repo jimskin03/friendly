@@ -985,6 +985,7 @@
   <string name="setting_theme_page_preset_themes">Preset Themes</string>
   <string name="setting_theme_page_custom_themes">Custom Themes</string>
   <string name="setting_theme_page_paid_themes">Paid Themes</string>
+  <string name="setting_theme_page_paid_badge">Paid</string>
   <string name="setting_theme_page_paid_locked_title">Paid theme</string>
   <string name="setting_theme_page_paid_locked_message">These themes are part of the paid theme pack. Unlock will be available via Play billing in a future update. Nightly builds include them free.</string>
   <string name="setting_theme_page_add_theme">New</string>

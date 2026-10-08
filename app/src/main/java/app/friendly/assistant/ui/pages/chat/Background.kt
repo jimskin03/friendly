@@ -32,18 +32,14 @@ fun AssistantBackground(setting: Settings, modifier: Modifier) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            // Soft veil so chrome cards stay readable
-            // Soft atmospheric presence: cat faintly suggested, never competing with cards.
-            val veil = when (chrome.styleId) {
-                CatHomeStyleId.GLASS_FROST -> Color(0x6614100C)
-                CatHomeStyleId.COZY_NIGHT -> Color(0x99100A08)
-                else -> Color.Transparent
-            }
-            if (veil.alpha > 0f) {
+            // Gradient scrim: darker only behind the header/top cards and the input bar,
+            // nearly clear through the middle so the cat photo stays crisp and visible.
+            val scrim = catPhotoScrim(chrome.styleId)
+            if (scrim != null) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(veil)
+                        .background(scrim)
                 )
             }
         }
@@ -92,4 +88,27 @@ fun AssistantBackground(setting: Settings, modifier: Modifier) {
             )
         }
     }
+}
+
+internal fun catPhotoScrim(styleId: CatHomeStyleId): Brush? = when (styleId) {
+    CatHomeStyleId.COZY_NIGHT -> Brush.verticalGradient(
+        0.00f to Color(0xD90C0705),
+        0.20f to Color(0xA60C0705),
+        0.42f to Color(0x590C0705),
+        0.55f to Color(0x1A0C0705),
+        0.74f to Color(0x140C0705),
+        0.88f to Color(0x800C0705),
+        1.00f to Color(0xCC0C0705),
+    )
+
+    CatHomeStyleId.GLASS_FROST -> Brush.verticalGradient(
+        0.00f to Color(0x8C1A110B),
+        0.20f to Color(0x591A110B),
+        0.45f to Color(0x261A110B),
+        0.55f to Color(0x0D1A110B),
+        0.76f to Color(0x0D1A110B),
+        1.00f to Color(0x731A110B),
+    )
+
+    else -> null
 }
