@@ -28,7 +28,6 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import app.friendly.assistant.R
 import app.friendly.assistant.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
-import app.friendly.assistant.data.ai.prompts.DEFAULT_OCR_PROMPT
 import app.friendly.assistant.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import app.friendly.assistant.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import app.friendly.assistant.data.datastore.Settings
@@ -59,15 +58,6 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 promptValue = settings.suggestionPrompt,
                 onPromptChange = { vm.updateSettings(settings.copy(suggestionPrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(suggestionPrompt = DEFAULT_SUGGESTION_PROMPT)) },
-            )
-        }
-        item {
-            PromptSettingItem(
-                title = stringResource(R.string.setting_model_page_prompt_ocr),
-                promptDescription = stringResource(R.string.setting_model_page_ocr_prompt_vars),
-                promptValue = settings.ocrPrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(ocrPrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(ocrPrompt = DEFAULT_OCR_PROMPT)) },
             )
         }
         item {

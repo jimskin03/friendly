@@ -10,7 +10,7 @@ Android AI assistant (Kotlin/Compose). Owner: Greg (`jimskin03`). Main branch `f
 ## Build locally
 - `scripts/build.sh check --install`, then `debug` | `nightly` | `release --version-code N [--version-name X]` (Windows: `scripts\build.ps1 <channel> [-VersionCode N] [-Install]`). Output in `dist/`.
 - `nightly` = signed nightly APKs (nightly key). `release` = those APKs + Play AAB (upload key).
-- Tests: `./gradlew :app:testNightlyDebugUnitTest`. Needs JDK 21, Android SDK, Node 22 + pnpm (the `check` channel installs them).
+- Tests: `./gradlew :app:testNightlyDebugUnitTest`. Needs JDK 21 and the Android SDK (the `check` channel installs them).
 - Key steps (fingerprints, verify, new key, `gh secret set`, upload-key reset), Play Console steps and the self-hosted runner: `scripts/build.sh help` (Windows notes: `scripts\build.ps1 help`).
 
 ## CI: `.github/workflows/build.yml` ("Build")

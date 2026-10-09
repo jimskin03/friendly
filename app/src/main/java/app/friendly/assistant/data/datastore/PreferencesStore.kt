@@ -37,7 +37,6 @@ import app.friendly.assistant.AppScope
 import app.friendly.assistant.data.ai.mcp.McpOAuthState
 import app.friendly.assistant.data.ai.mcp.McpServerConfig
 import app.friendly.assistant.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
-import app.friendly.assistant.data.ai.prompts.DEFAULT_OCR_PROMPT
 import app.friendly.assistant.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import app.friendly.assistant.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import app.friendly.assistant.data.ai.prompts.LEARNING_MODE_PROMPT
@@ -130,18 +129,10 @@ class SettingsStore(
 
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
         val SELECT_MODEL = stringPreferencesKey("chat_model")
-        val FAST_MODEL = stringPreferencesKey("fast_model")
-        val FAST_MODEL_REASONING_LEVEL = stringPreferencesKey("fast_model_reasoning_level")
-        val TRANSLATE_MODEL = stringPreferencesKey("translate_model")
         val ENABLE_SUGGESTION = booleanPreferencesKey("enable_suggestion")
         val IMAGE_GENERATION_MODEL = stringPreferencesKey("image_generation_model")
         val TITLE_PROMPT = stringPreferencesKey("title_prompt")
-        val TRANSLATION_PROMPT = stringPreferencesKey("translation_prompt")
-        val TRANSLATE_THINKING_BUDGET = intPreferencesKey("translate_thinking_budget")
         val SUGGESTION_PROMPT = stringPreferencesKey("suggestion_prompt")
-        val OCR_MODEL = stringPreferencesKey("ocr_model")
-        val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
-        val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
 
 
@@ -176,11 +167,6 @@ class SettingsStore(
         val SELECTED_ASR_PROVIDER = stringPreferencesKey("selected_asr_provider")
 
         // Web Server
-        val WEB_SERVER_ENABLED = booleanPreferencesKey("web_server_enabled")
-        val WEB_SERVER_PORT = intPreferencesKey("web_server_port")
-        val WEB_SERVER_JWT_ENABLED = booleanPreferencesKey("web_server_jwt_enabled")
-        val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
-        val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
 
 
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -220,18 +206,10 @@ class SettingsStore(
 
                 preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
                 preferences[SELECT_MODEL] = settings.chatModelId.toString()
-                preferences[FAST_MODEL] = settings.fastModelId.toString()
-                preferences[FAST_MODEL_REASONING_LEVEL] = settings.fastModelReasoningLevel.name
-                preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
                 preferences[ENABLE_SUGGESTION] = settings.enableSuggestion
                 preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
                 preferences[TITLE_PROMPT] = settings.titlePrompt
-                preferences[TRANSLATION_PROMPT] = settings.translatePrompt
-                preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
                 preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
-                preferences[OCR_MODEL] = settings.ocrModelId.toString()
-                preferences[OCR_PROMPT] = settings.ocrPrompt
-                preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
                 preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
@@ -264,11 +242,6 @@ class SettingsStore(
                 preferences[INSTALLED_WEB_APPS] = JsonInstant.encodeToString(settings.installedWebApps)
                 preferences[INSTALLED_WEB_APPS_SEEDED] = settings.installedWebAppsSeeded
                 preferences[HOME_ACTIONS] = JsonInstant.encodeToString(settings.homeActions)
-                preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
-                preferences[WEB_SERVER_PORT] = settings.webServerPort
-                preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-                preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
-                preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
                 preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
                 preferences[LAUNCH_COUNT] = settings.launchCount
                 preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -335,22 +308,10 @@ class SettingsStore(
                 } ?: emptyList(),
                 chatModelId = preferences[SELECT_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
-                fastModelId = preferences[FAST_MODEL]?.let { Uuid.parse(it) }
-                    ?: DEFAULT_AUTO_MODEL_ID,
-                fastModelReasoningLevel = preferences[FAST_MODEL_REASONING_LEVEL]
-                    ?.let { value -> ReasoningLevel.entries.find { it.name == value } }
-                    ?: ReasoningLevel.AUTO,
-                translateModeId = preferences[TRANSLATE_MODEL]?.let { Uuid.parse(it) }
-                    ?: DEFAULT_AUTO_MODEL_ID,
                 enableSuggestion = preferences[ENABLE_SUGGESTION] != false,
                 imageGenerationModelId = preferences[IMAGE_GENERATION_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 titlePrompt = preferences[TITLE_PROMPT] ?: DEFAULT_TITLE_PROMPT,
-                translatePrompt = preferences[TRANSLATION_PROMPT] ?: "",
-                translateThinkingBudget = preferences[TRANSLATE_THINKING_BUDGET] ?: 0,
                 suggestionPrompt = preferences[SUGGESTION_PROMPT] ?: DEFAULT_SUGGESTION_PROMPT,
-                ocrModelId = preferences[OCR_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
-                ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
-                compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
@@ -416,11 +377,6 @@ class SettingsStore(
                     runCatching { normalizeHomeActions(JsonInstant.decodeStored<List<HomeAction>>(raw)) }
                         .getOrDefault(defaultHomeActions())
                 } ?: defaultHomeActions(),
-                webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
-                webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
-                webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
-                webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
-                webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeStored(it)
                 } ?: BackupReminderConfig(),
@@ -731,18 +687,10 @@ data class Settings(
     val networkSetting: NetworkSetting = NetworkSetting(),
     val favoriteModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
-    val fastModelId: Uuid = Uuid.random(),
-    val fastModelReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
-    val translateModeId: Uuid = Uuid.random(),
-    val translatePrompt: String = "",
-    val translateThinkingBudget: Int = 0,
     val enableSuggestion: Boolean = true,
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
-    val ocrModelId: Uuid = Uuid.random(),
-    val ocrPrompt: String = DEFAULT_OCR_PROMPT,
-    val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
@@ -765,11 +713,6 @@ data class Settings(
     val installedWebApps: List<InstalledWebApp> = emptyList(),
     val installedWebAppsSeeded: Boolean = false,
     val homeActions: List<HomeAction> = defaultHomeActions(),
-    val webServerEnabled: Boolean = false,
-    val webServerPort: Int = 8080,
-    val webServerJwtEnabled: Boolean = false,
-    val webServerAccessPassword: String = "",
-    val webServerLocalhostOnly: Boolean = false,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,

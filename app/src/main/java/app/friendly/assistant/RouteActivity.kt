@@ -122,7 +122,6 @@ import app.friendly.assistant.ui.pages.setting.SettingProviderPage
 import app.friendly.assistant.ui.pages.setting.SettingSearchDetailPage
 import app.friendly.assistant.ui.pages.setting.SettingSearchPage
 import app.friendly.assistant.ui.pages.setting.SettingSpeechPage
-import app.friendly.assistant.ui.pages.setting.SettingWebPage
 import app.friendly.assistant.ui.pages.share.handler.ShareHandlerPage
 import app.friendly.assistant.ui.pages.stats.StatsPage
 import app.friendly.assistant.ui.pages.webview.WebViewPage
@@ -531,9 +530,6 @@ class RouteActivity : ComponentActivity() {
                                 SettingFilesPage()
                             }
 
-                            entry<Screen.SettingWeb> {
-                                SettingWebPage()
-                            }
 
                             entry<Screen.Debug> {
                                 DebugPage()
@@ -767,8 +763,6 @@ sealed interface Screen : NavKey {
     @Serializable
     data object SettingFiles : Screen
 
-    @Serializable
-    data object SettingWeb : Screen
 
     @Serializable
     data object Debug : Screen

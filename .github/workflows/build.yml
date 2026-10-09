@@ -98,23 +98,6 @@ jobs:
           # Daemon requires JVM 21 (gradle/gradle-daemon-jvm.properties). Compile target stays 17.
           java-version: '21'
 
-      # The web module's preBuild runs `pnpm run build`, so Node and pnpm must be ready
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web-ui/pnpm-lock.yaml
-
-      - name: Install web-ui dependencies
-        working-directory: web-ui
-        run: pnpm install --frozen-lockfile
-
       - name: Gradle cache
         uses: actions/cache@v4
         with:
