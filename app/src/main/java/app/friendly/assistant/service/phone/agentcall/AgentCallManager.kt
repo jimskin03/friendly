@@ -266,7 +266,7 @@ class AgentCallManager(
             )
 
             val notification = NotificationCompat.Builder(app, PHONE_CALL_NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_brand_neon)
+                .setSmallIcon(R.drawable.ic_stat_friendly)
                 .setContentTitle(title)
                 .setContentText(content)
                 .setContentIntent(pendingOpen)

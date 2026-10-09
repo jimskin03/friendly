@@ -1106,12 +1106,11 @@ private fun MiniIndicatorBubble(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Image(
-                    painter = painterResource(R.drawable.ic_brand_neon),
+                    painter = painterResource(R.drawable.ic_brand_logo),
                     contentDescription = null,
                     modifier = Modifier
                         .size(54.dp)
-                        .padding(6.dp)
-                        .clip(CircleShape),
+                        .padding(6.dp),
                 )
                 if (expanded) {
                     Text(

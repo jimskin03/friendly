@@ -31,7 +31,7 @@ fun RabbitLoadingIndicator(modifier: Modifier = Modifier) {
             label = "loadingCatAlpha",
         )
         Image(
-            painter = painterResource(R.drawable.ic_loading_cat),
+            painter = painterResource(R.drawable.ic_brand_logo),
             contentDescription = null,
             modifier = modifier.graphicsLayer { this.alpha = alpha },
         )
