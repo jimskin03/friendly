@@ -1,0 +1,106 @@
+name: PR check
+
+# Read-only validation for pull requests and work branches. It uses no secrets,
+# signs nothing and publishes nothing (releases come only from build.yml).
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - friendly-2.0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android (nightly + play debug unit tests, lint, assemble)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Gradle cache (restore only)
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Unit tests
+        id: tests
+        # Exit code is checked below so known pre-existing failures can be told apart.
+        continue-on-error: true
+        run: |
+          chmod +x gradlew
+          ./gradlew --continue \
+            :app:testNightlyDebugUnitTest :app:testPlayDebugUnitTest \
+            :ai:testDebugUnitTest :highlight:testDebugUnitTest :oauth:testDebugUnitTest \
+            :search:testDebugUnitTest :speech:testDebugUnitTest :videogen:testDebugUnitTest \
+            :workspace:testDebugUnitTest
+
+      - name: Check test results (known pre-existing failures are warnings)
+        run: |
+          python3 .github/scripts/check_test_results.py \
+            app/build/test-results/testNightlyDebugUnitTest \
+            app/build/test-results/testPlayDebugUnitTest \
+            ai/build/test-results/testDebugUnitTest \
+            highlight/build/test-results/testDebugUnitTest \
+            oauth/build/test-results/testDebugUnitTest \
+            search/build/test-results/testDebugUnitTest \
+            speech/build/test-results/testDebugUnitTest \
+            videogen/build/test-results/testDebugUnitTest \
+            workspace/build/test-results/testDebugUnitTest
+
+      - name: Lint (new issues only; existing ones are in app/lint-baseline.xml)
+        run: ./gradlew :app:lintNightlyDebug :app:lintPlayDebug
+
+      - name: Assemble both flavors (debug-signed, not published)
+        run: ./gradlew :app:assembleNightlyDebug :app:assemblePlayDebug
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/tests/
+            app/build/reports/lint-results-*.html
+
+  host:
+    name: Host agent (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: host/agent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies (runtime + dev)
+        run: python -m pip install -r requirements.txt 'pytest>=8.0'
+
+      - name: pytest
+        run: python -m pytest -q

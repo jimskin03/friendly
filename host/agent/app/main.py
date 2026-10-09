@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from . import browser, desktop, stream
 from .auth import BearerAuthASGIMiddleware, require_bearer
-from .config import Settings, get_settings
+from .config import Settings, get_settings, require_usable_api_token
 from .desktop import DesktopError
 from .mcp_server import build_mcp_starlette_app, mcp as desktop_mcp
 from .stream import StreamError, StreamNotImplemented, verify_viewer_token
@@ -30,6 +30,8 @@ _mcp_authed = BearerAuthASGIMiddleware(_mcp_asgi)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Refuse to serve REST or MCP with an empty or publicly known token.
+    require_usable_api_token(get_settings())
     # Mounted sub-app lifespans do not run — enter session manager here.
     async with desktop_mcp.session_manager.run():
         logger.info("MCP session manager started (streamable HTTP at /mcp)")
@@ -377,6 +379,7 @@ if __name__ == "__main__":
     import uvicorn
 
     s = get_settings()
+    require_usable_api_token(s)
     uvicorn.run(
         "app.main:app",
         host=s.api_host,

@@ -148,6 +148,11 @@ android {
         compose = true
         buildConfig = true
     }
+    lint {
+        // Pre-existing issues on friendly-2.0 (both flavors) are recorded here so
+        // PR checks fail only on new ones. Regenerate with :app:updateLintBaseline*.
+        baseline = file("lint-baseline.xml")
+    }
     sourceSets {
         getByName("androidTest").assets.srcDirs("$projectDir/schemas")
     }

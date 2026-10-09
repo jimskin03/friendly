@@ -13,6 +13,45 @@ _HOST_ROOT = Path(__file__).resolve().parents[2]
 _ENV_FILE = _HOST_ROOT / ".env"
 
 
+# Placeholder shipped in .env.example and as the Settings default. It is public,
+# so the host must never accept it as a credential.
+PLACEHOLDER_API_TOKEN = "change-me-to-a-long-random-secret"
+
+
+class ApiTokenConfigError(RuntimeError):
+    """API_TOKEN is missing or still the public placeholder. Never carries the value."""
+
+
+def api_token_problem(token: str | None) -> str | None:
+    """Why ``token`` is unusable as the host credential, or None when it is usable.
+
+    The returned text never contains the token itself.
+    """
+    value = (token or "").strip()
+    if not value:
+        return "API_TOKEN is empty"
+    # Same rule as scripts/setup-ubuntu-headless.sh, which regenerates any "change-me" token.
+    if value == PLACEHOLDER_API_TOKEN or "change-me" in value.lower():
+        return "API_TOKEN is still the placeholder from .env.example"
+    return None
+
+
+def usable_api_token(token: str | None) -> str:
+    """The configured token, or "" when it is empty or the placeholder."""
+    return "" if api_token_problem(token) else (token or "")
+
+
+def require_usable_api_token(settings: "Settings") -> None:
+    """Fail fast at startup when the REST/MCP credential is missing or the placeholder."""
+    problem = api_token_problem(settings.api_token)
+    if problem:
+        raise ApiTokenConfigError(
+            f"{problem}. Refusing to start the Control API and MCP. Set API_TOKEN in "
+            "host/.env (or /etc/friendly-host.env) to a long random value, e.g. "
+            "`openssl rand -hex 32`, then restart and copy it into the Friendly app."
+        )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE) if _ENV_FILE.exists() else None,

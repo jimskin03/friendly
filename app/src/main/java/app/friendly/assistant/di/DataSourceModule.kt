@@ -10,6 +10,7 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
 import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.data.ai.AIRequestInterceptor
+import app.friendly.assistant.data.ai.LogRedactor
 import app.friendly.assistant.data.ai.RequestLoggingInterceptor
 import app.friendly.assistant.data.ai.transformers.AssistantTemplateLoader
 import app.friendly.assistant.data.ai.GenerationLoop
@@ -173,8 +174,7 @@ val dataSourceModule = module {
             }
             .addNetworkInterceptor(RequestLoggingInterceptor())
             .addInterceptor(AIRequestInterceptor())
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                redactHeader("Proxy-Authorization")
+            .addInterceptor(LogRedactor.httpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
             .build()
