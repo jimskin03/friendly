@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 380" width="800" height="380">
+  <defs>
+    <radialGradient id="fur" cx="0.45" cy="0.25" r="0.85">
+      <stop offset="0" stop-color="#FFC77A"/>
+      <stop offset="0.55" stop-color="#F7AE55"/>
+      <stop offset="1" stop-color="#EE9A42"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="0.5" cy="0.62" r="0.62">
+      <stop offset="0" stop-color="#8A5128"/>
+      <stop offset="0.55" stop-color="#5A3218"/>
+      <stop offset="1" stop-color="#3A1F0F"/>
+    </radialGradient>
+    <linearGradient id="paw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFC77A"/>
+      <stop offset="1" stop-color="#F6AE58"/>
+    </linearGradient>
+    <clipPath id="cut"><rect x="0" y="0" width="800" height="330"/></clipPath>
+  </defs>
+  <g stroke="#B5642A" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <!-- ears -->
+    <path d="M212 210 C200 150 214 82 238 38 Q248 22 264 32 C306 60 340 94 362 128 Z" fill="url(#fur)"/>
+    <path d="M588 210 C600 150 586 82 562 38 Q552 22 536 32 C494 60 460 94 438 128 Z" fill="url(#fur)"/>
+    <path d="M234 170 C228 130 236 92 250 62 C280 84 304 108 320 132 Z" fill="#F7B9A6" stroke="none"/>
+    <path d="M566 170 C572 130 564 92 550 62 C520 84 496 108 480 132 Z" fill="#F7B9A6" stroke="none"/>
+    <g fill="none" stroke="#FFF1E2" stroke-width="3.5" opacity="0.9">
+      <path d="M250 140 Q256 116 268 104"/><path d="M262 148 Q272 128 286 118"/>
+      <path d="M550 140 Q544 116 532 104"/><path d="M538 148 Q528 128 514 118"/>
+    </g>
+    <!-- head (clipped at the card edge) -->
+    <g clip-path="url(#cut)">
+      <ellipse cx="400" cy="282" rx="222" ry="186" fill="url(#fur)"/>
+      <g stroke="none">
+        <!-- muzzle + chest cream -->
+        <ellipse cx="400" cy="318" rx="96" ry="58" fill="#FDE7C8"/>
+        <!-- forehead stripes -->
+        <g fill="#E0802E">
+          <path d="M391 104 Q386 140 400 180 Q414 140 409 104 Z"/>
+          <path d="M344 112 Q346 148 370 176 Q368 142 360 108 Z"/>
+          <path d="M456 112 Q454 148 430 176 Q432 142 440 108 Z"/>
+          <path d="M302 128 Q312 152 334 168 Q326 144 316 122 Z"/>
+          <path d="M498 128 Q488 152 466 168 Q474 144 484 122 Z"/>
+          <!-- cheek stripes -->
+          <path d="M182 246 Q212 240 240 252 Q212 256 184 260 Z"/>
+          <path d="M184 278 Q208 272 232 282 Q208 286 186 290 Z"/>
+          <path d="M618 246 Q588 240 560 252 Q588 256 616 260 Z"/>
+          <path d="M616 278 Q592 272 568 282 Q592 286 614 290 Z"/>
+        </g>
+        <!-- blush -->
+        <ellipse cx="282" cy="306" rx="28" ry="14" fill="#F59A8C" opacity="0.45"/>
+        <ellipse cx="518" cy="306" rx="28" ry="14" fill="#F59A8C" opacity="0.45"/>
+      </g>
+      <ellipse cx="400" cy="282" rx="222" ry="186" fill="none"/>
+    </g>
+    <!-- eyes -->
+    <g>
+      <circle cx="318" cy="254" r="46" fill="url(#iris)" stroke="#6B3A1A" stroke-width="5"/>
+      <circle cx="482" cy="254" r="46" fill="url(#iris)" stroke="#6B3A1A" stroke-width="5"/>
+      <g stroke="none" fill="#FFFFFF">
+        <circle cx="333" cy="237" r="15"/><circle cx="303" cy="272" r="6"/><circle cx="342" cy="261" r="3.5"/>
+        <circle cx="497" cy="237" r="15"/><circle cx="467" cy="272" r="6"/><circle cx="506" cy="261" r="3.5"/>
+      </g>
+    </g>
+    <!-- nose + mouth -->
+    <path d="M386 292 Q400 284 414 292 Q408 306 400 309 Q392 306 386 292 Z" fill="#F2897F" stroke-width="4"/>
+    <path d="M400 309 Q401 322 387 324 Q377 324 374 315" fill="none" stroke-width="5"/>
+    <path d="M400 309 Q399 322 413 324 Q423 324 426 315" fill="none" stroke-width="5"/>
+    <!-- whiskers -->
+    <g stroke="#C98450" stroke-width="4" fill="none">
+      <path d="M176 296 L120 286"/><path d="M176 310 L124 316"/>
+      <path d="M624 296 L680 286"/><path d="M624 310 L676 316"/>
+    </g>
+    <!-- paws over the card edge -->
+    <path d="M186 344 C182 304 214 288 246 289 C278 288 310 304 306 344 C306 362 288 371 246 371 C204 371 186 362 186 344 Z" fill="url(#paw)"/>
+    <path d="M494 344 C490 304 522 288 554 289 C586 288 618 304 614 344 C614 362 596 371 554 371 C512 371 494 362 494 344 Z" fill="url(#paw)"/>
+    <g fill="none" stroke-width="5">
+      <path d="M226 356 L226 370"/><path d="M266 356 L266 370"/>
+      <path d="M534 356 L534 370"/><path d="M574 356 L574 370"/>
+    </g>
+    <!-- hearts + sparkles -->
+    <path d="M110 196 C110 180 88 176 82 192 C76 208 98 222 110 234 C122 222 144 208 138 192 C132 176 110 180 110 196 Z" fill="#FFE1D2" stroke="#E07F4F" stroke-width="6"/>
+    <path d="M78 252 L100 248" stroke="#E9925E" stroke-width="5"/><path d="M86 268 L104 262" stroke="#E9925E" stroke-width="5"/>
+    <path d="M700 150 C700 139 685 136 681 147 C677 158 692 168 700 176 C708 168 723 158 719 147 C715 136 700 139 700 150 Z" fill="#F7A49A" stroke="#E07F4F" stroke-width="4"/>
+    <path d="M716 214 Q720 226 732 230 Q720 234 716 246 Q712 234 700 230 Q712 226 716 214 Z" fill="#FFD27A" stroke="none"/>
+    <path d="M700 262 L718 268" stroke="#E9925E" stroke-width="5"/>
+  </g>
+</svg>
