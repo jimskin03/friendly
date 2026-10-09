@@ -40,7 +40,7 @@ android {
         applicationId = "friendly.cryptgregresearch.org"
         minSdk = 26
         targetSdk = 37
-        // Overridable for releases: -Pfriendly.versionCode=N -Pfriendly.versionName=X (see docs/RELEASE.md).
+        // Overridable for releases: -Pfriendly.versionCode=N -Pfriendly.versionName=X (see AGENTS.md).
         versionCode = (project.findProperty("friendly.versionCode") as String?)?.toIntOrNull() ?: 300
         versionName = (project.findProperty("friendly.versionName") as String?)?.takeIf { it.isNotBlank() } ?: "3.0.0"
 

@@ -1,6 +1,6 @@
 name: Build
 
-# One workflow, two channels (see docs/RELEASE.md):
+# One workflow, two channels (see AGENTS.md and `scripts/build.sh help`):
 #   nightly  - scheduled or manual. Nightly-flavor APKs signed with the stable NIGHTLY_* key,
 #              published to the `nightly` prerelease (assets replaced each run).
 #   release  - manual only. The same APKs plus a Play-flavor AAB signed with the PLAY_UPLOAD_* key,
@@ -87,7 +87,7 @@ jobs:
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::Missing repository secrets for channel '$CHANNEL':$missing (see docs/RELEASE.md)"
+            echo "::error::Missing repository secrets for channel '$CHANNEL':$missing (see AGENTS.md)"
             exit 1
           fi
 

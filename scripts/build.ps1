@@ -18,14 +18,25 @@
     NIGHTLY_KEYSTORE_FILE  NIGHTLY_KEYSTORE_PASSWORD  NIGHTLY_KEY_ALIAS  NIGHTLY_KEY_PASSWORD
     PLAY_UPLOAD_KEYSTORE_FILE  PLAY_UPLOAD_KEYSTORE_PASSWORD  PLAY_UPLOAD_KEY_ALIAS  PLAY_UPLOAD_KEY_PASSWORD
   Outputs land in dist\.
+  keystore.properties keys: nightly.storeFile/storePassword/keyAlias/keyPassword, upload.* (same four).
+  GitHub secrets: the same 8 env names, with *_KEYSTORE_BASE64 (base64 of the .jks) instead of *_KEYSTORE_FILE.
+
+.NOTES
+  Full key, Play Console and self-hosted-runner steps: the header of scripts/build.sh (`bash scripts/build.sh help`).
+  Key fingerprints: nightly 4A:74:6F:58:...:DA:C9:FE, upload 32:8C:3C:59:...:DE:52:5C (`check` prints them).
+  Update a keystore secret from Windows:
+    [Convert]::ToBase64String([IO.File]::ReadAllBytes("friendly-upload.jks")) | gh secret set PLAY_UPLOAD_KEYSTORE_BASE64 -R jimskin03/friendly
+    gh secret set PLAY_UPLOAD_KEYSTORE_PASSWORD -R jimskin03/friendly   # prompts; same for PLAY_UPLOAD_KEY_PASSWORD
+  `scripts\build.ps1 help` prints this text.
 #>
 param(
-  [Parameter(Mandatory = $true, Position = 0)][ValidateSet('debug', 'nightly', 'release', 'check')][string]$Channel,
+  [Parameter(Mandatory = $true, Position = 0)][ValidateSet('debug', 'nightly', 'release', 'check', 'help')][string]$Channel,
   [string]$VersionCode = $env:VERSION_CODE,
   [string]$VersionName = $env:VERSION_NAME,
   [switch]$Install
 )
 $ErrorActionPreference = 'Stop'
+if ($Channel -eq 'help') { Get-Help $PSCommandPath -Full; exit 0 }
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 

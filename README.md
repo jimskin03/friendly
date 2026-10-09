@@ -243,7 +243,7 @@ cd web-ui && pnpm install --frozen-lockfile && cd ..
 ./gradlew :app:assemblePlayDebug
 ```
 
-APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. For signed nightly/release builds use `scripts/build.sh` or `scripts\build.ps1` (see [docs/BUILD.md](docs/BUILD.md)); CI and releases are described in [docs/RELEASE.md](docs/RELEASE.md). Both flavors share `applicationId` `friendly.cryptgregresearch.org` — Play and sideload builds cannot both be installed with different signing under the same ID.
+APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. For signed nightly/release builds use `scripts/build.sh` or `scripts\build.ps1` (`scripts/build.sh help`); CI, releases and signing are summarized in [AGENTS.md](AGENTS.md). Both flavors share `applicationId` `friendly.cryptgregresearch.org` — Play and sideload builds cannot both be installed with different signing under the same ID.
 
 Release builds need your own signing config (`keystore.properties`, see `keystore.properties.example`) — keep keystores, `local.properties`, and `google-services.json` out of git.
 
