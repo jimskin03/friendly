@@ -243,9 +243,9 @@ cd web-ui && pnpm install --frozen-lockfile && cd ..
 ./gradlew :app:assemblePlayDebug
 ```
 
-APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. Release: `assembleNightlyRelease` / `assemblePlayRelease`. Daily CI still invokes `assembleRelease` (builds all release flavors); nightly APKs are also synced to `app/build/outputs/apk/release/` for the existing publish path. Prefer `assembleNightlyRelease` locally. Both flavors share `applicationId` `friendly.cryptgregresearch.org` — Play and sideload builds cannot both be installed with different signing under the same ID.
+APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. For signed nightly/release builds use `scripts/build.sh` or `scripts\build.ps1` (see [docs/BUILD.md](docs/BUILD.md)); CI and releases are described in [docs/RELEASE.md](docs/RELEASE.md). Both flavors share `applicationId` `friendly.cryptgregresearch.org` — Play and sideload builds cannot both be installed with different signing under the same ID.
 
-Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
+Release builds need your own signing config (`keystore.properties`, see `keystore.properties.example`) — keep keystores, `local.properties`, and `google-services.json` out of git.
 
 ### Tests
 
@@ -260,7 +260,7 @@ Release builds need your own signing config — keep keystores, `local.propertie
 - **SDK not found:** set `ANDROID_HOME` / `sdk.dir` in untracked `local.properties`
 - **NDK:** install side-by-side `28.2.13676358`
 - **Web UI build:** Node 22 + Corepack pnpm 11 inside `web-ui/`
-- **Wrong Java:** `JAVA_HOME` → JDK 17
+- **Wrong Java:** `JAVA_HOME` → JDK 21 (the build targets Java 17)
 - **Computer offline:** verify Tailscale connectivity, Base URL, and Bearer token; `curl` host `/health` and `/v1/desktop/status`
 
 ---

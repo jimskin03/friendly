@@ -40,8 +40,9 @@ android {
         applicationId = "friendly.cryptgregresearch.org"
         minSdk = 26
         targetSdk = 37
-        versionCode = 300
-        versionName = "3.0.0"
+        // Overridable for releases: -Pfriendly.versionCode=N -Pfriendly.versionName=X (see docs/RELEASE.md).
+        versionCode = (project.findProperty("friendly.versionCode") as String?)?.toIntOrNull() ?: 300
+        versionName = (project.findProperty("friendly.versionName") as String?)?.takeIf { it.isNotBlank() } ?: "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -84,14 +85,15 @@ android {
                 localProperties.load(FileInputStream(localPropertiesFile))
             }
 
-            val storeFilePath = localProperties.getProperty("storeFile")
-                ?: System.getenv("KEYSTORE_FILE")
-            val storePasswordValue = localProperties.getProperty("storePassword")
-                ?: System.getenv("KEYSTORE_PASSWORD")
-            val keyAliasValue = localProperties.getProperty("keyAlias")
-                ?: System.getenv("KEY_ALIAS")
-            val keyPasswordValue = localProperties.getProperty("keyPassword")
-                ?: System.getenv("KEY_PASSWORD")
+            // Env first (CI and scripts/build.* set these per build), then local.properties.
+            val storeFilePath = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("storeFile")
+            val storePasswordValue = System.getenv("KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("storePassword")
+            val keyAliasValue = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("keyAlias")
+            val keyPasswordValue = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("keyPassword")
 
             if (!storeFilePath.isNullOrBlank() &&
                 !storePasswordValue.isNullOrBlank() &&

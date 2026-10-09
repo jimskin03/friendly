@@ -1,0 +1,274 @@
+name: Build
+
+# One workflow, two channels (see docs/RELEASE.md):
+#   nightly  - scheduled or manual. Nightly-flavor APKs signed with the stable NIGHTLY_* key,
+#              published to the `nightly` prerelease (assets replaced each run).
+#   release  - manual only. The same APKs plus a Play-flavor AAB signed with the PLAY_UPLOAD_* key,
+#              published as GitHub release v<versionName>-<versionCode> (a draft unless draft=false).
+on:
+  # Daily at 09:00 and 18:00 UTC (17:00 and 02:00 MYT); skipped when nothing changed in 24 hours.
+  schedule:
+    - cron: '0 9,18 * * *'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'nightly = prerelease APKs; release = versioned GitHub release with APKs + Play AAB'
+        type: choice
+        options: [nightly, release]
+        default: nightly
+      version_code:
+        description: 'versionCode (empty = 300 + run number; must be higher than every earlier Play upload)'
+        required: false
+        default: ''
+      version_name:
+        description: 'versionName for release (empty = app/build.gradle.kts default)'
+        required: false
+        default: ''
+      draft:
+        description: 'release only: create the GitHub release as a draft (not public until you publish it)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: build-${{ inputs.channel || 'nightly' }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for recent commits
+        id: check
+        run: |
+          # Manual runs always build; scheduled runs only when there is a commit from the last 24 hours.
+          if [ "${{ github.event_name }}" != "schedule" ] || [ -n "$(git log --since='24 hours ago' --oneline)" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "No commits in the last 24 hours, skipping the build"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: write   # publish releases
+    env:
+      CHANNEL: ${{ inputs.channel || 'nightly' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Check signing secrets
+        env:
+          NIGHTLY_KEYSTORE_BASE64: ${{ secrets.NIGHTLY_KEYSTORE_BASE64 }}
+          NIGHTLY_KEYSTORE_PASSWORD: ${{ secrets.NIGHTLY_KEYSTORE_PASSWORD }}
+          NIGHTLY_KEY_ALIAS: ${{ secrets.NIGHTLY_KEY_ALIAS }}
+          NIGHTLY_KEY_PASSWORD: ${{ secrets.NIGHTLY_KEY_PASSWORD }}
+          PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+          PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          required="NIGHTLY_KEYSTORE_BASE64 NIGHTLY_KEYSTORE_PASSWORD NIGHTLY_KEY_ALIAS NIGHTLY_KEY_PASSWORD"
+          if [ "$CHANNEL" = "release" ]; then
+            required="$required PLAY_UPLOAD_KEYSTORE_BASE64 PLAY_UPLOAD_KEYSTORE_PASSWORD PLAY_UPLOAD_KEY_ALIAS PLAY_UPLOAD_KEY_PASSWORD"
+          fi
+          missing=""
+          for name in $required; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets for channel '$CHANNEL':$missing (see docs/RELEASE.md)"
+            exit 1
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          # Daemon requires JVM 21 (gradle/gradle-daemon-jvm.properties). Compile target stays 17.
+          java-version: '21'
+
+      # The web module's preBuild runs `pnpm run build`, so Node and pnpm must be ready
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Install keystores and Firebase config
+        env:
+          NIGHTLY_KEYSTORE_BASE64: ${{ secrets.NIGHTLY_KEYSTORE_BASE64 }}
+          NIGHTLY_KEYSTORE_PASSWORD: ${{ secrets.NIGHTLY_KEYSTORE_PASSWORD }}
+          NIGHTLY_KEY_ALIAS: ${{ secrets.NIGHTLY_KEY_ALIAS }}
+          PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+          PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          # Public certificate SHA-256 (lowercase hex, no colons) of a keystore entry.
+          cert_sha() {
+            keytool -list -v -keystore "$1" -storepass "$2" -alias "$3" \
+              | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f'
+          }
+          printf '%s' "$NIGHTLY_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/nightly.jks"
+          echo "NIGHTLY_CERT_SHA256=$(cert_sha "$RUNNER_TEMP/nightly.jks" "$NIGHTLY_KEYSTORE_PASSWORD" "$NIGHTLY_KEY_ALIAS")" >> "$GITHUB_ENV"
+          if [ "$CHANNEL" = "release" ]; then
+            printf '%s' "$PLAY_UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "UPLOAD_CERT_SHA256=$(cert_sha "$RUNNER_TEMP/upload.jks" "$PLAY_UPLOAD_KEYSTORE_PASSWORD" "$PLAY_UPLOAD_KEY_ALIAS")" >> "$GITHUB_ENV"
+          fi
+          # Firebase is optional. An empty or non-JSON secret must not create a file.
+          if [ -n "$GOOGLE_SERVICES_JSON" ] && printf '%s\n' "$GOOGLE_SERVICES_JSON" | python3 -c 'import json,sys; json.load(sys.stdin)'; then
+            printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          else
+            rm -f app/google-services.json
+            echo "Skipping Firebase: GOOGLE_SERVICES_JSON missing or not valid JSON"
+          fi
+
+      - name: Version
+        id: version
+        env:
+          INPUT_CODE: ${{ inputs.version_code }}
+          INPUT_NAME: ${{ inputs.version_name }}
+        run: |
+          set -euo pipefail
+          code="${INPUT_CODE:-$((300 + GITHUB_RUN_NUMBER))}"
+          case "$code" in (*[!0-9]*|'') echo "::error::version_code must be a number"; exit 1;; esac
+          name="${INPUT_NAME:-$(sed -n 's/.*?: "\([0-9][^"]*\)".*/\1/p' app/build.gradle.kts | head -1)}"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$code versionName=$name channel=$CHANNEL"
+
+      - name: Build nightly-flavor APKs
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/nightly.jks
+          KEYSTORE_PASSWORD: ${{ secrets.NIGHTLY_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.NIGHTLY_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.NIGHTLY_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleNightlyRelease \
+            -Pfriendly.versionCode=${{ steps.version.outputs.code }} \
+            -Pfriendly.versionName=${{ steps.version.outputs.name }}
+
+      - name: Verify APK signatures
+        run: |
+          set -euo pipefail
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          for apk in app/build/outputs/apk/nightly/release/*.apk; do
+            got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/.*SHA-256 digest: //p' | head -1)
+            echo "$(basename "$apk"): $got"
+            if [ "$got" != "$NIGHTLY_CERT_SHA256" ]; then
+              echo "::error::$apk is not signed with the nightly key (expected $NIGHTLY_CERT_SHA256)"
+              exit 1
+            fi
+          done
+
+      - name: Build signed Play AAB
+        if: env.CHANNEL == 'release'
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/upload.jks
+          KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew bundlePlayRelease \
+            -Pfriendly.versionCode=${{ steps.version.outputs.code }} \
+            -Pfriendly.versionName=${{ steps.version.outputs.name }}
+          aab=app/build/outputs/bundle/playRelease/app-play-release.aab
+          got=$(keytool -printcert -jarfile "$aab" | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          echo "AAB signer: $got"
+          if [ "$got" != "$UPLOAD_CERT_SHA256" ]; then
+            echo "::error::AAB is not signed with the Play upload key (expected $UPLOAD_CERT_SHA256)"
+            exit 1
+          fi
+          if ! unzip -p "$aab" base/manifest/AndroidManifest.xml | strings | grep -q 'com.android.vending.BILLING'; then
+            echo "::warning::AAB has no BILLING permission (Play Billing is not merged yet), so Play Console cannot create in-app products from it."
+          fi
+          mkdir -p out
+          cp "$aab" "out/friendly-play-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}.aab"
+
+      - name: Keep the AAB as a run artifact
+        if: env.CHANNEL == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: friendly-play-aab
+          path: out/*.aab
+          retention-days: 30
+
+      # Nightly: drop every asset on the fixed tag first (softprops only overwrites same-named files).
+      - name: Clear previous nightly assets
+        if: env.CHANNEL == 'nightly'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! release=$(gh api "repos/${{ github.repository }}/releases/tags/nightly" 2>/dev/null); then
+            echo "No nightly release yet; nothing to clear."
+            exit 0
+          fi
+          for id in $(printf '%s' "$release" | jq -r '.assets[].id'); do
+            echo "Deleting release asset id=${id}"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/${id}"
+          done
+
+      - name: Publish nightly prerelease
+        if: env.CHANNEL == 'nightly'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly Build
+          prerelease: true
+          body: |
+            Automatic nightly build (commit `${{ github.sha }}`, versionCode ${{ steps.version.outputs.code }})
+
+            > Development build. It may be unstable and is for testing only.
+          files: app/build/outputs/apk/nightly/release/*.apk
+
+      - name: Publish GitHub release
+        if: env.CHANNEL == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          target_commitish: ${{ github.sha }}
+          name: Friendly ${{ steps.version.outputs.name }} (${{ steps.version.outputs.code }})
+          draft: ${{ inputs.draft }}
+          prerelease: false
+          make_latest: ${{ !inputs.draft }}
+          body: |
+            Friendly ${{ steps.version.outputs.name }}, versionCode ${{ steps.version.outputs.code }}, commit `${{ github.sha }}`.
+
+            - `app-nightly-*-release.apk`: sideload builds (full features), signed with the same key as the nightly.
+            - `friendly-play-*.aab`: Play flavor, signed with the Play upload key. Upload it in Play Console.
+          files: |
+            app/build/outputs/apk/nightly/release/*.apk
+            out/*.aab

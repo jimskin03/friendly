@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# Local Friendly build for Linux / WSL. Mirrors .github/workflows/build.yml.
+#
+#   scripts/build.sh debug                        # nightly-flavor debug APK, no signing needed
+#   scripts/build.sh nightly [--version-code N]   # signed nightly-flavor APKs (NIGHTLY key)
+#   scripts/build.sh release --version-code N [--version-name X]
+#                                                 # nightly APKs + Play AAB (PLAY_UPLOAD key)
+#   scripts/build.sh check                        # only check prerequisites and signing
+#   add --install to download missing JDK 21 / Android cmdline-tools / Node 22 into ~/.friendly-build
+#
+# Signing comes from env vars, else from keystore.properties at the repo root (gitignored, see
+# keystore.properties.example). Env names match the GitHub secrets, with _FILE instead of _BASE64:
+#   NIGHTLY_KEYSTORE_FILE  NIGHTLY_KEYSTORE_PASSWORD  NIGHTLY_KEY_ALIAS  NIGHTLY_KEY_PASSWORD
+#   PLAY_UPLOAD_KEYSTORE_FILE  PLAY_UPLOAD_KEYSTORE_PASSWORD  PLAY_UPLOAD_KEY_ALIAS  PLAY_UPLOAD_KEY_PASSWORD
+# Outputs land in dist/.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TOOLS="${FRIENDLY_TOOLS_DIR:-$HOME/.friendly-build}"
+CHANNEL="${1:-}"
+shift || true
+VERSION_CODE="${VERSION_CODE:-}"
+VERSION_NAME="${VERSION_NAME:-}"
+INSTALL=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version-code) VERSION_CODE="$2"; shift 2 ;;
+    --version-name) VERSION_NAME="$2"; shift 2 ;;
+    --install) INSTALL=1; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+case "$CHANNEL" in debug|nightly|release|check) ;; *)
+  sed -n '2,17p' "$0"; exit 2 ;;
+esac
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+info() { echo "==> $*"; }
+
+# ---- prerequisites -------------------------------------------------------------------------
+java_major() { "$1" -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1; }
+
+setup_java() {
+  local cands=()
+  [ -n "${JAVA_HOME:-}" ] && cands+=("$JAVA_HOME")
+  cands+=("$TOOLS/jdk")
+  command -v java >/dev/null 2>&1 && cands+=("$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")")
+  for h in "${cands[@]}"; do
+    if [ -x "$h/bin/java" ] && [ "$(java_major "$h/bin/java")" = "21" ]; then
+      export JAVA_HOME="$h"; export PATH="$JAVA_HOME/bin:$PATH"; return 0
+    fi
+  done
+  [ "$INSTALL" = 1 ] || die "JDK 21 not found. Set JAVA_HOME to a JDK 21 or rerun with --install."
+  info "Installing Temurin JDK 21 into $TOOLS/jdk"
+  mkdir -p "$TOOLS/jdk"
+  curl -fsSL "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" \
+    | tar xz -C "$TOOLS/jdk" --strip-components=1
+  export JAVA_HOME="$TOOLS/jdk"; export PATH="$JAVA_HOME/bin:$PATH"
+}
+
+setup_android() {
+  local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+  if [ -z "$sdk" ] && [ -f "$ROOT/local.properties" ]; then
+    sdk="$(sed -n 's/^sdk.dir=//p' "$ROOT/local.properties" | head -1)"
+  fi
+  [ -z "$sdk" ] && sdk="$HOME/Android/Sdk"
+  local sdkmanager=""
+  for c in "$sdk/cmdline-tools/latest/bin/sdkmanager" "$sdk"/cmdline-tools/*/bin/sdkmanager; do
+    [ -x "$c" ] && { sdkmanager="$c"; break; }
+  done
+  if [ -z "$sdkmanager" ]; then
+    [ "$INSTALL" = 1 ] || die "Android SDK cmdline-tools not found under $sdk. Set ANDROID_HOME or rerun with --install."
+    info "Installing Android cmdline-tools into $sdk"
+    mkdir -p "$sdk/cmdline-tools"
+    local zip="$TOOLS/cmdline-tools.zip"
+    mkdir -p "$TOOLS"
+    curl -fsSL -o "$zip" "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip"
+    rm -rf "$sdk/cmdline-tools/latest" "$sdk/cmdline-tools/cmdline-tools"
+    unzip -q "$zip" -d "$sdk/cmdline-tools" && mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+    sdkmanager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+  fi
+  export ANDROID_HOME="$sdk"
+  if [ ! -d "$sdk/licenses" ] || [ "$INSTALL" = 1 ]; then
+    info "Accepting Android SDK licenses (AGP then downloads the platform, build-tools and NDK it needs)"
+    yes | "$sdkmanager" --sdk_root="$sdk" --licenses >/dev/null 2>&1 || true
+    "$sdkmanager" --sdk_root="$sdk" "platform-tools" >/dev/null
+  fi
+}
+
+setup_node() {
+  [ -x "$TOOLS/node/bin/node" ] && export PATH="$TOOLS/node/bin:$PATH"
+  local major=""
+  command -v node >/dev/null 2>&1 && major="$(node -v | sed 's/^v\([0-9]*\).*/\1/')"
+  if [ -z "$major" ] || [ "$major" -lt 22 ]; then
+    [ "$INSTALL" = 1 ] || die "Node 22+ not found (web-ui needs it). Install Node 22 or rerun with --install."
+    info "Installing Node 22 into $TOOLS/node"
+    mkdir -p "$TOOLS/node"
+    local ver; ver="$(curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt | sed -n 's/.*node-\(v22[^-]*\)-linux-x64.tar.gz$/\1/p' | head -1)"
+    curl -fsSL "https://nodejs.org/dist/$ver/node-$ver-linux-x64.tar.gz" | tar xz -C "$TOOLS/node" --strip-components=1
+    export PATH="$TOOLS/node/bin:$PATH"
+  fi
+  if ! command -v pnpm >/dev/null 2>&1; then
+    if [ "$INSTALL" = 1 ] || corepack --version >/dev/null 2>&1; then
+      info "Enabling pnpm 11 through corepack"
+      corepack enable --install-directory "$(dirname "$(command -v node)")" 2>/dev/null || corepack enable
+      corepack prepare pnpm@11 --activate >/dev/null
+    fi
+  fi
+  command -v pnpm >/dev/null 2>&1 || die "pnpm not found. Run: corepack enable && corepack prepare pnpm@11 --activate"
+}
+
+# ---- signing -------------------------------------------------------------------------------
+# prop <key>: value from keystore.properties (first '=' splits key and value).
+prop() {
+  local f="$ROOT/keystore.properties"
+  [ -f "$f" ] || return 0
+  awk -v k="$1" 'index($0, k"=") == 1 { print substr($0, length(k) + 2); exit }' "$f" | tr -d '\r'
+}
+
+# load_key <ENV_PREFIX> <props prefix> -> exports KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD
+load_key() {
+  local p="$1" q="$2" file pass alias kpass v
+  v="${p}_KEYSTORE_FILE";     file="${!v:-}";  [ -n "$file" ]  || file="$(prop "$q.storeFile")"
+  v="${p}_KEYSTORE_PASSWORD"; pass="${!v:-}";  [ -n "$pass" ]  || pass="$(prop "$q.storePassword")"
+  v="${p}_KEY_ALIAS";         alias="${!v:-}"; [ -n "$alias" ] || alias="$(prop "$q.keyAlias")"
+  v="${p}_KEY_PASSWORD";      kpass="${!v:-}"; [ -n "$kpass" ] || kpass="$(prop "$q.keyPassword")"
+  local missing=""
+  [ -n "$file" ] || missing="$missing ${p}_KEYSTORE_FILE/$q.storeFile"
+  [ -n "$pass" ] || missing="$missing ${p}_KEYSTORE_PASSWORD/$q.storePassword"
+  [ -n "$alias" ] || missing="$missing ${p}_KEY_ALIAS/$q.keyAlias"
+  [ -n "$kpass" ] || missing="$missing ${p}_KEY_PASSWORD/$q.keyPassword"
+  [ -z "$missing" ] || die "Missing signing values:$missing (see keystore.properties.example)"
+  case "$file" in /*) ;; *) file="$ROOT/$file" ;; esac
+  [ -s "$file" ] || die "Keystore not found: $file"
+  export KEYSTORE_FILE="$file" KEYSTORE_PASSWORD="$pass" KEY_ALIAS="$alias" KEY_PASSWORD="$kpass"
+}
+
+key_sha() {
+  keytool -list -v -keystore "$KEYSTORE_FILE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null \
+    | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f'
+}
+
+apksigner_bin() { ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1 | sed 's#$#apksigner#'; }
+
+# ---- main ----------------------------------------------------------------------------------
+cd "$ROOT"
+setup_java
+setup_android
+setup_node
+info "JDK: $(java_major "$JAVA_HOME/bin/java") ($JAVA_HOME)"
+info "Android SDK: $ANDROID_HOME"
+info "Node: $(node -v), pnpm: $(pnpm -v)"
+
+if [ "$CHANNEL" = "release" ] && [ -z "$VERSION_CODE" ]; then
+  die "release needs --version-code N (higher than every earlier Play upload; CI uses 300 + run number)"
+fi
+case "$VERSION_CODE" in ''|*[!0-9]*) [ -z "$VERSION_CODE" ] || die "--version-code must be a number" ;; esac
+# Same default versionName as CI: the literal in app/build.gradle.kts.
+DEFAULT_VERSION_NAME="$(sed -n 's/.*?: "\([0-9][^"]*\)".*/\1/p' app/build.gradle.kts | head -1)"
+GRADLE_ARGS=(--console=plain)
+[ -n "$VERSION_CODE" ] && GRADLE_ARGS+=("-Pfriendly.versionCode=$VERSION_CODE")
+[ -n "$VERSION_NAME" ] && GRADLE_ARGS+=("-Pfriendly.versionName=$VERSION_NAME")
+
+if [ "$CHANNEL" = "check" ]; then
+  for pair in "NIGHTLY nightly" "PLAY_UPLOAD upload"; do
+    set -- $pair
+    if ( load_key "$1" "$2" ) 2>/dev/null; then
+      ( load_key "$1" "$2"; info "$2 key OK, certificate SHA-256 $(key_sha)" )
+    else
+      info "$2 key not configured (needed for: $([ "$2" = nightly ] && echo 'nightly, release' || echo release))"
+    fi
+  done
+  info "Prerequisites OK"
+  exit 0
+fi
+
+# Fail before the long build if a needed key is missing or unreadable.
+if [ "$CHANNEL" != "debug" ]; then
+  ( load_key NIGHTLY nightly; [ -n "$(key_sha)" ] || die "Cannot read the nightly key (wrong password or alias?)" )
+fi
+if [ "$CHANNEL" = "release" ]; then
+  ( load_key PLAY_UPLOAD upload; [ -n "$(key_sha)" ] || die "Cannot read the upload key (wrong password or alias?)" )
+fi
+
+info "Installing web-ui dependencies"
+(cd web-ui && pnpm install --frozen-lockfile)
+chmod +x gradlew
+mkdir -p dist
+
+if [ "$CHANNEL" = "debug" ]; then
+  ./gradlew :app:assembleNightlyDebug "${GRADLE_ARGS[@]}"
+  cp app/build/outputs/apk/nightly/debug/*.apk dist/
+  info "Debug APKs in dist/"; ls -1 dist/*debug*.apk
+  exit 0
+fi
+
+# Nightly-flavor APKs, signed with the nightly key (both channels)
+(
+  load_key NIGHTLY nightly
+  expected="$(key_sha)"
+  [ -n "$expected" ] || die "Cannot read the nightly key (wrong password or alias?)"
+  ./gradlew assembleNightlyRelease "${GRADLE_ARGS[@]}"
+  signer="$(apksigner_bin)"
+  for apk in app/build/outputs/apk/nightly/release/*.apk; do
+    got="$("$signer" verify --print-certs "$apk" | sed -n 's/.*SHA-256 digest: //p' | head -1)"
+    [ "$got" = "$expected" ] || die "$apk signed with $got, expected nightly key $expected"
+    cp "$apk" dist/
+  done
+)
+info "Nightly APKs in dist/"
+
+if [ "$CHANNEL" = "release" ]; then
+  (
+    load_key PLAY_UPLOAD upload
+    expected="$(key_sha)"
+    [ -n "$expected" ] || die "Cannot read the upload key (wrong password or alias?)"
+    ./gradlew bundlePlayRelease "${GRADLE_ARGS[@]}"
+    aab=app/build/outputs/bundle/playRelease/app-play-release.aab
+    got="$(keytool -printcert -jarfile "$aab" | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+    [ "$got" = "$expected" ] || die "AAB signed with $got, expected upload key $expected"
+    unzip -p "$aab" base/manifest/AndroidManifest.xml | strings | grep -q com.android.vending.BILLING \
+      || echo "WARNING: AAB has no BILLING permission (Play Billing not merged yet)"
+    cp "$aab" "dist/friendly-play-${VERSION_NAME:-$DEFAULT_VERSION_NAME}-$VERSION_CODE.aab"
+  )
+  info "Play AAB in dist/"
+fi
+ls -1 dist/
