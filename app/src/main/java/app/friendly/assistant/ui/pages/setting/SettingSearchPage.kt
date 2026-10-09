@@ -64,103 +64,83 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.reflect.full.primaryConstructor
 
+/**
+ * Search provider list, common options and add/delete dialogs. Shown as the
+ * Search tab of the Providers page.
+ */
 @Composable
-fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
+fun SearchServicesContent(
+    vm: SettingVM,
+    showAddDialog: Boolean,
+    onShowAddDialogChange: (Boolean) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(),
+) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val lazyListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val nav = LocalNavController.current
-    var showAddDialog by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SearchServiceOptions?>(null) }
 
-    Scaffold(
-        topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text(stringResource(R.string.setting_page_search_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                actions = {
-                    IconButton(
-                        onClick = { showAddDialog = true }
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Add01,
-                            contentDescription = stringResource(R.string.setting_page_search_add_provider)
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = CustomColors.topBarColors
-            )
-        },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor
-    ) {
-        val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-            val fromIndex = from.index
-            val toIndex = to.index
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val fromIndex = from.index
+        val toIndex = to.index
 
-            if (fromIndex >= 0 && toIndex >= 0 && fromIndex < settings.searchServices.size && toIndex < settings.searchServices.size) {
-                val newServices = settings.searchServices.toMutableList().apply {
-                    add(toIndex, removeAt(fromIndex))
-                }
-                vm.updateSettings(
-                    settings.copy(searchServices = newServices)
+        if (fromIndex >= 0 && toIndex >= 0 && fromIndex < settings.searchServices.size && toIndex < settings.searchServices.size) {
+            val newServices = settings.searchServices.toMutableList().apply {
+                add(toIndex, removeAt(fromIndex))
+            }
+            vm.updateSettings(
+                settings.copy(searchServices = newServices)
+            )
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
+        contentPadding = contentPadding + PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        state = lazyListState
+    ) {
+        items(settings.searchServices, key = { it.id }) { service ->
+            ReorderableItem(
+                state = reorderableState,
+                key = service.id
+            ) { isDragging ->
+                SearchProviderCard(
+                    service = service,
+                    onEdit = {
+                        nav.navigate(Screen.SettingSearchDetail(service.id.toString()))
+                    },
+                    onDelete = {
+                        deleteTarget = service
+                    },
+                    canDelete = settings.searchServices.size > 1,
+                    modifier = Modifier
+                        .animateItem()
+                        .then(longPressReorder(isDragging))
                 )
             }
         }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding(),
-            contentPadding = it + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            state = lazyListState
-        ) {
-            items(settings.searchServices, key = { it.id }) { service ->
-                ReorderableItem(
-                    state = reorderableState,
-                    key = service.id
-                ) { isDragging ->
-                    SearchProviderCard(
-                        service = service,
-                        onEdit = {
-                            nav.navigate(Screen.SettingSearchDetail(service.id.toString()))
-                        },
-                        onDelete = {
-                            deleteTarget = service
-                        },
-                        canDelete = settings.searchServices.size > 1,
-                        modifier = Modifier
-                            .animateItem()
-                            .then(longPressReorder(isDragging))
+        item("common_options") {
+            CommonOptions(
+                settings = settings,
+                onUpdate = { options ->
+                    vm.updateSettings(
+                        settings.copy(searchCommonOptions = options)
                     )
                 }
-            }
-
-            item("common_options") {
-                CommonOptions(
-                    settings = settings,
-                    onUpdate = { options ->
-                        vm.updateSettings(
-                            settings.copy(searchCommonOptions = options)
-                        )
-                    }
-                )
-            }
+            )
         }
     }
 
     if (showAddDialog) {
         AddProviderDialog(
-            onDismiss = { showAddDialog = false },
+            onDismiss = { onShowAddDialogChange(false) },
             onConfirm = { options ->
-                showAddDialog = false
+                onShowAddDialogChange(false)
                 vm.updateSettings(
                     settings.copy(
                         searchServices = listOf(options) + settings.searchServices

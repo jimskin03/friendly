@@ -120,7 +120,6 @@ import app.friendly.assistant.ui.pages.setting.SettingPage
 import app.friendly.assistant.ui.pages.setting.SettingProviderDetailPage
 import app.friendly.assistant.ui.pages.setting.SettingProviderPage
 import app.friendly.assistant.ui.pages.setting.SettingSearchDetailPage
-import app.friendly.assistant.ui.pages.setting.SettingSearchPage
 import app.friendly.assistant.ui.pages.setting.SettingSpeechPage
 import app.friendly.assistant.ui.pages.share.handler.ShareHandlerPage
 import app.friendly.assistant.ui.pages.stats.StatsPage
@@ -508,8 +507,9 @@ class RouteActivity : ComponentActivity() {
                                 SettingAboutPage()
                             }
 
+                            // Search providers now live in the Providers page (Search tab).
                             entry<Screen.SettingSearch> {
-                                SettingSearchPage()
+                                SettingProviderPage(initialTab = 1)
                             }
 
                             entry<Screen.SettingSearchDetail> { key ->

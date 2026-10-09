@@ -45,7 +45,6 @@ import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Database02
-import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
@@ -182,12 +181,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_assistant)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.Stats) },
-                        leadingContent = { Icon(HugeIcons.ChartColumn, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_analyze_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_analyze)) },
-                    )
-                    item(
                         onClick = { navController.navigate(Screen.Extensions) },
                         leadingContent = { Icon(HugeIcons.Package, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_extensions_desc)) },
@@ -212,12 +205,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Brain02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_providers_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_providers)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingSearch) },
-                        leadingContent = { Icon(HugeIcons.GlobalSearch, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_search_service_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_search_service)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSpeech) },
@@ -273,6 +260,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                 ) {
+                    item(
+                        onClick = { navController.navigate(Screen.Stats) },
+                        leadingContent = { Icon(HugeIcons.ChartColumn, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_analyze_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_analyze)) },
+                    )
                     item(
                         onClick = { navController.navigate(Screen.SettingAbout) },
                         leadingContent = { Icon(HugeIcons.Book03, null) },
