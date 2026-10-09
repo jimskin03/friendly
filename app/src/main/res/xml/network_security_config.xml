@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Play / default: HTTPS only, normal certificate checks. Self-hosted servers (desktop viewer,
+  Hermes, MCP) need a publicly trusted cert (e.g. Tailscale HTTPS) or a CA the user installed
+  on the phone. There is deliberately no trust-all code anywhere in the app.
+-->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system" />
+      <certificates src="user" />
+    </trust-anchors>
+  </base-config>
+</network-security-config>

@@ -90,13 +90,6 @@ import com.dokar.sonner.ToastType
 import io.ktor.client.HttpClient
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -786,7 +779,17 @@ fun DesktopControlSheet(
                                     handler: SslErrorHandler?,
                                     error: SslError?,
                                 ) {
-                                    handler?.proceed()
+                                    // Never accept an invalid certificate. Use a trusted cert (e.g. Tailscale
+                                    // HTTPS / Let's Encrypt), install your own CA on the phone, or plain HTTP.
+                                    handler?.cancel()
+                                    android.util.Log.w("DesktopControl", "Viewer TLS error ${error?.primaryError} for ${error?.url}")
+                                    view?.context?.let { ctx ->
+                                        android.widget.Toast.makeText(
+                                            ctx,
+                                            "Screen viewer certificate isn't trusted. Use a trusted HTTPS certificate, install your CA on the phone, or use http://.",
+                                            android.widget.Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
                                 }
 
                                 override fun onReceivedError(
@@ -1406,7 +1409,7 @@ private fun Float.jsNum(): String = if (isFinite()) toString() else "0"
 
 /**
  * noVNC keeps its session inside an ES module. Append a hook so the page can
- * turn scaling back on. The viewer certificate is already accepted by the WebView.
+ * turn scaling back on. Uses the platform's normal certificate checks.
  */
 private fun viewerScriptWithHook(url: String): WebResourceResponse? {
     if (!url.contains("/app/ui.js")) return null
@@ -1415,10 +1418,6 @@ private fun viewerScriptWithHook(url: String): WebResourceResponse? {
             connectTimeout = 8000
             readTimeout = 8000
             instanceFollowRedirects = true
-            if (this is HttpsURLConnection) {
-                sslSocketFactory = viewerTlsSocketFactory()
-                hostnameVerifier = HostnameVerifier { _, _ -> true }
-            }
         }
         connection.inputStream.use { input ->
             val hooked = input.bufferedReader().readText() + "\nglobalThis.__novncUI = UI;\n"
@@ -1429,14 +1428,6 @@ private fun viewerScriptWithHook(url: String): WebResourceResponse? {
         null
     }
 }
-
-private fun viewerTlsSocketFactory() = SSLContext.getInstance("TLS").apply {
-    init(null, arrayOf<TrustManager>(object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-    }), SecureRandom())
-}.socketFactory
 
 /** Fit the whole remote desktop in the phone. resize=remote makes one remote pixel one CSS pixel, which crops it. */
 private fun String.fittedViewerUrl(): String {

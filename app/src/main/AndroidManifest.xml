@@ -53,6 +53,7 @@
     android:supportsRtl="true"
     android:theme="@style/Theme.Friendly"
     android:usesCleartextTraffic="false"
+    android:networkSecurityConfig="@xml/network_security_config"
     tools:targetApi="33">
     <meta-data
       android:name="google_analytics_adid_collection_enabled"
