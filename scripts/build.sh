@@ -1,18 +1,43 @@
 #!/usr/bin/env bash
-# Local Friendly build for Linux / WSL. Mirrors .github/workflows/build.yml.
+# Local Friendly build for Linux / WSL. Mirrors .github/workflows/build.yml. `scripts/build.sh help` prints this.
 #
+#   scripts/build.sh check [--install]            # check (or install) JDK 21, Android cmdline-tools, Node 22 + pnpm,
+#                                                 # and print each configured key's SHA-256. Installs go to ~/.friendly-build.
 #   scripts/build.sh debug                        # nightly-flavor debug APK, no signing needed
-#   scripts/build.sh nightly [--version-code N]   # signed nightly-flavor APKs (NIGHTLY key)
+#   scripts/build.sh nightly [--version-code N]   # signed nightly-flavor APKs (nightly key), same as CI channel=nightly
 #   scripts/build.sh release --version-code N [--version-name X]
-#                                                 # nightly APKs + Play AAB (PLAY_UPLOAD key)
-#   scripts/build.sh check                        # only check prerequisites and signing
-#   add --install to download missing JDK 21 / Android cmdline-tools / Node 22 into ~/.friendly-build
+#                                                 # nightly APKs + Play AAB (upload key), same as CI channel=release
+# Outputs land in dist/; every artifact's signature is checked first. VERSION_CODE / VERSION_NAME env also work.
 #
-# Signing comes from env vars, else from keystore.properties at the repo root (gitignored, see
-# keystore.properties.example). Env names match the GitHub secrets, with _FILE instead of _BASE64:
-#   NIGHTLY_KEYSTORE_FILE  NIGHTLY_KEYSTORE_PASSWORD  NIGHTLY_KEY_ALIAS  NIGHTLY_KEY_PASSWORD
-#   PLAY_UPLOAD_KEYSTORE_FILE  PLAY_UPLOAD_KEYSTORE_PASSWORD  PLAY_UPLOAD_KEY_ALIAS  PLAY_UPLOAD_KEY_PASSWORD
-# Outputs land in dist/.
+# SIGNING: env vars first, else keystore.properties at the repo root (gitignored; copy keystore.properties.example).
+#   keystore.properties keys: nightly.storeFile nightly.storePassword nightly.keyAlias nightly.keyPassword
+#                             upload.storeFile  upload.storePassword  upload.keyAlias  upload.keyPassword
+#   env vars: NIGHTLY_KEYSTORE_FILE NIGHTLY_KEYSTORE_PASSWORD NIGHTLY_KEY_ALIAS NIGHTLY_KEY_PASSWORD
+#             PLAY_UPLOAD_KEYSTORE_FILE PLAY_UPLOAD_KEYSTORE_PASSWORD PLAY_UPLOAD_KEY_ALIAS PLAY_UPLOAD_KEY_PASSWORD
+#   GitHub secrets: the same 8 names, with *_KEYSTORE_BASE64 (base64 of the .jks) instead of *_KEYSTORE_FILE.
+#
+# KEYS (never commit them; keep an offline copy of both .jks files + passwords):
+#   nightly (alias nightly) signs every GitHub APK. SHA-256 4A:74:6F:58:5A:87:7F:A9:EC:8A:CC:E4:C3:68:CF:51:73:CA:05:85:4A:6C:70:92:20:53:6B:8A:E9:DA:C9:FE
+#   upload  (alias upload) signs the Play AAB.     SHA-256 32:8C:3C:59:35:8D:74:BA:B0:F2:6A:E8:37:52:E7:04:DC:2B:E4:62:E0:21:CE:8D:10:10:80:FB:CD:DE:52:5C
+#   Verify:  keytool -list -v -keystore friendly-upload.jks -alias upload   (compare the SHA256 line)
+#   New key: keytool -genkeypair -v -keystore friendly-upload.jks -storetype PKCS12 -alias upload -keyalg RSA -keysize 4096 -validity 10000
+#   Secrets: base64 -w0 friendly-upload.jks | gh secret set PLAY_UPLOAD_KEYSTORE_BASE64 -R jimskin03/friendly
+#            gh secret set PLAY_UPLOAD_KEYSTORE_PASSWORD -R jimskin03/friendly   (prompts; same for PLAY_UPLOAD_KEY_PASSWORD)
+#            gh secret set PLAY_UPLOAD_KEY_ALIAS -R jimskin03/friendly --body upload    (NIGHTLY_* + alias nightly likewise)
+#   A new nightly key means one more uninstall on the phone.
+#   Lost upload key: Play Console > Test and release > App integrity > App signing > Request upload key reset,
+#   upload `keytool -export -rfc -keystore new.jks -alias upload -file upload_cert.pem`, then update PLAY_UPLOAD_*.
+#
+# PLAY CONSOLE: payments profile; Internal testing > Create release > upload the AAB (turns on Play App Signing);
+#   after billing is merged, Monetize > One-time products (non-consumable): theme_cute_minimal, theme_cozy_night,
+#   theme_playful_doodle, theme_glass_frost, theme_pack_all; add License testers; privacy-policy URL before production.
+#
+# SELF-HOSTED RUNNER (optional, WSL2/Linux): `scripts/build.sh check --install`, export ANDROID_HOME, install gh, then
+#   download the runner (repo > Settings > Actions > Runners > New self-hosted runner > Linux x64) and run
+#   ./config.sh --url https://github.com/jimskin03/friendly --labels friendly --unattended \
+#     --token "$(gh api -X POST repos/jimskin03/friendly/actions/runners/registration-token -q .token)"
+#   echo "ANDROID_HOME=$HOME/Android/Sdk" >> .env && sudo ./svc.sh install && sudo ./svc.sh start
+#   gh variable set BUILD_RUNNER -R jimskin03/friendly --body friendly   (gh variable delete BUILD_RUNNER to go back)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,8 +55,11 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
-case "$CHANNEL" in debug|nightly|release|check) ;; *)
-  sed -n '2,17p' "$0"; exit 2 ;;
+usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+case "$CHANNEL" in
+  debug|nightly|release|check) ;;
+  help|-h|--help) usage; exit 0 ;;
+  *) usage; exit 2 ;;
 esac
 
 die() { echo "ERROR: $*" >&2; exit 1; }
