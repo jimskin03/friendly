@@ -45,6 +45,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
+import app.friendly.assistant.data.billing.PaidThemeStore
 
 private const val TAG = "FriendlyApp"
 
@@ -107,6 +108,9 @@ class FriendlyApp : Application() {
 
         // Increment launch count
         incrementLaunchCount()
+
+        // Restore paid theme purchases from Google Play (no-op on builds that unlock them)
+        get<PaidThemeStore>().start()
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
