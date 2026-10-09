@@ -195,6 +195,23 @@ Friendly’s host is meant for a **private network**:
 
 Optional MCP registration for the host: name `friendly-desktop`, Streamable HTTP URL `http://<host>:8787/mcp`, header `Authorization: Bearer <API_TOKEN>`.
 
+### Desktop Screen over HTTPS (Play version)
+
+The **Play** build only accepts trusted HTTPS for the desktop Screen viewer and the Control API: self-signed certificates are rejected and cleartext `http://` is blocked. The easiest fix is **Tailscale HTTPS**:
+
+1. In the Tailscale admin console [DNS page](https://login.tailscale.com/admin/dns), enable **MagicDNS** and **HTTPS Certificates**.
+2. On the computer running the host (cert is issued automatically):
+   ```bash
+   tailscale serve --bg --https=443  http://127.0.0.1:8787   # Control API
+   tailscale serve --bg --https=8443 http://127.0.0.1:6099   # noVNC Screen viewer
+   ```
+   With `TUNNEL_MODE=auto` (default) or `tailscale`, the host sets up the `:8443` viewer route itself when a stream starts. Running your own server instead? `tailscale cert <machine>.<tailnet>.ts.net` writes `.crt`/`.key` files for it.
+3. In Friendly, set the Base URL to `https://<machine>.<tailnet>.ts.net`. The Screen opens at `https://<machine>.<tailnet>.ts.net:8443/vnc.html`, the `viewer_url` returned by the host.
+
+**Alternative:** install your own CA on the phone (Android Settings → Security → Encryption & credentials → Install a certificate → CA certificate). Friendly trusts user-installed CAs.
+
+**Nightly** builds can still use plain `http://` on LAN/Tailscale (e.g. `http://100.x.y.z:8787`).
+
 ---
 
 ## Architecture (brief)
