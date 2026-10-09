@@ -11,7 +11,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .config import Settings, get_settings
+from .config import Settings, get_settings, usable_api_token
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -21,11 +21,11 @@ def require_bearer(
     settings: Settings = Depends(get_settings),
 ) -> None:
     """Reject requests without a matching Authorization: Bearer <API_TOKEN>."""
-    expected = settings.api_token
+    expected = usable_api_token(settings.api_token)
     if not expected:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="API_TOKEN is not configured on the host",
+            detail="API_TOKEN is not configured on the host (empty or placeholder)",
         )
 
     if credentials is None or credentials.scheme.lower() != "bearer":
@@ -65,10 +65,10 @@ class BearerAuthASGIMiddleware:
             await self.app(scope, receive, send)
             return
 
-        expected = self._token_getter() or ""
+        expected = usable_api_token(self._token_getter())
         if not expected:
             response = JSONResponse(
-                {"detail": "API_TOKEN is not configured on the host"},
+                {"detail": "API_TOKEN is not configured on the host (empty or placeholder)"},
                 status_code=503,
             )
             await response(scope, receive, send)
@@ -94,10 +94,10 @@ class BearerAuthASGIMiddleware:
 # Keep Request-based helper for FastAPI middleware style if needed
 async def bearer_http_middleware(request: Request, call_next) -> Response:
     settings = get_settings()
-    expected = settings.api_token or ""
+    expected = usable_api_token(settings.api_token)
     if not expected:
         return JSONResponse(
-            {"detail": "API_TOKEN is not configured on the host"},
+            {"detail": "API_TOKEN is not configured on the host (empty or placeholder)"},
             status_code=503,
         )
     token = _extract_bearer(request.headers.get("authorization"))

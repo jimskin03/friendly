@@ -46,7 +46,7 @@ Copy `.env.example` → `.env` if bootstrap did not already. Set a strong `API_T
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `API_TOKEN` | (required) | Bearer token for all `/v1/*` routes |
+| `API_TOKEN` | (required) | Bearer token for all `/v1/*` routes and `/mcp`. Startup fails if it is empty or the `.env.example` placeholder |
 | `DISPLAY` | `:99` | Xvfb display |
 | `API_HOST` / `API_PORT` | `127.0.0.1` / `8787` | Bind address |
 | `SCREEN_WIDTH` / `HEIGHT` / `DEPTH` | `1280` / `720` / `24` | Xvfb geometry |
