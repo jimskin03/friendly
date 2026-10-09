@@ -261,7 +261,7 @@ The **play** flavor sells the four paid themes through Google Play Billing (one 
 
 The **nightly** flavor has no Play billing and keeps the themes unlocked (`BuildConfig.UNLOCK_PAID_THEMES`).
 
-To build an upload bundle, run the **Build** workflow with `channel=release` (see `docs/RELEASE.md`), or locally `scripts/build.sh release --version-code N` (`scripts\build.ps1 release -VersionCode N` on Windows).
+To build an upload bundle, run the **Build** workflow with `channel=release` (see AGENTS.md), or locally `scripts/build.sh release --version-code N` (`scripts\build.ps1 release -VersionCode N` on Windows).
 
 ### Tests
 
