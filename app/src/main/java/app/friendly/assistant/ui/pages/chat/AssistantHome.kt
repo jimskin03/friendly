@@ -11,6 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -156,7 +159,9 @@ fun AssistantHome(
             chrome = chrome,
         )
 
-        chrome.peekRes?.let { peek ->
+        if (chrome.styleId == CatHomeStyleId.CUTE_MINIMAL && chrome.peekRes != null) {
+            CutePeekingCat(peek = chrome.peekRes)
+        } else chrome.peekRes?.let { peek ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -208,6 +213,40 @@ fun AssistantHome(
             onStarterClick = onStarterClick,
             chrome = chrome,
         )
+    }
+}
+
+/**
+ * Cute Minimal: the tabby sits behind the Activity card with only its paws over the edge.
+ * The art (theme_cat_cute_peek, 800x380 units) is cut flat at y=330 where the card's top
+ * edge goes; the paws hang 41 units below that line.
+ */
+@Composable
+private fun CutePeekingCat(peek: Int) {
+    val artWidth = 240.dp
+    val artHeight = artWidth * (380f / 800f)
+    val cutY = artWidth * (330f / 800f)
+    val columnGap = 12.dp
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cutY - columnGap)
+            .zIndex(1f)
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+        Box(modifier = Modifier.weight(1f)) {
+            Image(
+                painter = painterResource(peek),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .wrapContentSize(align = Alignment.TopCenter, unbounded = true)
+                    .requiredSize(width = artWidth, height = artHeight),
+            )
+        }
     }
 }
 
@@ -444,6 +483,9 @@ private fun ShortcutCards(
         else -> chrome.card
     }
 
+    // Cute Minimal: extra top room so the peeking cat's paws don't cover the labels.
+    val cardTopPad = if (chrome.styleId == CatHomeStyleId.CUTE_MINIMAL) 24.dp else 14.dp
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -460,7 +502,7 @@ private fun ShortcutCards(
             border = BorderStroke(1.dp, if (chrome.styleId == CatHomeStyleId.NONE) Color(0x3338BDF8) else chrome.cardBorder),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = cardTopPad, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -512,7 +554,7 @@ private fun ShortcutCards(
             border = BorderStroke(1.dp, if (chrome.styleId == CatHomeStyleId.NONE) Color(0x33818CF8) else chrome.cardBorder),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = cardTopPad, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
