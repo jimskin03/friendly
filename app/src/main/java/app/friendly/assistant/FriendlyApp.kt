@@ -35,7 +35,6 @@ import app.friendly.assistant.data.datastore.SettingsStore
 import app.friendly.assistant.data.sync.BackupManager
 import app.friendly.assistant.data.sync.RestoreFailedException
 import app.friendly.assistant.utils.JsonInstant
-import app.friendly.assistant.service.WebServerService
 import app.friendly.assistant.utils.CrashHandler
 import app.friendly.assistant.utils.DatabaseUtil
 import app.friendly.assistant.data.repository.WorkspaceRepository
@@ -51,7 +50,6 @@ private const val TAG = "FriendlyApp"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
-const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val PHONE_AUTOMATION_NOTIFICATION_CHANNEL_ID = "phone_automation"
 const val VOICE_CAPTURE_NOTIFICATION_CHANNEL_ID = "voice_capture"
 const val PHONE_CALL_NOTIFICATION_CHANNEL_ID = "phone_call"
@@ -102,9 +100,6 @@ class FriendlyApp : Application() {
 
         // Extract builtin skills from assets after install/update
         extractBuiltinSkills()
-
-        // Start WebServer if enabled in settings
-        startWebServerIfEnabled()
 
         // Increment launch count
         incrementLaunchCount()
@@ -182,44 +177,6 @@ class FriendlyApp : Application() {
         }
     }
 
-    private fun startWebServerIfEnabled() {
-        get<AppScope>().launch {
-            runCatching {
-                delay(500)
-                val settings = get<SettingsStore>().settingsFlowRaw.first()
-                if (settings.webServerEnabled) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ContextCompat.checkSelfPermission(
-                            this@FriendlyApp,
-                            android.Manifest.permission.POST_NOTIFICATIONS
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        Log.w(TAG, "startWebServerIfEnabled: notification permission not granted, skipping")
-                        return@launch
-                    }
-                    if (Build.VERSION.SDK_INT >= 37 &&
-                        !settings.webServerLocalhostOnly &&
-                        ContextCompat.checkSelfPermission(
-                            this@FriendlyApp,
-                            android.Manifest.permission.ACCESS_LOCAL_NETWORK
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        Log.w(TAG, "startWebServerIfEnabled: local network permission not granted, skipping")
-                        return@launch
-                    }
-                    val intent = Intent(this@FriendlyApp, WebServerService::class.java).apply {
-                        action = WebServerService.ACTION_START
-                        putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)
-                        putExtra(WebServerService.EXTRA_LOCALHOST_ONLY, settings.webServerLocalhostOnly)
-                    }
-                    startForegroundService(intent)
-                }
-            }.onFailure {
-                Log.e(TAG, "startWebServerIfEnabled failed", it)
-            }
-        }
-    }
-
     private fun createNotificationChannel() {
         val notificationManager = NotificationManagerCompat.from(this)
         val chatCompletedChannel = NotificationChannelCompat
@@ -241,14 +198,6 @@ class FriendlyApp : Application() {
             .setVibrationEnabled(false)
             .build()
         notificationManager.createNotificationChannel(chatLiveUpdateChannel)
-
-        val webServerChannel = NotificationChannelCompat
-            .Builder(WEB_SERVER_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-            .setName(getString(R.string.notification_channel_web_server))
-            .setVibrationEnabled(false)
-            .setShowBadge(false)
-            .build()
-        notificationManager.createNotificationChannel(webServerChannel)
 
         val phoneAutomationChannel = NotificationChannelCompat
             .Builder(PHONE_AUTOMATION_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
@@ -277,7 +226,6 @@ class FriendlyApp : Application() {
     override fun onTerminate() {
         super.onTerminate()
         get<AppScope>().cancel()
-        stopService(Intent(this, WebServerService::class.java))
     }
 }
 

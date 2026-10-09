@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local Friendly build for Linux / WSL. Mirrors .github/workflows/build.yml. `scripts/build.sh help` prints this.
 #
-#   scripts/build.sh check [--install]            # check (or install) JDK 21, Android cmdline-tools, Node 22 + pnpm,
+#   scripts/build.sh check [--install]            # check (or install) JDK 21, Android cmdline-tools,
 #                                                 # and print each configured key's SHA-256. Installs go to ~/.friendly-build.
 #   scripts/build.sh debug                        # nightly-flavor debug APK, no signing needed
 #   scripts/build.sh nightly [--version-code N]   # signed nightly-flavor APKs (nightly key), same as CI channel=nightly
@@ -115,28 +115,6 @@ setup_android() {
   fi
 }
 
-setup_node() {
-  [ -x "$TOOLS/node/bin/node" ] && export PATH="$TOOLS/node/bin:$PATH"
-  local major=""
-  command -v node >/dev/null 2>&1 && major="$(node -v | sed 's/^v\([0-9]*\).*/\1/')"
-  if [ -z "$major" ] || [ "$major" -lt 22 ]; then
-    [ "$INSTALL" = 1 ] || die "Node 22+ not found (web-ui needs it). Install Node 22 or rerun with --install."
-    info "Installing Node 22 into $TOOLS/node"
-    mkdir -p "$TOOLS/node"
-    local ver; ver="$(curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt | sed -n 's/.*node-\(v22[^-]*\)-linux-x64.tar.gz$/\1/p' | head -1)"
-    curl -fsSL "https://nodejs.org/dist/$ver/node-$ver-linux-x64.tar.gz" | tar xz -C "$TOOLS/node" --strip-components=1
-    export PATH="$TOOLS/node/bin:$PATH"
-  fi
-  if ! command -v pnpm >/dev/null 2>&1; then
-    if [ "$INSTALL" = 1 ] || corepack --version >/dev/null 2>&1; then
-      info "Enabling pnpm 11 through corepack"
-      corepack enable --install-directory "$(dirname "$(command -v node)")" 2>/dev/null || corepack enable
-      corepack prepare pnpm@11 --activate >/dev/null
-    fi
-  fi
-  command -v pnpm >/dev/null 2>&1 || die "pnpm not found. Run: corepack enable && corepack prepare pnpm@11 --activate"
-}
-
 # ---- signing -------------------------------------------------------------------------------
 # prop <key>: value from keystore.properties (first '=' splits key and value).
 prop() {
@@ -174,10 +152,8 @@ apksigner_bin() { ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | t
 cd "$ROOT"
 setup_java
 setup_android
-setup_node
 info "JDK: $(java_major "$JAVA_HOME/bin/java") ($JAVA_HOME)"
 info "Android SDK: $ANDROID_HOME"
-info "Node: $(node -v), pnpm: $(pnpm -v)"
 
 if [ "$CHANNEL" = "release" ] && [ -z "$VERSION_CODE" ]; then
   die "release needs --version-code N (higher than every earlier Play upload; CI uses 300 + run number)"
@@ -210,8 +186,6 @@ if [ "$CHANNEL" = "release" ]; then
   ( load_key PLAY_UPLOAD upload; [ -n "$(key_sha)" ] || die "Cannot read the upload key (wrong password or alias?)" )
 fi
 
-info "Installing web-ui dependencies"
-(cd web-ui && pnpm install --frozen-lockfile)
 chmod +x gradlew
 mkdir -p dist
 

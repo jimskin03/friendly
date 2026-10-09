@@ -549,6 +549,38 @@ internal fun ModelSettingsForm(
     }
 }
 
+/**
+ * New models only need an ID (and optional display name). Capabilities come from the model
+ * registry when the ID is recognised; otherwise a capable chat model is assumed
+ * (text + image in, text out, tools + reasoning).
+ */
+internal fun Model.withAutoCapabilities(): Model {
+    val id = modelId.trim()
+    val name = displayName.trim().ifBlank { id }
+    if (id.contains("embed", ignoreCase = true)) {
+        return copy(modelId = id, displayName = name, type = ModelType.EMBEDDING, abilities = emptyList())
+    }
+    return if (ModelRegistry.isKnown(id)) {
+        copy(
+            modelId = id,
+            displayName = name,
+            type = ModelType.CHAT,
+            inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(id),
+            outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(id),
+            abilities = ModelRegistry.MODEL_ABILITIES.getData(id),
+        )
+    } else {
+        copy(
+            modelId = id,
+            displayName = name,
+            type = ModelType.CHAT,
+            inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+            outputModalities = listOf(Modality.TEXT),
+            abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+        )
+    }
+}
+
 @Composable
 private fun AddModelButton(
     models: List<Model>,
@@ -560,7 +592,7 @@ private fun AddModelButton(
     onUpdateProvider: (ProviderSetting) -> Unit
 ) {
     val dialogState = useEditState<Model> {
-        onAddModel(it.copy(displayName = it.displayName.trim()))
+        onAddModel(it.withAutoCapabilities())
     }
     val scope = rememberCoroutineScope()
 
@@ -572,16 +604,7 @@ private fun AddModelButton(
             models = models,
             selectedModels = selectedModels,
             onModelSelected = { model ->
-                val inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId)
-                val outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId)
-                val abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
-                onAddModel(
-                    model.copy(
-                        inputModalities = inputModalities,
-                        outputModalities = outputModalities,
-                        abilities = abilities
-                    )
-                )
+                onAddModel(model.withAutoCapabilities())
             },
             onModelDeselected = { model ->
                 onRemoveModel(model)
@@ -591,13 +614,7 @@ private fun AddModelButton(
                     parentProvider.copyProvider(
                         models = parentProvider.models + it.filter { model ->
                             parentProvider.models.none { existing -> existing.modelId == model.modelId }
-                        }.map { model ->
-                            model.copy(
-                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
-                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
-                                abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
-                            )
-                        }
+                        }.map { model -> model.withAutoCapabilities() }
                     )
                 )
             },
@@ -639,75 +656,43 @@ private fun AddModelButton(
 
     if (dialogState.isEditing) {
         dialogState.currentState?.let { modelState ->
-            val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-            ModalBottomSheet(
-                onDismissRequest = {
-                    dialogState.dismiss()
-                },
-                sheetState = sheetState,
-                sheetGesturesEnabled = false,
-                dragHandle = {
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                sheetState.hide()
-                                dialogState.dismiss()
-                            }
-                        }
-                    ) {
-                        Icon(HugeIcons.ArrowDown01, null)
-                    }
-                }
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.95f)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_add_model),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        ModelSettingsForm(
-                            model = modelState,
-                            onModelChange = { dialogState.currentState = it },
-                            isEdit = false,
-                            parentProvider = parentProvider
+            AlertDialog(
+                onDismissRequest = { dialogState.dismiss() },
+                title = { Text(stringResource(R.string.setting_provider_page_add_model)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = modelState.modelId,
+                            onValueChange = { dialogState.currentState = modelState.copy(modelId = it.trim()) },
+                            label = { Text(stringResource(R.string.setting_provider_page_model_id)) },
+                            placeholder = { Text(stringResource(R.string.setting_provider_page_model_id_placeholder)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = modelState.displayName,
+                            onValueChange = { dialogState.currentState = modelState.copy(displayName = it) },
+                            label = { Text(stringResource(R.string.setting_provider_page_model_display_name_optional)) },
+                            placeholder = { Text(modelState.modelId) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = modelState.modelId.isNotBlank(),
+                        onClick = { dialogState.confirm() },
                     ) {
-                        TextButton(
-                            onClick = {
-                                dialogState.dismiss()
-                            },
-                        ) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        TextButton(
-                            onClick = {
-                                if (modelState.modelId.isNotBlank() && modelState.displayName.isNotBlank()) {
-                                    dialogState.confirm()
-                                }
-                            },
-                        ) {
-                            Text(stringResource(R.string.setting_provider_page_add))
-                        }
+                        Text(stringResource(R.string.setting_provider_page_add))
                     }
-                }
-            }
+                },
+                dismissButton = {
+                    TextButton(onClick = { dialogState.dismiss() }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
         }
     }
 }

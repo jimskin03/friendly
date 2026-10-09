@@ -112,7 +112,7 @@ Full host docs: [`host/README.md`](host/README.md) · [`host/SETUP_UBUNTU.md`](h
 | **Android** | 8.0 (API 26) or newer · `targetSdk` 37 |
 | **Application ID** | `friendly.cryptgregresearch.org` (debug builds use `.debug` → `friendly.cryptgregresearch.org.debug`) |
 | **Version** | 3.0.0 (`versionCode` 300) |
-| **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358`, Node.js 22 + pnpm 11 |
+| **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358` |
 
 ### Permissions (honest summary)
 
@@ -124,7 +124,7 @@ Declared in the app manifest; optional features only work when you grant the mat
 | Microphone | Speech input |
 | Camera | Scanning / capture features |
 | Notifications | Generation / foreground service updates |
-| Foreground services | Long-running chat generation / web server |
+| Foreground services | Long-running chat generation |
 | Calendar (read/write) | Calendar tools when enabled |
 | Usage access | Screen-time style features when enabled (**nightly** flavor only) |
 | Storage (legacy, max SDK 28) | Older Android file access |
@@ -221,7 +221,6 @@ See [`host/docs/architecture.md`](host/docs/architecture.md) for host defaults.
 | `app/` | Android app (Compose UI, settings, phone & desktop clients) |
 | `ai/` | Model/provider abstractions and tools |
 | `search/`, `speech/`, `workspace/` | Search, ASR/TTS, workspace agents |
-| `web/`, `web-ui/` | Embedded web server + bundled UI |
 | `host/` | Self-hosted Linux Control API, MCP, stream stack |
 | `docs/` | Icons, screenshots, references |
 
@@ -232,10 +231,6 @@ See [`host/docs/architecture.md`](host/docs/architecture.md) for host defaults.
 ```bash
 git clone --branch friendly-2.0 --recurse-submodules https://github.com/jimskin03/friendly.git
 cd friendly
-
-corepack enable
-corepack prepare pnpm@11 --activate
-cd web-ui && pnpm install --frozen-lockfile && cd ..
 
 # Nightly (full features: phone automation, overlay, cellular calls, LAN cleartext)
 ./gradlew :app:assembleNightlyDebug
@@ -275,7 +270,6 @@ To build an upload bundle, run the **Build** workflow with `channel=release` (se
 
 - **SDK not found:** set `ANDROID_HOME` / `sdk.dir` in untracked `local.properties`
 - **NDK:** install side-by-side `28.2.13676358`
-- **Web UI build:** Node 22 + Corepack pnpm 11 inside `web-ui/`
 - **Wrong Java:** `JAVA_HOME` → JDK 21 (the build targets Java 17)
 - **Computer offline:** verify Tailscale connectivity, Base URL, and Bearer token; `curl` host `/health` and `/v1/desktop/status`
 

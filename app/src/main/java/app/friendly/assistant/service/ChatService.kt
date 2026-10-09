@@ -60,6 +60,7 @@ import app.friendly.assistant.data.ai.transformers.TimeReminderTransformer
 import app.friendly.assistant.data.ai.transformers.WorkspaceReminderTransformer
 import app.friendly.assistant.data.event.AppEvent
 import app.friendly.assistant.data.event.AppEventBus
+import app.friendly.assistant.data.datastore.Settings
 import app.friendly.assistant.data.datastore.SettingsStore
 import app.friendly.assistant.data.datastore.findModelById
 import app.friendly.assistant.data.datastore.findProvider
@@ -80,8 +81,6 @@ import app.friendly.assistant.data.repository.MemoryRepository
 import app.friendly.assistant.data.repository.WorkspaceRepository
 import app.friendly.assistant.service.phone.PhoneAutomationMiniIndicatorManager
 import app.friendly.assistant.service.phone.PhoneAutomationService
-import app.friendly.assistant.web.BadRequestException
-import app.friendly.assistant.web.NotFoundException
 import app.friendly.assistant.utils.applyPlaceholders
 import java.util.Locale
 import kotlin.uuid.Uuid
@@ -859,6 +858,15 @@ class ChatService(
     }
 
 
+    /**
+     * Helper features (title, suggestions, compression) run on the same model as the chat
+     * session: the conversation's assistant model, else the default chat model.
+     */
+    private fun Settings.sessionModel(conversation: Conversation): Model? {
+        val assistant = getAssistantById(conversation.assistantId) ?: getCurrentAssistant()
+        return findModelById(assistant.chatModelId ?: chatModelId) ?: getCurrentChatModel()
+    }
+
     suspend fun generateTitle(
         conversationId: Uuid,
         conversation: Conversation,
@@ -873,7 +881,7 @@ class ChatService(
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            val model = settings.findModelById(settings.fastModelId)
+            val model = settings.sessionModel(conversation)
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -888,7 +896,7 @@ class ChatService(
                                 .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
                     ),
                 ),
-                params = backgroundTextGenerationParams(model, conversationId, settings.fastModelReasoningLevel),
+                params = backgroundTextGenerationParams(model, conversationId, ReasoningLevel.OFF),
             )
 
 
@@ -917,7 +925,7 @@ class ChatService(
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             if (!settings.enableSuggestion) return@runCatching
-            val model = settings.findModelById(settings.fastModelId)
+            val model = settings.sessionModel(conversation)
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -939,7 +947,7 @@ class ChatService(
                                 .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
                     )
                 ),
-                params = backgroundTextGenerationParams(model, conversationId, settings.fastModelReasoningLevel),
+                params = backgroundTextGenerationParams(model, conversationId, ReasoningLevel.OFF),
             )
             val suggestions =
                 result.message.toText().split("\n").map { it.trim() }
@@ -970,8 +978,7 @@ class ChatService(
         keepRecentMessages: Int = 32
     ): Result<Unit> = runCatching {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.findModelById(settings.compressModelId)
-            ?: settings.getCurrentChatModel()
+        val model = settings.sessionModel(conversation)
             ?: throw IllegalStateException("No model available for compression")
         val provider = model.findProvider(settings.providers)
             ?: throw IllegalStateException("Provider not found")
@@ -1067,7 +1074,7 @@ class ChatService(
         sessionManager.withSession(conversationId) { session ->
             session.initialize {
                 conversationRepo.getConversationById(conversationId)
-                    ?: throw NotFoundException("Conversation not found")
+                    ?: throw NoSuchElementException("Conversation not found")
             }
             session.updateMetadata(update, persist)
         }
@@ -1201,7 +1208,7 @@ class ChatService(
             node.messages.any { it.id == messageId }
         }
         if (targetNodeIndex == -1) {
-            throw NotFoundException("Message not found")
+            throw NoSuchElementException("Message not found")
         }
 
         val copiedNodes = currentConversation.messageNodes
@@ -1236,10 +1243,10 @@ class ChatService(
     ) {
         val currentConversation = getConversationFlow(conversationId).value
         val targetNode = currentConversation.messageNodes.firstOrNull { it.id == nodeId }
-            ?: throw NotFoundException("Message node not found")
+            ?: throw NoSuchElementException("Message node not found")
 
         if (selectIndex !in targetNode.messages.indices) {
-            throw BadRequestException("Invalid selectIndex")
+            throw IllegalArgumentException("Invalid selectIndex")
         }
 
         if (targetNode.selectIndex == selectIndex) {
@@ -1267,7 +1274,7 @@ class ChatService(
 
         if (updatedConversation == null) {
             if (failIfMissing) {
-                throw NotFoundException("Message not found")
+                throw NoSuchElementException("Message not found")
             }
             return
         }

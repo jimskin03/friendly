@@ -11,7 +11,7 @@
 .DESCRIPTION
   Channels: debug (no signing), nightly (nightly-flavor APKs, NIGHTLY key),
   release (nightly APKs + Play AAB, PLAY_UPLOAD key; -VersionCode required), check (prerequisites only).
-  -Install installs missing JDK 21 / Node 22 with winget and Android cmdline-tools into
+  -Install installs missing JDK 21 with winget and Android cmdline-tools into
   %LOCALAPPDATA%\Android\Sdk.
   Signing comes from env vars, else keystore.properties at the repo root (gitignored, see
   keystore.properties.example). Env names match the GitHub secrets, with _FILE instead of _BASE64:
@@ -101,25 +101,6 @@ function Setup-Android {
   }
 }
 
-function Setup-Node {
-  $node = Get-Command node -ErrorAction SilentlyContinue
-  $major = 0
-  if ($node) { $major = [int]((& node -v).TrimStart('v').Split('.')[0]) }
-  if ($major -lt 22) {
-    if (-not $Install) { Die 'Node 22+ not found (web-ui needs it). Install Node 22 or rerun with -Install.' }
-    Info 'Installing Node.js LTS (22+) with winget'
-    winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
-    Refresh-Path
-  }
-  if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-    Info 'Enabling pnpm 11 through corepack'
-    corepack enable
-    corepack prepare pnpm@11 --activate | Out-Null
-    Refresh-Path
-  }
-  if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) { Die 'pnpm not found. Run: corepack enable; corepack prepare pnpm@11 --activate (as admin if needed)' }
-}
-
 # ---- signing -------------------------------------------------------------------------------
 function Get-Prop($key) {
   $f = Join-Path $Root 'keystore.properties'
@@ -171,10 +152,8 @@ function Invoke-Gradle {
 # ---- main ----------------------------------------------------------------------------------
 Setup-Java
 Setup-Android
-Setup-Node
 Info "JDK: $env:JAVA_HOME"
 Info "Android SDK: $env:ANDROID_HOME"
-Info "Node: $(node -v), pnpm: $(pnpm -v)"
 
 if ($Channel -eq 'release' -and -not $VersionCode) { Die 'release needs -VersionCode N (higher than every earlier Play upload; CI uses 300 + run number)' }
 if ($VersionCode -and $VersionCode -notmatch '^\d+$') { Die '-VersionCode must be a number' }
@@ -199,11 +178,6 @@ if ($Channel -eq 'check') {
 if ($Channel -ne 'debug') { Use-Key 'NIGHTLY' 'nightly'; if (-not (Get-KeySha)) { Die 'Cannot read the nightly key (wrong password or alias?)' }; Clear-Key }
 if ($Channel -eq 'release') { Use-Key 'PLAY_UPLOAD' 'upload'; if (-not (Get-KeySha)) { Die 'Cannot read the upload key (wrong password or alias?)' }; Clear-Key }
 
-Info 'Installing web-ui dependencies'
-Push-Location web-ui
-pnpm install --frozen-lockfile
-if ($LASTEXITCODE -ne 0) { Die 'pnpm install failed' }
-Pop-Location
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 
 if ($Channel -eq 'debug') {

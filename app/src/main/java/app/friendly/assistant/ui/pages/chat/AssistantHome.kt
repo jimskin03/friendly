@@ -330,36 +330,16 @@ private fun DashboardHeader(
                                 .size(54.dp)
                                 .clip(CircleShape),
                         )
-                    } else if (chrome.styleId != CatHomeStyleId.NONE) {
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(CircleShape)
-                                .background(chrome.avatarFill)
-                                .border(2.dp, chrome.avatarRing, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_cat_paw_white),
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        }
                     } else {
-                        Box(
+                        // Default avatar = the Friendly brand cat (same art as the launcher icon).
+                        Image(
+                            painter = painterResource(R.drawable.ic_brand_avatar),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(54.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            Color(0xFFF472B6),
-                                            Color(0xFFA855F7),
-                                            Color(0xFFFBBF24),
-                                            Color(0xFF38BDF8),
-                                        )
-                                    )
-                                )
+                                .border(2.dp, chrome.avatarRing, CircleShape),
                         )
                     }
 

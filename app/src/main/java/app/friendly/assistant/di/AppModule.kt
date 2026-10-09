@@ -22,7 +22,6 @@ import app.friendly.assistant.utils.EmojiUtils
 import app.friendly.assistant.utils.JsonInstant
 import app.friendly.assistant.utils.SoundEffectPlayer
 import app.friendly.assistant.utils.UpdateChecker
-import app.friendly.assistant.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
@@ -155,15 +154,4 @@ val appModule = module {
         )
     }
 
-    single {
-        WebServerManager(
-            context = get(),
-            appScope = get(),
-            chatService = get(),
-            conversationRepo = get(),
-            folderRepo = get(),
-            settingsStore = get(),
-            filesManager = get()
-        )
-    }
 }
