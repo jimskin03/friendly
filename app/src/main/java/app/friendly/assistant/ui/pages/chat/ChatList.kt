@@ -344,7 +344,8 @@ private fun ChatListNormal(
             LazyColumn(
                 state = state,
                 contentPadding = if (conversation.messageNodes.isEmpty()) {
-                    PaddingValues(bottom = 16.dp + innerPadding.calculateBottomPadding())
+                    // Home: keep a clear gap above the input bar (innerPadding already includes it).
+                    PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding())
                 } else {
                     PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding())
                 },

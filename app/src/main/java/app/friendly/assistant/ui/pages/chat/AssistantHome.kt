@@ -217,7 +217,7 @@ fun AssistantHome(
 }
 
 /**
- * Cute Minimal: the tabby sits behind the Activity card with only its paws over the edge.
+ * Cute Minimal: the tabby peeks over the top edge of the card grid, centered on screen.
  * The art (theme_cat_cute_peek, 800x380 units) is cut flat at y=330 where the card's top
  * edge goes; the paws hang 41 units below that line.
  */
@@ -227,26 +227,23 @@ private fun CutePeekingCat(peek: Int) {
     val artHeight = artWidth * (380f / 800f)
     val cutY = artWidth * (330f / 800f)
     val columnGap = 12.dp
-    Row(
+    // Centered over the card grid (Greg's reference): head cut sits on the cards' top edge,
+    // paws rest on the Search/Activity cards (they get extra top padding for this).
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(cutY - columnGap)
-            .zIndex(1f)
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .zIndex(1f),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        Spacer(modifier = Modifier.weight(1f))
-        Box(modifier = Modifier.weight(1f)) {
-            Image(
-                painter = painterResource(peek),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .wrapContentSize(align = Alignment.TopCenter, unbounded = true)
-                    .requiredSize(width = artWidth, height = artHeight),
-            )
-        }
+        Image(
+            painter = painterResource(peek),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .wrapContentSize(align = Alignment.TopCenter, unbounded = true)
+                .requiredSize(width = artWidth, height = artHeight),
+        )
     }
 }
 
@@ -580,6 +577,9 @@ private fun ShortcutCards(
     }
 }
 
+/** Home shows only a short folder preview; "See all" opens the full list. */
+private const val HOME_FOLDER_PREVIEW_COUNT = 4
+
 @Composable
 private fun FoldersSection(
     folders: List<Folder>,
@@ -667,7 +667,7 @@ private fun FoldersSection(
             Spacer(modifier = Modifier.height(2.dp))
 
             if (folders.isNotEmpty()) {
-                folders.take(6).forEachIndexed { index, folder ->
+                folders.take(HOME_FOLDER_PREVIEW_COUNT).forEachIndexed { index, folder ->
                     val label = FolderLabel.fromId(folder.label)
                     val timeString = remember(folder.createAt) { formatRelativeTime(index) }
                     FolderRowItem(
@@ -680,7 +680,7 @@ private fun FoldersSection(
                     )
                 }
             } else {
-                DefaultTemplateFolders.forEach { template ->
+                DefaultTemplateFolders.take(HOME_FOLDER_PREVIEW_COUNT).forEach { template ->
                     val label = FolderLabel.fromId(template.labelId)
                     FolderRowItem(
                         title = template.name,
