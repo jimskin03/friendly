@@ -1,72 +1,59 @@
 import { useEffect, useRef, useState } from "react";
 import { postNative, setNativeSession } from "./native";
-import { RichResponse, openUiProgram } from "./RichResponse";
-import { Markdown, safeLinkTarget } from "./Markdown";
+import { safeLinkTarget } from "./Markdown";
 import { themeStyle } from "./theme";
-import type { FriendlyMessage, FriendlySnapshot } from "./types";
+import { AttachmentChip, MessageView } from "./MessageView";
+import { IconClose, IconDown, IconMic, IconMonitor, IconPhone, IconPlus, IconSpark, IconStopCircle, IconUp } from "./icons";
+import type { FriendlyChatState, FriendlySnapshot } from "./types";
 import "@openuidev/react-ui/styles/index.css";
 import "./styles.css";
 
-export function Message({ message, loading, interactive = true }: { message: FriendlyMessage; loading: boolean; interactive?: boolean }) {
-  const isUser = message.role === "user";
-  const program = !isUser ? openUiProgram(message.text, message.openui) : null;
+const EMPTY_CHAT: FriendlyChatState = {
+  pendingAttachments: [], voice: "off", voiceTranscript: "", ttsAvailable: true, showStats: true,
+  queue: [], errors: [], desktopAvailable: true, phoneAvailable: false, desktopStreaming: false,
+};
 
+const VOICE_LABEL: Record<string, string> = {
+  connecting: "Connecting…", listening: "Listening…", transcribing: "Transcribing…", speaking: "Speaking…", error: "Voice error",
+};
+
+function VoicePanel({ chat }: { chat: FriendlyChatState }) {
   return (
-    <article className={`message ${isUser ? "message-user" : "message-assistant"}`} data-message-id={message.id}>
-      <div className="message-label">{isUser ? "You" : message.role === "assistant" ? "Friendly" : message.role}</div>
-      <div className="message-body">
-        {program ? (
-          <RichResponse text={message.text} program={program} loading={loading} interactive={interactive} />
-        ) : isUser ? (
-          <p>{message.text}</p>
-        ) : message.text ? (
-          <Markdown text={message.text} />
-        ) : (
-          <p className="thinking">{loading ? "Thinking…" : ""}</p>
-        )}
+    <div className={`voice-panel voice-${chat.voice}`} role="status">
+      <span className="voice-orb" aria-hidden="true"><span /><span /><span /></span>
+      <div className="voice-text">
+        <strong>{VOICE_LABEL[chat.voice] ?? "Voice"}</strong>
+        {chat.voiceTranscript && <span>{chat.voiceTranscript}</span>}
       </div>
-      {(message.canEdit || !isUser) && (
-        <div className="message-actions" aria-label="Message actions">
-          {message.canRegenerate && (
-            <button type="button" onClick={() => postNative({ type: "regenerate", messageId: message.id })}>
-              Regenerate
-            </button>
-          )}
-          {message.canEdit && (
-            <button type="button" onClick={() => postNative({ type: "edit", messageId: message.id })}>
-              Edit
-            </button>
-          )}
-          {message.canReport && (
-            <button type="button" onClick={() => postNative({ type: "report", messageId: message.id })}>
-              Report
-            </button>
-          )}
-          {message.branchCount && message.branchCount > 1 ? (
-            <span className="branch-count">{(message.branchIndex ?? 0) + 1}/{message.branchCount}</span>
-          ) : null}
-        </div>
-      )}
-    </article>
+      {chat.voice === "speaking" && <button type="button" className="btn-secondary" onClick={() => postNative({ type: "voiceInterrupt" })}>Interrupt</button>}
+      <button type="button" className="btn-primary" onClick={() => postNative({ type: "voiceStop" })}>End</button>
+    </div>
   );
 }
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<FriendlySnapshot | null>(null);
   const [draft, setDraft] = useState("");
+  const [atBottom, setAtBottom] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const scrollRef = useRef<HTMLElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const followOutput = useRef(true);
   const currentSession = useRef<string | null>(null);
+  const lastEditing = useRef<string | null>(null);
 
   useEffect(() => {
     window.friendlyOpenUI = {
       pushSnapshot(payload: string) {
         const parsed = JSON.parse(payload) as FriendlySnapshot;
         if (parsed.protocolVersion !== 1) return;
-        if (currentSession.current !== parsed.sessionId) {
+        const editing = parsed.chat?.editingMessageId ?? null;
+        if (currentSession.current !== parsed.sessionId || editing !== lastEditing.current) {
+          // New session, or native entered/left edit mode: the native draft is canonical.
           currentSession.current = parsed.sessionId;
           setDraft(parsed.draft);
         }
+        lastEditing.current = editing;
         setNativeSession(parsed.sessionId);
         setSnapshot(current => {
           if (current?.sessionId === parsed.sessionId && parsed.revision < current.revision) return current;
@@ -78,7 +65,7 @@ export default function App() {
         currentSession.current = null;
         setSnapshot(null);
         setDraft("");
-      }
+      },
     };
     postNative({ type: "ready" });
     return () => {
@@ -92,83 +79,150 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: snapshot.loading ? "auto" : "smooth", block: "end" });
   }, [snapshot?.revision, snapshot?.loading, snapshot?.messages.length]);
 
+  if (!snapshot) return <main className="loading-shell" aria-live="polite">Loading Friendly…</main>;
+
+  const chat = snapshot.chat ?? EMPTY_CHAT;
+  const busy = snapshot.loading;
+  const canSend = Boolean(draft.trim()) && !busy && snapshot.modelAvailable;
+  const editing = Boolean(chat.editingMessageId);
+  const voiceActive = chat.voice !== "off" && chat.voice !== "error";
+
   const submit = () => {
     const text = draft.trim();
-    if (!text || snapshot?.loading || !snapshot?.modelAvailable) return;
+    if (!canSend) return;
     postNative({ type: "send", text });
     setDraft("");
   };
-
-  if (!snapshot) {
-    return <main className="loading-shell" aria-live="polite">Loading Friendly…</main>;
-  }
 
   return (
     <main className={snapshot.darkMode ? "app dark" : "app"} style={themeStyle(snapshot.theme)}
       onClickCapture={event => {
         const link = (event.target as Element).closest("a");
         if (!link) return;
-        // OpenUI's own Markdown and source links must also leave through native.
+        // Every link (ours and OpenUI's) leaves through native, which only opens http(s)/mailto.
         event.preventDefault();
         event.stopPropagation();
         const url = safeLinkTarget(link.getAttribute("href") ?? undefined);
         if (url) postNative({ type: "link", url });
       }}>
-      <section className="conversation" aria-live="polite" aria-busy={snapshot.loading}
+      <section ref={scrollRef} className="conversation" aria-live="polite" aria-busy={busy}
         onScroll={event => {
           const view = event.currentTarget;
-          followOutput.current = view.scrollHeight - view.scrollTop - view.clientHeight < 100;
+          const bottom = view.scrollHeight - view.scrollTop - view.clientHeight < 100;
+          followOutput.current = bottom;
+          setAtBottom(bottom);
         }}>
         {snapshot.messages.length === 0 ? (
           <div className="welcome">
             <div className="cat">🐈</div>
-            <h2>How can I help?</h2>
-            <p>Friendly can chat, work with your files, and use the tools enabled for this edition.</p>
+            <h2>{chat.folderName ? chat.folderName : "How can I help?"}</h2>
+            <p>{chat.folderName ? "Chats here are saved to this folder." : "Friendly can chat, work with your files, and use the tools enabled for this edition."}</p>
           </div>
         ) : snapshot.messages.map((message, index) => (
-          <Message key={message.id} message={message} loading={snapshot.loading && index === snapshot.messages.length - 1} interactive={!snapshot.loading && snapshot.modelAvailable} />
+          <MessageView key={message.id} message={message} chat={chat} busy={busy}
+            streaming={busy && index === snapshot.messages.length - 1 && message.role === "assistant"}
+            interactive={!busy && snapshot.modelAvailable} />
         ))}
         {snapshot.processingStatus && <div className="processing">{snapshot.processingStatus}</div>}
+        {chat.errors.length > 0 && (
+          <div className="errors" role="alert">
+            {chat.errors.map(error => (
+              <div key={error.id} className="error-card">
+                <div><strong>{error.title || "Something went wrong"}</strong><span>{error.message}</span></div>
+                <button type="button" className="icon-btn" aria-label="Dismiss error" onClick={() => postNative({ type: "dismissError", id: error.id })}><IconClose size={16} /></button>
+              </div>
+            ))}
+            {chat.errors.length > 1 && <button type="button" className="text-btn" onClick={() => postNative({ type: "clearErrors" })}>Clear all</button>}
+          </div>
+        )}
         <div ref={endRef} />
       </section>
 
-      {snapshot.suggestions.length > 0 && (
+      {!atBottom && snapshot.messages.length > 0 && (
+        <button type="button" className="scroll-bottom" aria-label="Scroll to bottom" onClick={() => {
+          followOutput.current = true;
+          endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        }}><IconDown /></button>
+      )}
+
+      {snapshot.suggestions.length > 0 && !editing && (
         <nav className="suggestions" aria-label="Suggestions">
           {snapshot.suggestions.map(text => (
-            <button key={text} type="button" disabled={snapshot.loading || !snapshot.modelAvailable} onClick={() => postNative({ type: "suggestion", text })}>{text}</button>
+            <button key={text} type="button" disabled={busy || !snapshot.modelAvailable} onClick={() => postNative({ type: "suggestion", text })}>{text}</button>
           ))}
         </nav>
       )}
 
-      <footer className="composer">
-        <textarea
-          value={draft}
-          onChange={event => {
-            const next = event.target.value.slice(0, 16000);
-            setDraft(next);
-            postNative({ type: "draft", text: next });
-          }}
-          onKeyDown={event => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={snapshot.modelAvailable ? "Ask anything…" : "Select a model in native settings"}
-          aria-label="Message Friendly" rows={1}
-        />
-        <div className="composer-actions">
-        <div className="composer-tools">
-        <button type="button" className="composer-tool" onClick={() => postNative({ type: "attachments" })} aria-label="Open native attachment picker">
-          +{snapshot.attachmentCount > 0 ? snapshot.attachmentCount : ""}
-        </button>
-        <button type="button" className="composer-tool" onClick={() => postNative({ type: "voice" })} aria-label="Start native voice session">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>
-        </button>
-        <button type="button" className="native-switch" onClick={() => postNative({ type: "native" })} aria-label="Use native chat">Native chat</button>
-        </div>
-        {snapshot.loading ? <button type="button" className="send stop" onClick={() => postNative({ type: "stop" })} aria-label="Stop generation">■</button> : (
-        <button type="button" className="send" disabled={!draft.trim() || snapshot.loading || !snapshot.modelAvailable} onClick={submit} aria-label="Send message">↑</button>)}
+      <footer className="composer-wrap">
+        {voiceActive || chat.voice === "error" ? <VoicePanel chat={chat} /> : null}
+        {chat.queue.length > 0 && (
+          <div className="queue" aria-label="Queued messages">
+            {chat.queue.map(q => (
+              <span key={q.id} className="queue-item"><span>{q.text || "Queued message"}</span>
+                <button type="button" className="chip-remove" aria-label="Remove queued message" onClick={() => postNative({ type: "removeQueued", id: q.id })}>×</button></span>
+            ))}
+            {!busy && <button type="button" className="text-btn" onClick={() => postNative({ type: "resumeQueue" })}>Send queued</button>}
+          </div>
+        )}
+        <div className={`composer${editing ? " composer-editing" : ""}`}>
+          {editing && (
+            <div className="edit-banner">
+              <span>Editing message</span>
+              <button type="button" className="text-btn" onClick={() => { postNative({ type: "cancelEdit" }); setDraft(""); }}>Cancel</button>
+            </div>
+          )}
+          {chat.pendingAttachments.length > 0 && (
+            <div className="pending-attachments">
+              {chat.pendingAttachments.map((item, index) => (
+                <AttachmentChip key={`${item.name}-${index}`} item={item} onRemove={() => postNative({ type: "removeAttachment", index })} />
+              ))}
+            </div>
+          )}
+          <textarea
+            value={draft}
+            onChange={event => {
+              const next = event.target.value.slice(0, 16000);
+              setDraft(next);
+              postNative({ type: "draft", text: next });
+            }}
+            onKeyDown={event => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            placeholder={!snapshot.modelAvailable ? "Select a model to start" : editing ? "Edit your message…" : "Ask anything…"}
+            aria-label="Message Friendly" rows={1}
+          />
+          <div className="composer-actions">
+            <div className="composer-tools">
+              <button type="button" className="icon-btn tool" onClick={() => postNative({ type: "attachments" })} aria-label="Add attachments"><IconPlus /></button>
+              <button type="button" className="model-chip" onClick={() => postNative({ type: "modelPicker" })} aria-label="Choose model">
+                <IconSpark size={15} /><span>{chat.modelName ?? "Choose model"}</span>
+              </button>
+              <span className="menu-anchor">
+                <button type="button" className={`icon-btn tool${chat.desktopStreaming ? " is-live" : ""}`} aria-label="Device control" aria-haspopup="menu" aria-expanded={toolsOpen}
+                  onClick={() => setToolsOpen(v => !v)}><IconMonitor /></button>
+                {toolsOpen && (
+                  <>
+                    <div className="menu-scrim" onClick={() => setToolsOpen(false)} />
+                    <div className="menu menu-up" role="menu">
+                      {chat.desktopAvailable && <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); postNative({ type: "desktop" }); }}><IconMonitor /><span>Desktop control{chat.desktopStreaming ? " · live" : ""}</span></button>}
+                      {chat.phoneAvailable && <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); postNative({ type: "phone" }); }}><IconPhone /><span>Phone automation</span></button>}
+                    </div>
+                  </>
+                )}
+              </span>
+            </div>
+            {busy ? (
+              <button type="button" className="send stop" onClick={() => postNative({ type: "stop" })} aria-label="Stop generation"><IconStopCircle size={22} /></button>
+            ) : draft.trim() || editing ? (
+              <button type="button" className="send" disabled={!canSend} onClick={submit} aria-label={editing ? "Save and resend" : "Send message"}><IconUp size={20} /></button>
+            ) : (
+              <button type="button" className={`send voice${voiceActive ? " is-live" : ""}`} onClick={() => postNative({ type: voiceActive ? "voiceStop" : "voice" })}
+                aria-label={voiceActive ? "Stop voice" : "Start voice"}><IconMic size={20} /></button>
+            )}
+          </div>
         </div>
       </footer>
     </main>
