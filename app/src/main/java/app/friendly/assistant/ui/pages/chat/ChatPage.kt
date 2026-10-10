@@ -476,6 +476,8 @@ private fun ChatPageContent(
         )
     }
 
+    val copiedText = stringResource(R.string.copied)
+    val rendererFailedText = stringResource(R.string.openui_renderer_failed)
     val tts = LocalTTSState.current
     val ttsSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
     val ttsAvailable by tts.isAvailable.collectAsStateWithLifecycle()
@@ -551,7 +553,7 @@ private fun ChatPageContent(
             is OpenUiChatAction.CopyMessage -> {
                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                 clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("message", action.message.toText()))
-                toaster.show(context.getString(R.string.copied), type = ToastType.Success)
+                toaster.show(copiedText, type = ToastType.Success)
             }
             is OpenUiChatAction.CopyText -> Unit // handled inside OpenUiChat
             is OpenUiChatAction.Speak -> {
@@ -836,7 +838,7 @@ private fun ChatPageContent(
                     onAction = { action -> handleOpenUiAction(action) },
                     onRendererFailure = {
                         // No native fallback: the web chat is the only transcript UI.
-                        toaster.show(context.getString(R.string.openui_renderer_failed), type = ToastType.Error)
+                        toaster.show(rendererFailedText, type = ToastType.Error)
                     },
                 )
             } else {

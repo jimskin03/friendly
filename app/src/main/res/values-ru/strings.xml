@@ -1236,4 +1236,5 @@
   <string name="chart_series_name">Ряд %1$d</string>
   <string name="setting_display_page_openui_title">Чат OpenUI (экспериментально)</string>
   <string name="setting_display_page_openui_desc">Предпросмотр встроенного чата OpenUI. Вложения, голос и некоторые встроенные элементы управления пока недоступны в этом режиме. Выключите, чтобы вернуться к полноценному встроенному чату.</string>
+  <string name="openui_renderer_failed">Не удалось загрузить чат. Перезапустите Friendly.</string>
 </resources>
