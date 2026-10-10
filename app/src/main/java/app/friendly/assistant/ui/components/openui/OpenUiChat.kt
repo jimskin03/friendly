@@ -1,6 +1,10 @@
 package app.friendly.assistant.ui.components.openui
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Handler
@@ -13,6 +17,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import app.friendly.assistant.BuildConfig
@@ -44,6 +50,7 @@ private const val OPEN_UI_HOST = "openui.friendly.local"
 private const val OPEN_UI_URL = "https://$OPEN_UI_HOST/index.html"
 private const val MAX_ACTION_BYTES = 32 * 1024
 private const val MAX_MESSAGE_LENGTH = 16_000
+private const val MAX_LINK_LENGTH = 2048
 private val bridgeJson = Json { encodeDefaults = true }
 
 @Serializable
@@ -99,7 +106,37 @@ private data class OpenUiSnapshot(
     val capabilities: OpenUiCapabilities,
     val messages: List<OpenUiMessage>,
     val suggestions: List<String>,
+    val theme: OpenUiTheme? = null,
 )
+
+/** Active native Material colours (#AARRGGBB) so the web renderer follows the app theme. */
+@Serializable
+internal data class OpenUiTheme(
+    val primary: String,
+    val onPrimary: String,
+    val secondaryContainer: String,
+    val onSecondaryContainer: String,
+    val background: String,
+    val surface: String,
+    val surfaceContainer: String,
+    val surfaceContainerHigh: String,
+    val onSurface: String,
+    val onSurfaceVariant: String,
+    val outlineVariant: String,
+)
+
+private fun androidx.compose.ui.graphics.Color.hex(): String = "#%08X".format(toArgb())
+
+/** Only plain web/mail links leave the renderer; everything else is dropped. */
+internal fun openUiExternalLink(url: String?): Uri? {
+    if (url == null || url.length > MAX_LINK_LENGTH) return null
+    val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
+    return when (uri.scheme?.lowercase()) {
+        "https", "http" -> uri.takeIf { !it.host.isNullOrBlank() }
+        "mailto" -> uri
+        else -> null
+    }
+}
 
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
@@ -143,6 +180,20 @@ fun OpenUiChat(
     val nativeState = rememberUpdatedState(onOpenNative)
     val failureState = rememberUpdatedState(onRendererFailure)
     val modelAvailableState = rememberUpdatedState(modelAvailable)
+    val colors = MaterialTheme.colorScheme
+    val theme = OpenUiTheme(
+        primary = colors.primary.hex(),
+        onPrimary = colors.onPrimary.hex(),
+        secondaryContainer = colors.secondaryContainer.hex(),
+        onSecondaryContainer = colors.onSecondaryContainer.hex(),
+        background = colors.background.hex(),
+        surface = colors.surface.hex(),
+        surfaceContainer = colors.surfaceContainer.hex(),
+        surfaceContainerHigh = colors.surfaceContainerHigh.hex(),
+        onSurface = colors.onSurface.hex(),
+        onSurfaceVariant = colors.onSurfaceVariant.hex(),
+        outlineVariant = colors.outlineVariant.hex(),
+    )
 
     val snapshotContents = OpenUiSnapshot(
         sessionId = sessionId,
@@ -171,6 +222,7 @@ fun OpenUiChat(
             )
         },
         suggestions = conversation.chatSuggestions,
+        theme = theme,
     )
     // The web client rejects older revisions. Content hashes are NOT monotonic,
     // particularly when a streaming assistant response changes.
@@ -210,6 +262,15 @@ fun OpenUiChat(
                 "attachments" -> attachmentsState.value()
                 "voice" -> voiceState.value()
                 "native" -> nativeState.value()
+                "link" -> openUiExternalLink(action.url)?.let { uri ->
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+                "copy" -> action.text?.let { text ->
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("code", text))
+                }
                 "edit" -> {
                     if (loadingState.value) return@OpenUiBridge
                     conversationState.value.currentMessages.firstOrNull { it.id.toString() == action.messageId }
@@ -271,6 +332,7 @@ private data class OpenUiAction(
     val type: String,
     val text: String? = null,
     val messageId: String? = null,
+    val url: String? = null,
 )
 
 private class OpenUiBridge(
@@ -286,13 +348,14 @@ private class OpenUiBridge(
         val parsed = runCatching {
             val value = JSONObject(payload)
             val type = value.getString("type")
-            if (type !in setOf("ready", "send", "stop", "suggestion", "regenerate", "draft", "attachments", "voice", "native", "edit")) return
+            if (type !in setOf("ready", "send", "stop", "suggestion", "regenerate", "draft", "attachments", "voice", "native", "edit", "link", "copy")) return
             val actionId = if (type == "ready") 0L else value.getLong("actionId")
             if (type != "ready" && (value.optString("sessionId") != sessionId || actionId <= 0L)) return
             Pair(actionId, OpenUiAction(
                 type = type,
                 text = value.optString("text").takeIf { value.has("text") },
                 messageId = value.optString("messageId").takeIf { value.has("messageId") },
+                url = value.optString("url").takeIf { value.has("url") },
             ))
         }.getOrNull() ?: return
         mainHandler.post {
@@ -371,5 +434,6 @@ private fun mimeTypeOf(path: String): String = when (path.substringAfterLast('.'
     "webp" -> "image/webp"
     "woff2" -> "font/woff2"
     "woff" -> "font/woff"
+    "ttf" -> "font/ttf"
     else -> "application/octet-stream"
 }

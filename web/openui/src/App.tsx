@@ -2,6 +2,8 @@ import { Renderer } from "@openuidev/react-lang";
 import { openuiChatLibrary } from "@openuidev/react-ui/genui-lib";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postNative, setNativeSession } from "./native";
+import { Markdown } from "./Markdown";
+import { themeStyle } from "./theme";
 import type { FriendlyMessage, FriendlySnapshot } from "./types";
 import "@openuidev/react-ui/styles/index.css";
 import "./styles.css";
@@ -22,8 +24,12 @@ function Message({ message, loading }: { message: FriendlyMessage; loading: bool
             toolProvider={null}
             publishObservability={false}
           />
+        ) : isUser ? (
+          <p>{message.text}</p>
+        ) : message.text ? (
+          <Markdown text={message.text} />
         ) : (
-          <p>{message.text || (loading ? "Thinking…" : "")}</p>
+          <p className="thinking">{loading ? "Thinking…" : ""}</p>
         )}
       </div>
       {(message.canEdit || !isUser) && (
@@ -105,7 +111,7 @@ export default function App() {
   }
 
   return (
-    <main className={snapshot.darkMode ? "app dark" : "app"}>
+    <main className={snapshot.darkMode ? "app dark" : "app"} style={themeStyle(snapshot.theme)}>
       <header className="chat-header">
         <div>
           <h1>{snapshot.title || "New chat"}</h1>

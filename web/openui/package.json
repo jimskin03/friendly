@@ -11,8 +11,14 @@
   "dependencies": {
     "@openuidev/react-lang": "0.3.2",
     "@openuidev/react-ui": "0.17.0",
+    "katex": "0.16.22",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "react-markdown": "10.1.0",
+    "rehype-highlight": "7.0.2",
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
     "zod": "3.25.76"
   },
   "devDependencies": {

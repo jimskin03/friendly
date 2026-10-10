@@ -20,6 +20,21 @@ export interface FriendlyCapabilities {
   openUiActions: boolean;
 }
 
+/** Colors from the active native Material theme (#RRGGBB or #AARRGGBB). */
+export interface FriendlyTheme {
+  primary: string;
+  onPrimary: string;
+  secondaryContainer: string;
+  onSecondaryContainer: string;
+  background: string;
+  surface: string;
+  surfaceContainer: string;
+  surfaceContainerHigh: string;
+  onSurface: string;
+  onSurfaceVariant: string;
+  outlineVariant: string;
+}
+
 export interface FriendlySnapshot {
   protocolVersion: 1;
   sessionId: string;
@@ -35,6 +50,7 @@ export interface FriendlySnapshot {
   capabilities: FriendlyCapabilities;
   messages: FriendlyMessage[];
   suggestions: string[];
+  theme?: FriendlyTheme | null;
 }
 
 export type FriendlyAction =
@@ -48,7 +64,9 @@ export type FriendlyAction =
   | { type: "attachments" }
   | { type: "voice" }
   | { type: "native" }
-  | { type: "edit"; messageId: string };
+  | { type: "edit"; messageId: string }
+  | { type: "link"; url: string }
+  | { type: "copy"; text: string };
 
 declare global {
   interface Window {
