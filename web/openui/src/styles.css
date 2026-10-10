@@ -385,3 +385,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .model-chip { max-width: 108px; flex: none; }
 .model-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-tools > * { flex: none; }
+.picker-section { font-size: 13px; font-weight: 700; color: var(--text); padding: 16px 4px 8px; border-top: 1px solid var(--line); margin-top: 8px; }
+.sheet-head + .picker-section { border-top: 0; margin-top: 0; padding-top: 4px; }
+.composer-tools { overflow: visible; min-width: 0; flex: 1; }
+.model-chip { max-width: none; flex: 0 1 auto; min-width: 0; }

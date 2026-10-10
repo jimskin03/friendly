@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { postNative } from "./native";
 import type { FriendlyOption, FriendlyPickers } from "./types";
 
-export type PickerKind = "assistant" | "model" | "reasoning" | "mcp" | "search";
+export type PickerKind = "assistant" | "model" | "reasoning" | "mcp" | "search" | "options";
 
 const REASONING_LABEL: Record<string, string> = {
   off: "Off", auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max",
@@ -36,15 +36,18 @@ export function PickerSheet({ kind, pickers, onClose }: { kind: PickerKind; pick
     const q = query.trim().toLowerCase();
     return q ? pickers.models.filter(m => m.name.toLowerCase().includes(q) || (m.group ?? "").toLowerCase().includes(q)) : pickers.models;
   }, [pickers.models, query]);
-  const title = { assistant: "Assistant", model: "Model", reasoning: "Reasoning", mcp: "MCP servers", search: "Web search" }[kind];
+  const title = { assistant: "Assistant", model: "Model", reasoning: "Reasoning", mcp: "MCP servers", search: "Web search", options: "Chat options" }[kind];
+  const all = kind === "options";
+  const show = (k: PickerKind) => kind === k || (all && (k !== "assistant" || pickers.assistants.length > 1) && (k !== "reasoning" || pickers.reasoning != null));
+  const heading = (text: string) => all ? <div className="picker-section">{text}</div> : null;
   return (
     <>
       <div className="menu-scrim sheet-scrim" onClick={onClose} />
       <div className="sheet" role="dialog" aria-label={title}>
         <div className="sheet-head"><strong>{title}</strong><button type="button" className="text-btn" onClick={onClose}>Done</button></div>
-        {kind === "assistant" && (
-          <Options options={pickers.assistants} selected={pickers.assistantId} onPick={o => { postNative({ type: "selectAssistant", id: o.id }); onClose(); }} />
-        )}
+        {show("assistant") && (<>{heading("Assistant")}
+          <Options options={pickers.assistants} selected={pickers.assistantId} onPick={o => { postNative({ type: "selectAssistant", id: o.id }); if (!all) onClose(); }} />
+        </>)}
         {kind === "model" && (
           <>
             <input className="sheet-search" value={query} onChange={e => setQuery(e.target.value.slice(0, 100))} placeholder="Search models" aria-label="Search models" />
@@ -52,7 +55,7 @@ export function PickerSheet({ kind, pickers, onClose }: { kind: PickerKind; pick
               : <p className="picker-empty">No models match.</p>}
           </>
         )}
-        {kind === "reasoning" && (
+        {show("reasoning") && (<>{heading("Reasoning")}
           <div className="segmented" role="radiogroup" aria-label="Reasoning level">
             {pickers.reasoningLevels.map(level => (
               <button key={level} type="button" role="radio" aria-checked={pickers.reasoning === level}
@@ -60,20 +63,8 @@ export function PickerSheet({ kind, pickers, onClose }: { kind: PickerKind; pick
                 onClick={() => postNative({ type: "setReasoning", level })}>{reasoningLabel(level)}</button>
             ))}
           </div>
-        )}
-        {kind === "mcp" && (pickers.mcp.length ? (
-          <div className="picker-list">
-            {pickers.mcp.map(server => (
-              <label key={server.id} className="picker-option picker-toggle">
-                <span>{server.name}</span>
-                <input type="checkbox" role="switch" checked={!!server.enabled}
-                  onChange={e => postNative({ type: "setMcp", id: server.id, enabled: e.target.checked })} />
-              </label>
-            ))}
-          </div>
-        ) : <p className="picker-empty">No MCP servers are enabled. Add one in Settings → MCP.</p>)}
-        {kind === "search" && (
-          <>
+        </>)}
+        {show("search") && (<>{heading("Web search")}
             <div className="segmented" role="radiogroup" aria-label="Search mode">
               {pickers.searchModes.map(mode => (
                 <button key={mode} type="button" role="radio" aria-checked={pickers.searchMode === mode}
@@ -87,8 +78,18 @@ export function PickerSheet({ kind, pickers, onClose }: { kind: PickerKind; pick
                 <Options options={pickers.searchServices} selected={pickers.searchServiceId} onPick={o => postNative({ type: "setSearchService", id: o.id })} />
               </>
             )}
-          </>
-        )}
+          </>)}
+        {show("mcp") && (<>{heading("MCP servers")}{pickers.mcp.length ? (
+          <div className="picker-list">
+            {pickers.mcp.map(server => (
+              <label key={server.id} className="picker-option picker-toggle">
+                <span>{server.name}</span>
+                <input type="checkbox" role="switch" checked={!!server.enabled}
+                  onChange={e => postNative({ type: "setMcp", id: server.id, enabled: e.target.checked })} />
+              </label>
+            ))}
+          </div>
+        ) : <p className="picker-empty">No MCP servers are enabled. Add one in Settings → MCP.</p>}</>)}
       </div>
     </>
   );

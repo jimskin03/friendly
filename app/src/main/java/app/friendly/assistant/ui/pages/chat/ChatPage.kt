@@ -588,6 +588,7 @@ private fun ChatPageContent(
                     ChatErrorSolution.CheckFastModelSettings -> "fastModelSettings"
                     null -> null
                 },
+                retryable = error.retryable,
             )
         },
         desktopAvailable = true,

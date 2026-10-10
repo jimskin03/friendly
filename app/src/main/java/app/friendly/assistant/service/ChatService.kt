@@ -135,6 +135,8 @@ data class ChatError(
     val conversationId: Uuid? = null,
     val timestamp: Long = System.currentTimeMillis(),
     val solution: ChatErrorSolution? = null,
+    /** True only for failures of the reply itself (send / regenerate / generation), which Retry can redo. */
+    val retryable: Boolean = false,
 )
 
 enum class ChatErrorSolution {
@@ -202,10 +204,11 @@ class ChatService(
         conversationId: Uuid? = null,
         title: String? = null,
         solution: ChatErrorSolution? = null,
+        retryable: Boolean = false,
     ) {
         if (error is CancellationException) return
         _errors.update {
-            it + ChatError(title = title, error = error, conversationId = conversationId, solution = solution)
+            it + ChatError(title = title, error = error, conversationId = conversationId, solution = solution, retryable = retryable)
         }
     }
 
@@ -476,7 +479,7 @@ class ChatService(
                 e.printStackTrace()
                 if (e is CancellationException) throw e
                 session.messageQueue.pause()
-                addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
+                addError(e, conversationId, title = context.getString(R.string.error_title_send_message), retryable = true)
             }
         }
         job.invokeOnCompletion { cause ->
@@ -547,7 +550,7 @@ class ChatService(
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 session.messageQueue.pause()
-                addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
+                addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message), retryable = true)
             }
         }
 
@@ -767,7 +770,7 @@ class ChatService(
             sessionManager.get(conversationId)?.messageQueue?.pause()
 
             it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+            addError(it, conversationId, title = context.getString(R.string.error_title_generation), retryable = true)
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {

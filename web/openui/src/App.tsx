@@ -4,9 +4,9 @@ import { safeLinkTarget } from "./Markdown";
 import { themeStyle } from "./theme";
 import { AttachmentChip, MessageView } from "./MessageView";
 import { AssetsContext, parseAssets } from "./assets";
-import { PickerSheet, reasoningLabel, searchLabel, type PickerKind } from "./Pickers";
+import { PickerSheet, type PickerKind } from "./Pickers";
 import { OutlineSheet } from "./Outline";
-import { IconBrain, IconClose, IconDown, IconEdit, IconGlobe, IconMic, IconMonitor, IconPhone, IconPlug, IconPlus, IconSpark, IconStopCircle, IconUp, IconUser } from "./icons";
+import { IconSliders, IconClose, IconDown, IconEdit, IconMic, IconMonitor, IconPhone, IconPlus, IconSpark, IconStopCircle, IconUp } from "./icons";
 import type { FriendlyChatState, FriendlySnapshot } from "./types";
 import "@openuidev/react-ui/styles/index.css";
 import "./styles.css";
@@ -189,7 +189,7 @@ export default function App() {
                 <div><strong>{error.title || "Something went wrong"}</strong><span>{error.message}</span>
                   <span className="error-solutions">
                     {error.solution === "fastModelSettings" && <button type="button" className="btn-secondary" onClick={() => postNative({ type: "errorSolution", id: error.id, solution: "fastModelSettings" })}>Check fast model settings</button>}
-                    {!busy && <button type="button" className="btn-secondary" onClick={() => { postNative({ type: "dismissError", id: error.id }); postNative({ type: "retry" }); }}>Retry</button>}
+                    {!busy && error.retryable && <button type="button" className="btn-secondary" onClick={() => { postNative({ type: "dismissError", id: error.id }); postNative({ type: "retry" }); }}>Retry</button>}
                   </span>
                 </div>
                 <button type="button" className="icon-btn" aria-label="Dismiss error" onClick={() => postNative({ type: "dismissError", id: error.id })}><IconClose size={16} /></button>
@@ -286,17 +286,9 @@ export default function App() {
               <button type="button" className="model-chip" onClick={() => pickers ? setPicker("model") : postNative({ type: "modelPicker" })} aria-label="Choose model">
                 <IconSpark size={15} /><span>{chat.modelName ?? "Choose model"}</span>
               </button>
-              {pickers && pickers.assistants.length > 1 && (
-                <button type="button" className="icon-btn tool" onClick={() => setPicker("assistant")} aria-label={`Assistant: ${chat.assistantName ?? ""}`}><IconUser /></button>
-              )}
-              {pickers?.reasoning != null && (
-                <button type="button" className={`icon-btn tool${pickers.reasoning !== "off" ? " is-on" : ""}`} onClick={() => setPicker("reasoning")} aria-label={`Reasoning: ${reasoningLabel(pickers.reasoning)}`}><IconBrain /></button>
-              )}
               {pickers && (
-                <button type="button" className={`icon-btn tool${pickers.searchMode !== "off" ? " is-on" : ""}`} onClick={() => setPicker("search")} aria-label={`Web search: ${searchLabel(pickers.searchMode)}`}><IconGlobe /></button>
-              )}
-              {pickers && pickers.mcp.length > 0 && (
-                <button type="button" className={`icon-btn tool${pickers.mcp.some(m => m.enabled) ? " is-on" : ""}`} onClick={() => setPicker("mcp")} aria-label="MCP servers"><IconPlug /></button>
+                <button type="button" className={`icon-btn tool${pickers.searchMode !== "off" || pickers.mcp.some(m => m.enabled) || (pickers.reasoning != null && pickers.reasoning !== "off") ? " is-on" : ""}`}
+                  onClick={() => setPicker("options")} aria-label="Chat options" title="Assistant, reasoning, search, MCP"><IconSliders /></button>
               )}
               <span className="menu-anchor">
                 <button type="button" className={`icon-btn tool${chat.desktopStreaming ? " is-live" : ""}`} aria-label="Device control" aria-haspopup="menu" aria-expanded={toolsOpen}

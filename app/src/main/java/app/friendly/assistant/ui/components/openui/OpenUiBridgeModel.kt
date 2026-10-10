@@ -117,7 +117,7 @@ internal data class OpenUiMessage(
 internal data class OpenUiQueued(val id: String, val text: String, val editing: Boolean = false)
 
 @Serializable
-internal data class OpenUiError(val id: String, val title: String, val message: String, val solution: String? = null)
+internal data class OpenUiError(val id: String, val title: String, val message: String, val solution: String? = null, val retryable: Boolean = false)
 
 /** Native state that only the chat page knows; folded into the snapshot. */
 @Serializable

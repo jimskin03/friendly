@@ -73,7 +73,7 @@ export interface FriendlyChatState {
   assistantName?: string | null;
   showStats: boolean;
   queue: { id: string; text: string; editing?: boolean }[];
-  errors: { id: string; title: string; message: string; solution?: string | null }[];
+  errors: { id: string; title: string; message: string; solution?: string | null; retryable?: boolean }[];
   desktopAvailable: boolean;
   phoneAvailable: boolean;
   desktopStreaming: boolean;
