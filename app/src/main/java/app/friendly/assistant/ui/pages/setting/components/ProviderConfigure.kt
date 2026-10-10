@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,7 @@ import app.friendly.assistant.data.ai.openai.OpenAIAccountStore
 import app.friendly.assistant.data.ai.openai.OpenAIOAuthCoordinator
 import me.rerere.ai.provider.OpenAIAuthMode
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.rememberCoroutineScope
 import org.koin.compose.koinInject
 import me.rerere.hugeicons.HugeIcons
@@ -221,14 +223,34 @@ private fun ProviderConfigureOpenAI(
     val scope = rememberCoroutineScope()
     var oauthError by remember { mutableStateOf<String?>(null) }
     var showOAuthConsent by remember { mutableStateOf(false) }
+    var signInAccountId by remember { mutableStateOf<String?>(null) }
+    var signingIn by remember { mutableStateOf(false) }
+    val currentProvider by rememberUpdatedState(provider)
+    val currentOnEdit by rememberUpdatedState(onEdit)
     LaunchedEffect(accountStore) { accountStore.initialize() }
     val connectChatGpt: () -> Unit = {
         showOAuthConsent = false
         oauthError = null
+        val selectedAccountId = signInAccountId
+        signingIn = true
         scope.launch {
-            runCatching { oauthCoordinator.connect(context) }
-                .onSuccess { account -> onEdit(provider.copy(authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = account.id, apiKey = "", useResponseApi = true, baseUrl = "https://api.openai.com/v1", responsesPath = "/responses")) }
-                .onFailure { oauthError = it.message ?: "ChatGPT sign-in failed" }
+            try {
+                val account = oauthCoordinator.connect(context, selectedAccountId)
+                currentOnEdit(currentProvider.copy(
+                    authMode = OpenAIAuthMode.CHATGPT_OAUTH,
+                    oauthAccountId = account.id,
+                    apiKey = "",
+                    useResponseApi = true,
+                    baseUrl = "https://api.openai.com/v1",
+                    responsesPath = "/responses",
+                ))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                oauthError = error.message ?: "ChatGPT sign-in failed"
+            } finally {
+                signingIn = false
+            }
         }
     }
 
@@ -249,6 +271,7 @@ private fun ProviderConfigureOpenAI(
                 shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 label = { Text(if (mode == OpenAIAuthMode.API_KEY) stringResource(R.string.setting_provider_openai_api_key_method) else stringResource(R.string.setting_provider_openai_chatgpt_method)) },
                 selected = provider.authMode == mode,
+                enabled = !signingIn,
                 onClick = {
                     oauthError = null
                     if (mode == OpenAIAuthMode.CHATGPT_OAUTH) {
@@ -269,30 +292,51 @@ private fun ProviderConfigureOpenAI(
         val connected = accounts.firstOrNull { it.id == provider.oauthAccountId && it.isConnected }
         if (connected == null) {
             Text(stringResource(R.string.setting_provider_openai_oauth_description))
-            Button(onClick = { showOAuthConsent = true }) { Text(stringResource(R.string.setting_provider_openai_connect)) }
+            Button(enabled = !signingIn, onClick = {
+                signInAccountId = accounts.firstOrNull { it.id == provider.oauthAccountId }?.id
+                showOAuthConsent = true
+            }) { Text(stringResource(R.string.setting_provider_openai_connect)) }
         } else {
             Text(stringResource(R.string.setting_provider_openai_connected, connected.email.ifBlank { connected.name.ifBlank { connected.subject.take(8) } }))
-            OutlinedButton(onClick = { showOAuthConsent = true }) {
-                Text(stringResource(R.string.setting_provider_openai_add_account))
-            }
-            accounts.filter { it.isConnected && it.id != connected.id }.forEach { account ->
-                OutlinedButton(onClick = { onEdit(provider.copy(oauthAccountId = account.id)) }) {
-                    Text(stringResource(R.string.setting_provider_openai_use_account, account.email.ifBlank { account.name.ifBlank { account.subject.take(8) } }))
-                }
-            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     runCatching {
                         context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://chatgpt.com/#settings/Usage")))
                     }
                 }) { Text(stringResource(R.string.setting_provider_openai_manage_usage)) }
-                OutlinedButton(onClick = {
+                OutlinedButton(enabled = !signingIn, onClick = {
                     scope.launch {
                         val remoteRevoked = oauthCoordinator.disconnect(connected.id)
                         onEdit(provider.copy(oauthAccountId = null))
                         if (!remoteRevoked) oauthError = context.getString(R.string.setting_provider_openai_revocation_failed)
                     }
                 }) { Text(stringResource(R.string.setting_provider_openai_sign_out)) }
+            }
+        }
+        if (accounts.isNotEmpty()) {
+            OutlinedButton(enabled = !signingIn, onClick = {
+                signInAccountId = null
+                showOAuthConsent = true
+            }) {
+                Text(stringResource(R.string.setting_provider_openai_add_account))
+            }
+        }
+        accounts.filter { it.id != connected?.id }.forEach { account ->
+            val label = account.email.ifBlank { account.name.ifBlank { account.subject.take(8).ifBlank { account.id.take(8) } } }
+            OutlinedButton(enabled = !signingIn, onClick = {
+                if (account.isConnected) {
+                    onEdit(provider.copy(oauthAccountId = account.id))
+                } else {
+                    signInAccountId = account.id
+                    showOAuthConsent = true
+                }
+            }) {
+                Text(stringResource(
+                    if (account.isConnected) R.string.setting_provider_openai_use_account
+                    else if (account.subject.isBlank()) R.string.setting_provider_openai_retry_account
+                    else R.string.setting_provider_openai_reconnect_account,
+                    label,
+                ))
             }
         }
         if (showOAuthConsent) {

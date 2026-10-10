@@ -3,6 +3,7 @@ package app.friendly.assistant.data.ai.openai
 import android.content.Context
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -15,6 +16,7 @@ import me.rerere.oauth.CustomTabsOAuthAuthorizationLauncher
 import me.rerere.oauth.OAuthAuthorizationLauncher
 import me.rerere.oauth.OAuthHttpClient
 import me.rerere.oauth.OAuthLoopbackCallbackServer
+import me.rerere.oauth.OAuthRequestException
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.Signature
@@ -31,15 +33,28 @@ class OpenAIOAuthCoordinator(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val refreshLocks = ConcurrentHashMap<String, Mutex>()
+    private val signInLock = Mutex()
 
-    suspend fun connect(context: Context): OpenAIAccountSummary = withContext(Dispatchers.IO) {
+    suspend fun connect(context: Context, accountId: String? = null): OpenAIAccountSummary = withContext(Dispatchers.IO) {
+        check(signInLock.tryLock()) { "A ChatGPT sign-in is already in progress" }
+        try {
+            connectAccount(context, accountId)
+        } finally {
+            signInLock.unlock()
+        }
+    }
+
+    private suspend fun connectAccount(context: Context, selectedAccountId: String?): OpenAIAccountSummary {
+        // A null selection always starts a new registration, even when other accounts exist.
+        val returning = selectedAccountId?.let { store.get(it) ?: error("The selected ChatGPT account is no longer available") }
+        require(returning == null || (returning.clientId.isNotBlank() && returning.clientId != DYNAMIC_CLIENT_ID)) {
+            "The saved account registration is invalid. Add the account again."
+        }
         val pkce = oauth.generatePkce()
         val state = oauth.generateState()
         val nonce = oauth.generateState()
         val session = callbackServer.openSession(context.applicationContext, state)
         try {
-            val prior = store.list()
-            val returning = prior.firstOrNull { it.clientId.isNotBlank() }
             val clientId = returning?.clientId ?: DYNAMIC_CLIENT_ID
             val redirectUri = session.redirectUri
             val authUrl = oauth.buildAuthorizationUrl(
@@ -51,11 +66,16 @@ class OpenAIOAuthCoordinator(
                     state = state,
                     scope = SCOPES,
                     resources = listOf(OPENAI_RESOURCE),
-                    additionalParameters = mapOf(
-                        "nonce" to nonce,
-                        "agent_name_hint" to "Friendly",
-                        "ext_agent_host_id" to store.hostId(),
-                    ),
+                    additionalParameters = buildMap {
+                        put("nonce", nonce)
+                        put("ext_agent_host_id", store.hostId())
+                        if (returning == null) {
+                            put("agent_name_hint", "Friendly")
+                        } else {
+                            if (returning.idToken.isNotBlank()) put("id_token_hint", returning.idToken)
+                            if (returning.email.isNotBlank()) put("login_hint", returning.email)
+                        }
+                    },
                 ),
             )
             withContext(Dispatchers.Main) { launcher.launch(context.applicationContext, authUrl) }
@@ -65,11 +85,18 @@ class OpenAIOAuthCoordinator(
             val code = callback.code ?: error("Authorization did not return a code")
             val issuedClientId = callback.clientId ?: returning?.clientId
                 ?: error("The authorization server did not return the issued client ID")
+            require(issuedClientId.isNotBlank() && issuedClientId != DYNAMIC_CLIENT_ID) {
+                "The authorization server did not return a valid issued client ID"
+            }
             if (returning != null && issuedClientId != returning.clientId) {
                 error("The returned account registration does not match the saved registration")
             }
             val accountId = returning?.id ?: UUID.randomUUID().toString()
-            if (returning == null) store.save(OpenAIStoredAccount(id = accountId, clientId = issuedClientId))
+            if (returning == null) {
+                require(store.list().none { it.clientId == issuedClientId }) { "This account registration is already saved. Reconnect it instead." }
+                // Keep the issued registration if exchange fails so the user can retry it.
+                store.save(OpenAIStoredAccount(id = accountId, clientId = issuedClientId))
+            }
             val token = oauth.exchangeAuthorizationCode(
                 OAuthHttpClient.AuthorizationCodeTokenRequest(
                     tokenEndpoint = TOKEN_ENDPOINT,
@@ -78,25 +105,24 @@ class OpenAIOAuthCoordinator(
                     codeVerifier = pkce.verifier,
                     redirectUri = redirectUri,
                     resources = listOf(OPENAI_RESOURCE),
-                    additionalParameters = mapOf("client_id" to issuedClientId),
                 ),
             )
             val identity = validateIdToken(token.idToken ?: error("The identity token was not returned"), nonce, issuedClientId)
+            require(returning == null || returning.subject.isBlank() || returning.subject == identity.subject) {
+                "Sign in with the selected ChatGPT account, or use Add another account."
+            }
             val grantedScopes = token.scope.orEmpty().split(' ').filter(String::isNotBlank)
             require(PLAN_SCOPE in grantedScopes) {
                 "Sign-in succeeded, but ChatGPT plan access was not granted. Reconnect and allow plan access."
             }
-            val priorAccount = prior.firstOrNull {
-                it.clientId == issuedClientId && (it.subject.isBlank() || it.subject == identity.subject)
-            }
             val account = OpenAIStoredAccount(
-                id = priorAccount?.id ?: accountId,
+                id = accountId,
                 clientId = issuedClientId,
                 subject = identity.subject,
                 email = identity.email,
                 name = identity.name,
                 accessToken = token.accessToken,
-                refreshToken = token.refreshToken ?: priorAccount?.refreshToken.orEmpty(),
+                refreshToken = token.refreshToken ?: returning?.refreshToken.orEmpty(),
                 idToken = token.idToken.orEmpty(),
                 scopes = grantedScopes,
                 accessExpiresAt = System.currentTimeMillis() + (token.expiresIn ?: 3600L) * 1000,
@@ -104,9 +130,9 @@ class OpenAIOAuthCoordinator(
             )
             require(account.refreshToken.isNotBlank()) { "OpenAI did not return a refresh token" }
             store.save(account)
-            OpenAIAccountSummary(account.id, account.subject, account.email, account.name, account.isConnected)
+            return OpenAIAccountSummary(account.id, account.subject, account.email, account.name, account.isConnected)
         } finally {
-            session.close()
+            withContext(NonCancellable) { session.close() }
         }
     }
 
@@ -130,11 +156,10 @@ class OpenAIOAuthCoordinator(
                         clientId = account.clientId,
                         refreshToken = account.refreshToken,
                         resources = listOf(OPENAI_RESOURCE),
-                        scope = account.scopes.joinToString(" "),
                     ),
                 )
             } catch (error: Exception) {
-                if (error.message.orEmpty().contains("HTTP 400") || error.message.orEmpty().contains("HTTP 401")) {
+                if (error is OAuthRequestException && error.errorCode in TERMINAL_REFRESH_ERRORS) {
                     store.save(account.copy(accessToken = "", refreshToken = "", idToken = "", accessExpiresAt = 0L))
                     throw IllegalStateException("ChatGPT session expired. Sign in again.", error)
                 }
@@ -202,7 +227,7 @@ class OpenAIOAuthCoordinator(
             require(notBefore <= System.currentTimeMillis() / 1000 + 30) { "Identity token is not yet valid" }
         }
         require(claims["nonce"]?.jsonPrimitive?.content == nonce) { "Identity token nonce did not match" }
-        val jwksUri = discovery["jwks_uri"]?.jsonPrimitive?.content ?: "$ISSUER/oauth2/jwks"
+        val jwksUri = discovery["jwks_uri"]?.jsonPrimitive?.content ?: "$ISSUER/.well-known/jwks.json"
         require(runCatching { java.net.URI(jwksUri).let { it.scheme == "https" && it.host == "auth.openai.com" } }.getOrDefault(false)) {
             "OpenAI signing key location was not trusted"
         }
@@ -240,5 +265,9 @@ class OpenAIOAuthCoordinator(
         const val PLAN_SCOPE = "chatgpt.tokens.use.direct"
         const val SCOPES = "openid profile email offline_access resource.invoke $PLAN_SCOPE"
         const val EXPIRY_LEEWAY_MS = 60_000L
+        val TERMINAL_REFRESH_ERRORS = setOf(
+            "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired",
+            "refresh_token_invalidated", "refresh_token_reused",
+        )
     }
 }

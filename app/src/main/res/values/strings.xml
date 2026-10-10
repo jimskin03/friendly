@@ -1071,6 +1071,8 @@
   <string name="setting_provider_openai_add_account">Add another account</string>
   <string name="setting_provider_openai_connected">Connected to %1$s</string>
   <string name="setting_provider_openai_use_account">Use %1$s</string>
+  <string name="setting_provider_openai_retry_account">Retry unfinished sign-in (%1$s)</string>
+  <string name="setting_provider_openai_reconnect_account">Reconnect %1$s</string>
   <string name="setting_provider_openai_manage_usage">Manage usage</string>
   <string name="setting_provider_openai_sign_out">Sign out</string>
   <string name="setting_provider_openai_revocation_failed">Signed out here. Disconnect Friendly from your ChatGPT account settings if needed.</string>
