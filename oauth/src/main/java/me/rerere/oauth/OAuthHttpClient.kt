@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.FormBody
@@ -23,6 +24,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import java.net.URLEncoder
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -117,7 +119,7 @@ class OAuthHttpClient(
             .post(body.toRequestBody(JSON_MEDIA_TYPE))
             .tag(SensitiveRequest::class.java, SensitiveRequest)
             .build()
-        val text = execute(httpRequest)
+        val text = execute(httpRequest, "OAuth client registration")
         json.decodeFromString(ClientRegistrationResponse.serializer(), text)
     }
 
@@ -137,6 +139,8 @@ class OAuthHttpClient(
     fun buildAuthorizationUrl(request: AuthorizationRequest): String {
         val base = request.authorizationEndpoint.toHttpUrlOrNull()
             ?: error("Invalid authorization endpoint: ${request.authorizationEndpoint}")
+        requireNoReservedParameters(request.additionalParameters.keys, AUTHORIZATION_PARAMETERS)
+        requireNoReservedParameters(base.queryParameterNames, AUTHORIZATION_PARAMETERS + request.additionalParameters.keys)
         return base.newBuilder()
             .addQueryParameter("response_type", "code")
             .addQueryParameter("client_id", request.clientId)
@@ -156,6 +160,7 @@ class OAuthHttpClient(
     suspend fun exchangeAuthorizationCode(
         request: AuthorizationCodeTokenRequest,
     ): TokenResponse = withContext(Dispatchers.IO) {
+        requireNoReservedParameters(request.additionalParameters.keys, TOKEN_PARAMETERS)
         val form = FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", request.code)
@@ -173,6 +178,7 @@ class OAuthHttpClient(
 
     suspend fun refreshToken(request: RefreshTokenRequest): TokenResponse =
         withContext(Dispatchers.IO) {
+            requireNoReservedParameters(request.additionalParameters.keys, TOKEN_PARAMETERS)
             val form = FormBody.Builder()
                 .add("grant_type", "refresh_token")
                 .add("refresh_token", request.refreshToken)
@@ -211,7 +217,12 @@ class OAuthHttpClient(
             .get()
             .tag(SensitiveRequest::class.java, SensitiveRequest)
             .build()
-        execute(request)
+        val operation = when (request.url.encodedPath) {
+            "/.well-known/openid-configuration" -> "OAuth discovery"
+            "/.well-known/jwks.json" -> "OAuth signing key retrieval"
+            else -> "OAuth metadata retrieval"
+        }
+        execute(request, operation)
     }
 
     private suspend fun postToken(tokenEndpoint: String, form: FormBody): TokenResponse {
@@ -221,20 +232,43 @@ class OAuthHttpClient(
             .post(form)
             .tag(SensitiveRequest::class.java, SensitiveRequest)
             .build()
-        val text = execute(request)
+        val operation = if ((0 until form.size).any { form.name(it) == "grant_type" && form.value(it) == "refresh_token" }) {
+            "OAuth token refresh"
+        } else {
+            "OAuth code exchange"
+        }
+        val text = execute(request, operation)
         return json.decodeFromString(TokenResponse.serializer(), text)
     }
 
-    private suspend fun execute(request: Request): String {
+    private suspend fun execute(request: Request, operation: String): String {
         executeRaw(request).use { response ->
             val body = response.body.string()
             if (!response.isSuccessful) {
-                val errorCode = runCatching {
-                    json.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+                val payload = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
+                val nested = payload?.get("error") as? JsonObject
+                fun textField(obj: JsonObject?, name: String): String? = runCatching {
+                    obj?.get(name)?.jsonPrimitive?.contentOrNull
                 }.getOrNull()
-                val suffix = errorCode?.takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,80}")) }
-                    ?.let { " ($it)" }.orEmpty()
-                throw IOException("OAuth request failed (HTTP ${response.code})$suffix")
+                fun identifier(value: String?): String? = value?.takeIf {
+                    it.matches(Regex("[A-Za-z0-9_.-]{1,120}"))
+                }
+                val errorCode = identifier(textField(nested, "code") ?: textField(payload, "error"))
+                val parameter = identifier(textField(nested, "param") ?: textField(payload, "error_param"))
+                val description = textField(payload, "error_description") ?: textField(nested, "message")
+                    ?: textField(payload, "message") ?: textField(payload, "detail")
+                val requestId = identifier(response.header("x-request-id") ?: response.header("openai-request-id"))
+                throw OAuthRequestException(
+                    statusCode = response.code,
+                    errorCode = errorCode,
+                    message = buildString {
+                        append("$operation failed (HTTP ${response.code})")
+                        errorCode?.let { append(" ($it)") }
+                        parameter?.let { append(" [parameter: $it]") }
+                        description?.let { append(": ${safeErrorDescription(it, request)}") }
+                        requestId?.let { append(" [request: $it]") }
+                    },
+                )
             }
             return body
         }
@@ -258,7 +292,50 @@ class OAuthHttpClient(
     private fun base64Url(bytes: ByteArray): String =
         Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
+    // Never surface raw response bodies or allow echoed credentials into the UI/logs.
+    private fun safeErrorDescription(description: String, request: Request): String {
+        val form = request.body as? FormBody
+        val secrets = buildList {
+            if (form != null) {
+                (0 until form.size).filter { form.name(it) in SENSITIVE_PARAMETERS }.forEach { add(form.value(it)) }
+            }
+            (0 until request.url.querySize).filter { request.url.queryParameterName(it) in SENSITIVE_PARAMETERS }
+                .forEach { request.url.queryParameterValue(it)?.let(::add) }
+        }.filter(String::isNotBlank).sortedByDescending(String::length)
+        var safe = description
+        secrets.forEach { secret ->
+            safe = safe.replace(secret, "[redacted]")
+                .replace(URLEncoder.encode(secret, "UTF-8"), "[redacted]")
+        }
+        safe = Regex("(?i)Bearer\\s+\\S+").replace(safe, "Bearer [redacted]")
+        safe = Regex("[A-Za-z0-9_+/.=-]{40,}").replace(safe, "[redacted]")
+        safe = Regex("[A-Za-z0-9_.+%-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}").replace(safe, "[redacted]")
+        return safe.replace(Regex("[\\p{Cc}\\p{Cf}\\s]+"), " ").trim().take(500)
+    }
+
+    private fun requireNoReservedParameters(names: Set<String>, reserved: Set<String>) {
+        require(names.none { it in reserved }) { "OAuth parameters must be supplied through their dedicated request fields" }
+    }
+
     private companion object {
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        val AUTHORIZATION_PARAMETERS = setOf(
+            "response_type", "client_id", "redirect_uri", "code_challenge",
+            "code_challenge_method", "state", "scope", "resource",
+        )
+        val TOKEN_PARAMETERS = setOf(
+            "grant_type", "client_id", "client_secret", "code", "code_verifier",
+            "redirect_uri", "refresh_token", "scope", "resource",
+        )
+        val SENSITIVE_PARAMETERS = setOf(
+            "code", "code_verifier", "client_secret", "refresh_token", "token",
+            "access_token", "id_token", "id_token_hint", "login_hint",
+        )
     }
 }
+
+class OAuthRequestException(
+    val statusCode: Int,
+    val errorCode: String?,
+    message: String,
+) : IOException(message)
