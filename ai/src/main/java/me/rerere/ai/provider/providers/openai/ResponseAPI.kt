@@ -58,10 +58,11 @@ import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
+import me.rerere.ai.util.SSEEventSource
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
-import me.rerere.common.http.await
 import me.rerere.common.http.SensitiveRequest
+import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -178,7 +179,12 @@ class ResponseAPI(
             .headers(headers)
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .header("Authorization", "Bearer $token")
-            .apply { if (oauth) tag(SensitiveRequest::class.java, SensitiveRequest) }
+            .apply {
+                if (oauth) {
+                    header("Accept", "text/event-stream")
+                    tag(SensitiveRequest::class.java, SensitiveRequest)
+                }
+            }
             .apply { if (!oauth) configureReferHeaders(providerSetting.baseUrl) }
             .apply { if (!oauth) configureSessionHeaders(providerSetting.baseUrl, params.sessionId) }
             .build()
@@ -245,8 +251,11 @@ class ResponseAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
-            .newEventSource(request, listener)
+        val eventSource = if (oauth) {
+            SSEEventSource.factory(client).newEventSource(request, listener)
+        } else {
+            EventSources.createFactory(client).newEventSource(request, listener)
+        }
 
         awaitClose {
             println("[awaitClose] Closing eventSource ")
