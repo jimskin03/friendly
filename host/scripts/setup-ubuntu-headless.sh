@@ -80,11 +80,39 @@ echo "==> [1/6] Updating apt repositories and installing packages..."
   openssl \
   || true
 
-# Chromium package detection (Ubuntu 24.04 uses snap or deb, fallback gracefully)
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1; then
-  echo "==> Installing Chromium browser..."
-  "${SUDO[@]}" apt-get install -y --no-install-recommends chromium || \
-  "${SUDO[@]}" apt-get install -y --no-install-recommends chromium-browser || true
+# Browser: snap Chromium does not run under a systemd service user on Xvfb,
+# so install a .deb browser. amd64: Google Chrome. arm64: a non-snap Chromium
+# if the distro has one (Debian), else print what to do.
+is_snap_browser() {
+  local p real; p="$(command -v "$1" 2>/dev/null)" || return 1
+  real="$(readlink -f "$p")"
+  [[ "$p" == /snap/* || "$real" == /snap/* ]] && return 0
+  head -c 4096 "$real" 2>/dev/null | grep -qaE '/snap/bin/|snap (run|install)'
+}
+have_deb_browser() {
+  local b; for b in google-chrome-stable google-chrome chromium chromium-browser; do
+    command -v "$b" >/dev/null 2>&1 && ! is_snap_browser "$b" && return 0
+  done; return 1
+}
+if ! have_deb_browser; then
+  ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
+  if [[ "$ARCH" == "amd64" || "$ARCH" == "x86_64" ]]; then
+    echo "==> Installing Google Chrome (.deb; snap Chromium can't run as a service)..."
+    CHROME_DEB="$(mktemp --suffix=.deb)"
+    if curl -fsSL -o "$CHROME_DEB" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb; then
+      chmod 644 "$CHROME_DEB"
+      "${SUDO[@]}" apt-get install -y "$CHROME_DEB" || echo "  [WARNING] Google Chrome install failed"
+    else
+      echo "  [WARNING] Could not download Google Chrome"
+    fi
+    rm -f "$CHROME_DEB"
+  else
+    # Debian ships a real chromium .deb; Ubuntu's is a snap transitional package.
+    if ! grep -qi ubuntu /etc/os-release; then
+      "${SUDO[@]}" apt-get install -y --no-install-recommends chromium || true
+    fi
+    have_deb_browser || echo "  [WARNING] No non-snap browser for $ARCH. Install a .deb Chromium (Debian package or a PPA) and set CHROMIUM_BIN in /etc/friendly-host.env."
+  fi
 fi
 
 # 3. Create assistant user if not exists
@@ -137,7 +165,7 @@ done
 # Keep optional operator settings across re-runs.
 EXTRA_ENV=""
 if "${SUDO[@]}" test -f /etc/friendly-host.env; then
-  EXTRA_ENV="$("${SUDO[@]}" grep -E '^(TAILSCALE_SERVE_PORT|TAILSCALE_SERVE_FALLBACK_PORTS|TAILSCALE_VIEWER_URL|TUNNEL_MODE)=' /etc/friendly-host.env || true)"
+  EXTRA_ENV="$("${SUDO[@]}" grep -E '^(TAILSCALE_SERVE_PORT|TAILSCALE_SERVE_FALLBACK_PORTS|TAILSCALE_VIEWER_URL|TUNNEL_MODE|CHROMIUM_BIN)=' /etc/friendly-host.env || true)"
 fi
 
 if [[ -z "$EXISTING_TOKEN" || "$EXISTING_TOKEN" == *"change-me"* ]]; then
@@ -169,6 +197,30 @@ printf '%s' "$ENV_CONTENT" | "${SUDO[@]}" tee /etc/friendly-host.env >/dev/null
 "${SUDO[@]}" chmod 600 /etc/friendly-host.env
 "${SUDO[@]}" chown root:root /etc/friendly-host.env
 "${SUDO[@]}" rm -f "$HOST_ROOT/.env"   # single source of truth: /etc/friendly-host.env
+# 5.0 Resolve the browser exactly like the agent does (non-snap only).
+BROWSER_BIN="$(cd "$HOST_ROOT/agent" && "${AS_SERVICE[@]}" env CHROMIUM_BIN="${CHROMIUM_BIN:-google-chrome-stable}" "$VENV_PATH/bin/python" -m app.browser 2>/tmp/friendly-browser.err || true)"
+if [[ -z "$BROWSER_BIN" ]]; then
+  echo "  [WARNING] $(cat /tmp/friendly-browser.err 2>/dev/null)"
+  BROWSER_BIN="google-chrome-stable"
+fi
+rm -f /tmp/friendly-browser.err
+echo "==> Desktop browser: $BROWSER_BIN"
+# Launchers (menu + taskbar) use the resolved binary, never the snap wrapper.
+"${SUDO[@]}" sed -i "s#<command>chromium --no-sandbox</command>#<command>$BROWSER_BIN --no-sandbox</command>#" "$HOST_ROOT/config/openbox/menu.xml"
+"${SUDO[@]}" mkdir -p /usr/local/share/applications
+printf '[Desktop Entry]\nType=Application\nName=Browser\nExec=%s --no-sandbox %%U\nIcon=google-chrome\nCategories=Network;WebBrowser;\n' "$BROWSER_BIN" \
+  | "${SUDO[@]}" tee /usr/local/share/applications/friendly-browser.desktop >/dev/null
+TINT2RC="/home/$SERVICE_USER/.config/tint2/tint2rc"
+"${SUDO[@]}" mkdir -p "$(dirname "$TINT2RC")"
+if ! "${SUDO[@]}" test -f "$TINT2RC" || "${SUDO[@]}" grep -q 'friendly-managed' "$TINT2RC"; then
+  {
+    [[ -f /etc/xdg/tint2/tint2rc ]] && sed '/^launcher_item_app/d' /etc/xdg/tint2/tint2rc
+    echo "# friendly-managed launchers (rewritten by setup-ubuntu-headless.sh)"
+    echo "launcher_item_app = /usr/local/share/applications/friendly-browser.desktop"
+    echo "launcher_item_app = /usr/share/applications/debian-xterm.desktop"
+  } | "${SUDO[@]}" tee "$TINT2RC" >/dev/null
+fi
+
 # 5.1 Configure Openbox application menus and theme
 echo "==> Configuring Openbox application menu and taskbar..."
 "${SUDO[@]}" mkdir -p "/home/$SERVICE_USER/.config/openbox" "/etc/xdg/openbox"
@@ -235,7 +287,7 @@ Type=simple
 User=$SERVICE_USER
 EnvironmentFile=-/etc/friendly-host.env
 Environment=DISPLAY=:99
-ExecStart=/usr/bin/tint2
+ExecStart=/usr/bin/tint2 -c /home/$SERVICE_USER/.config/tint2/tint2rc
 Restart=on-failure
 RestartSec=2
 

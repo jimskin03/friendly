@@ -103,6 +103,7 @@ def health(settings: Settings = Depends(get_settings)) -> dict:
             "server_name": "friendly-desktop",
         },
         "display": info,
+        "browser": browser.browser_status(settings),
     }
 
 

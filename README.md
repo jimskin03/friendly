@@ -226,7 +226,8 @@ The **Play** build only accepts trusted HTTPS for the desktop Screen viewer and 
 6. **Base URL** in Friendly: `https://<machine>.<tailnet>.ts.net:8444`
 7. **Black viewer:** the viewer needs its own Tailscale route: `sudo tailscale serve --bg --https=8443 http://127.0.0.1:6099` (the agent adds it itself, or picks the next free port if 8443 is taken), or set `TAILSCALE_VIEWER_URL=https://<machine>.<tailnet>.ts.net:8443` in `/etc/friendly-host.env`, then `sudo systemctl restart friendly-agent`.
 8. **Token:** `sudo grep API_TOKEN /etc/friendly-host.env`
-9. In Friendly: **Stop**, then **Start** the desktop stream.
+9. **Browser won't open** (terminal works): snap Chromium can't run as the service user. Check `curl -s 127.0.0.1:8787/health` → `browser`, and `/opt/friendly-host/logs/browser.log`. Fix: re-run the setup script (installs Google Chrome `.deb` on amd64), or install a non-snap browser and set `CHROMIUM_BIN=` in `/etc/friendly-host.env`; then `sudo systemctl restart friendly-agent friendly-openbox friendly-tint2`.
+10. In Friendly: **Stop**, then **Start** the desktop stream.
 
 ## Architecture (brief)
 

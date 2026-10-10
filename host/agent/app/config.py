@@ -68,7 +68,8 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8787
 
-    chromium_bin: str = "chromium"
+    # Preferred browser; snap builds are skipped (see browser.resolve_browser).
+    chromium_bin: str = "google-chrome-stable"
     chromium_profile_dir: str = "/var/lib/assistant/chromium-profile"
     browser_start_url: str = "about:blank"
 
