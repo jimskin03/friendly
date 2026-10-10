@@ -800,6 +800,15 @@ enum class BackgroundEffectType {
 }
 
 @Serializable
+enum class ChatUiMode {
+    @SerialName("openui")
+    OPEN_UI,
+
+    @SerialName("native")
+    NATIVE,
+}
+
+@Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -839,6 +848,8 @@ data class DisplaySetting(
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
     val chatCustomFontPath: String = "",
     val chatCustomFontName: String = "",
+    // Preserve the full native chat until the experimental renderer reaches feature parity.
+    val chatUiMode: ChatUiMode = ChatUiMode.NATIVE,
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
     /** Show ongoing notification (+ optional overlay bubble) while Phone Automation is active and Friendly is backgrounded. Default ON. */

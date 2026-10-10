@@ -9,6 +9,7 @@ import me.rerere.ai.provider.Model
 import app.friendly.assistant.data.ai.mcp.McpManager
 import app.friendly.assistant.data.ai.tools.local.LocalTools
 import app.friendly.assistant.data.datastore.Settings
+import app.friendly.assistant.data.edition.EditionCapabilities
 import app.friendly.assistant.data.files.SkillManager
 import app.friendly.assistant.data.model.Assistant
 import app.friendly.assistant.data.repository.ConversationRepository
@@ -55,6 +56,7 @@ class ChatToolFactory(
         model: Model,
         workspaceCwd: String? = null,
     ): List<Tool> = buildList {
+        val edition = EditionCapabilities.current()
         if (assistant.enableMemory) {
             val memoryAssistantId = if (assistant.useGlobalMemory) {
                 MemoryRepository.GLOBAL_MEMORY_ID
@@ -77,8 +79,10 @@ class ChatToolFactory(
         if (assistant.enableRecentChatsReference) {
             addAll(createConversationTools(conversationRepository, assistant.id))
         }
-        addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), workspaceCwd))
-        if (assistant.enabledSkills.isNotEmpty()) {
+        if (edition.workspaceExecution) {
+            addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), workspaceCwd))
+        }
+        if (edition.workspaceExecution && assistant.enabledSkills.isNotEmpty()) {
             addAll(
                 createSkillTools(
                     enabledSkills = assistant.enabledSkills,
@@ -87,7 +91,7 @@ class ChatToolFactory(
             )
         }
 
-        val mcpTools = mcpManager.getAllAvailableTools(assistant)
+        val mcpTools = if (edition.mcpExecution) mcpManager.getAllAvailableTools(assistant) else emptyList()
         mcpTools.forEach { (serverId, serverName, tool) ->
             val toolDefName = sanitizeMcpToolName(serverName, tool.name)
             add(

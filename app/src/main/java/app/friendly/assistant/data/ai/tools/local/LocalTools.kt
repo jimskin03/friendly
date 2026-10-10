@@ -2,6 +2,7 @@
 
 import android.content.Context
 import app.friendly.assistant.BuildConfig
+import app.friendly.assistant.data.edition.EditionCapabilities
 import me.rerere.ai.core.Tool
 import app.friendly.assistant.data.datastore.SettingsStore
 import app.friendly.assistant.data.event.AppEventBus
@@ -78,14 +79,10 @@ class LocalTools(
 
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
-        // Play flavor gates phone automation, cellular call tools, and usage-stats screen time.
-        val effective = if (BuildConfig.IS_PLAY_BUILD) {
-            options.filterNot {
-                it == LocalToolOption.PhoneAutomation || it == LocalToolOption.ScreenTime
-            }
-        } else {
-            options
-        }
+        // Authoritative native filter: an imported Nightly assistant cannot unlock
+        // arbitrary local code or autonomous device/desktop tools in Play.
+        val capabilities = EditionCapabilities.current()
+        val effective = options.filter(capabilities::allowsLocalTool)
         if (effective.contains(LocalToolOption.JavascriptEngine)) {
             tools.add(javascriptTool)
         }

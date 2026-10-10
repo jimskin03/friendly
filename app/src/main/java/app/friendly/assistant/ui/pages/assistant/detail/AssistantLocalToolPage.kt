@@ -141,7 +141,7 @@ private fun AssistantLocalToolContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         CardGroup {
-            item(
+            if (!BuildConfig.IS_PLAY_BUILD) item(
                 headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_javascript_engine_title))
                 },
@@ -271,7 +271,7 @@ private fun AssistantLocalToolContent(
                     }
                 )
             }
-            item(
+            if (!BuildConfig.IS_PLAY_BUILD) item(
                 headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_desktop_control_title))
                 },

@@ -3,6 +3,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools">
 
+  <!-- Remove permissions which could be merged from Nightly-only dependencies.
+       Enforcement is also applied to the compiled native tool registry. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:node="remove" />
+  <uses-permission android:name="android.permission.CALL_PHONE" tools:node="remove" />
+  <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" tools:node="remove" />
+  <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+
   <application
     android:usesCleartextTraffic="false"
     tools:replace="android:usesCleartextTraffic" />
