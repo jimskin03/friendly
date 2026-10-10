@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/generate-prompt.cjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

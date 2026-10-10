@@ -478,10 +478,10 @@ private fun ChatPageContent(
         val presentOpenUi = shouldPresentOpenUi(
             setting.displaySetting.chatUiMode,
             conversation.messageNodes.size,
-        )
+        ) && !previewMode
         Scaffold(
             topBar = {
-                if (!presentOpenUi && (conversation.messageNodes.isNotEmpty() || isFolderChat)) {
+                if (conversation.messageNodes.isNotEmpty() || isFolderChat) {
                     TopBar(
                         settings = setting,
                         conversation = conversation,
