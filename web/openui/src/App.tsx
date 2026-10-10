@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { postNative, setNativeSession } from "./native";
+import { scrollInside } from "./scroll";
 import { safeLinkTarget } from "./Markdown";
 import { themeStyle } from "./theme";
 import { AttachmentChip, MessageView } from "./MessageView";
@@ -47,6 +48,7 @@ export default function App() {
   const longPress = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
   const scrollRef = useRef<HTMLElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const followOutput = useRef(true);
   const currentSession = useRef<string | null>(null);
   const lastEditing = useRef<string | null>(null);
@@ -89,6 +91,12 @@ export default function App() {
     };
   }, []);
 
+  const scrollTranscript = (element: Element, align: "start" | "end", behavior: ScrollBehavior = "auto") => {
+    const view = scrollRef.current;
+    if (!view) return;
+    scrollInside(view, element, align, behavior);
+  };
+
   useEffect(() => {
     const target = snapshot?.chat?.focusMessageId;
     if (!target || focused.current === target) return;
@@ -96,7 +104,7 @@ export default function App() {
     if (!element) return;
     focused.current = target;
     followOutput.current = false;
-    element.scrollIntoView({ block: "start" });
+    scrollTranscript(element, "start");
     element.classList.add("is-focused");
   }, [snapshot?.revision]);
 
@@ -108,8 +116,20 @@ export default function App() {
 
   useEffect(() => {
     if (!snapshot || snapshot.messages.length === 0 || !followOutput.current) return;
-    endRef.current?.scrollIntoView({ behavior: snapshot.loading ? "auto" : "smooth", block: "end" });
+    // Draft updates share this revision. Scrolling while the composer is
+    // focused pans the WebView and hides the text being typed.
+    if (document.activeElement instanceof HTMLTextAreaElement) return;
+    const end = endRef.current;
+    if (!end) return;
+    scrollTranscript(end, "end", snapshot.loading ? "auto" : "smooth");
   }, [snapshot?.revision, snapshot?.loading, snapshot?.messages.length]);
+
+  useLayoutEffect(() => {
+    const field = composerRef.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 132)}px`;
+  }, [draft, snapshot]);
 
   if (!snapshot) return <main className="loading-shell" aria-live="polite">Loading Friendly…</main>;
 
@@ -132,7 +152,7 @@ export default function App() {
     const element = document.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
     if (!element) return;
     followOutput.current = false;
-    element.scrollIntoView({ block: "start", behavior: "smooth" });
+    scrollTranscript(element, "start", "smooth");
     element.classList.remove("is-focused");
     void (element as HTMLElement).offsetWidth;
     element.classList.add("is-focused");
@@ -204,7 +224,7 @@ export default function App() {
       {!atBottom && snapshot.messages.length > 0 && (
         <button type="button" className="scroll-bottom" aria-label="Scroll to bottom" onClick={() => {
           followOutput.current = true;
-          endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+          if (endRef.current) scrollTranscript(endRef.current, "end", "smooth");
         }}><IconDown /></button>
       )}
 
@@ -265,6 +285,7 @@ export default function App() {
             </div>
           )}
           <textarea
+            ref={composerRef}
             value={draft}
             onChange={event => {
               const next = event.target.value.slice(0, 16000);
