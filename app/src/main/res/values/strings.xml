@@ -1495,4 +1495,5 @@
   <string name="home_action_no_apps">Install an app from the home screen before choosing Launch app.</string>
   <string name="setting_display_page_openui_title">OpenUI chat (experimental)</string>
   <string name="setting_display_page_openui_desc">Preview the embedded OpenUI chat. Attachments, voice and some native controls are not yet available in this preview. Turn this off to return to the full native chat.</string>
+  <string name="chat_outline">Outline</string>
 </resources>

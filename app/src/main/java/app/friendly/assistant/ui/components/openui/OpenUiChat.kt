@@ -134,6 +134,7 @@ internal fun OpenUiChat(
     darkMode: Boolean,
     draft: String,
     chatState: OpenUiChatState,
+    pendingImageUrls: List<String>,
     modelAvailable: Boolean,
     modifier: Modifier = Modifier,
     onAction: (OpenUiChatAction) -> Unit,
@@ -179,7 +180,7 @@ internal fun OpenUiChat(
         chat = chatState,
         modelAvailable = modelAvailable,
         capabilities = OpenUiCapabilities.current(),
-        messages = conversation.toBridgeMessages(loading),
+        messages = conversation.toBridgeMessages(loading, OpenUiThumbnails::sizeOf),
         suggestions = conversation.chatSuggestions,
         theme = theme,
     )
@@ -189,6 +190,25 @@ internal fun OpenUiChat(
         bridgeJson.encodeToString(snapshotContents.copy(revision = revisionCounter.incrementAndGet()))
     }
     val snapshotState = rememberUpdatedState(snapshotJson)
+
+    val imageUrls = remember(conversation, pendingImageUrls) {
+        conversation.currentMessages.flatMap { message ->
+            message.parts.flatMap { part ->
+                when (part) {
+                    is UIMessagePart.Image -> listOf(part.url)
+                    is UIMessagePart.Tool -> part.output.filterIsInstance<UIMessagePart.Image>().map { it.url }
+                    else -> emptyList()
+                }
+            }
+        } + pendingImageUrls
+    }
+    val thumbnails = rememberOpenUiThumbnails(imageUrls)
+    val assetsJson = remember(thumbnails) { bridgeJson.encodeToString(thumbnails) }
+    LaunchedEffect(assetsJson, pageReady) {
+        if (pageReady && thumbnails.isNotEmpty()) {
+            webView?.evaluateJavascript("window.friendlyOpenUI?.pushAssets(${JSONObject.quote(assetsJson)})", null)
+        }
+    }
 
     fun pushSnapshot(target: WebView?) {
         if (!pageReady || target == null) return

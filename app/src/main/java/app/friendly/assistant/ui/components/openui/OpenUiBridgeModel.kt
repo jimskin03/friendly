@@ -18,7 +18,7 @@ import java.time.Duration
 import kotlinx.datetime.toJavaLocalDateTime
 
 internal const val MAX_MESSAGE_LENGTH = 16_000
-internal const val MAX_TOOL_TEXT = 4_000
+internal const val MAX_TOOL_TEXT = 16_000
 internal const val MAX_REASONING_TEXT = 20_000
 
 @Serializable
@@ -31,7 +31,50 @@ internal data class OpenUiStats(
 )
 
 @Serializable
-internal data class OpenUiAttachment(val kind: String, val name: String)
+internal data class OpenUiAttachment(
+    val kind: String,
+    val name: String,
+    val size: Long? = null,
+    /** Key into the asset map pushed separately (thumbnails as data: URIs). */
+    val thumb: String? = null,
+)
+
+/** Stable, short key for a local file URL; the URL itself never reaches the page. */
+internal fun openUiAssetKey(url: String): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-1").digest(url.toByteArray())
+    return digest.take(10).joinToString("") { "%02x".format(it) }
+}
+
+internal fun UIMessagePart.toBridgeAttachment(sizeOf: (String) -> Long? = { null }): OpenUiAttachment? = when (this) {
+    is UIMessagePart.Image -> OpenUiAttachment("image", url.substringAfterLast('/').take(60), sizeOf(url), openUiAssetKey(url))
+    is UIMessagePart.Video -> OpenUiAttachment("video", url.substringAfterLast('/').take(60), sizeOf(url))
+    is UIMessagePart.Audio -> OpenUiAttachment("audio", url.substringAfterLast('/').take(60), sizeOf(url))
+    is UIMessagePart.Document -> OpenUiAttachment("file", fileName.take(60), sizeOf(url))
+    else -> null
+}
+
+/** Ordered content of one reply, so reasoning, tools and text keep their real order. */
+@Serializable
+internal data class OpenUiBlock(val kind: String, val text: String? = null, val toolId: String? = null, val ms: Long? = null)
+
+@Serializable
+internal data class OpenUiOption(val id: String, val name: String, val group: String? = null, val enabled: Boolean = false)
+
+@Serializable
+internal data class OpenUiPickers(
+    val assistants: List<OpenUiOption> = emptyList(),
+    val assistantId: String? = null,
+    val models: List<OpenUiOption> = emptyList(),
+    val modelId: String? = null,
+    /** null when the current model has no reasoning ability. */
+    val reasoning: String? = null,
+    val reasoningLevels: List<String> = emptyList(),
+    val mcp: List<OpenUiOption> = emptyList(),
+    val searchMode: String = "off",
+    val searchModes: List<String> = listOf("off", "local"),
+    val searchServices: List<OpenUiOption> = emptyList(),
+    val searchServiceId: String? = null,
+)
 
 @Serializable
 internal data class OpenUiTool(
@@ -42,6 +85,8 @@ internal data class OpenUiTool(
     /** auto | pending | approved | denied | answered */
     val state: String,
     val executed: Boolean,
+    /** Asset keys of images the tool returned (screenshots). */
+    val images: List<String> = emptyList(),
 )
 
 @Serializable
@@ -55,6 +100,7 @@ internal data class OpenUiMessage(
     val openui: String? = null,
     val reasoning: String? = null,
     val reasoningMs: Long? = null,
+    val blocks: List<OpenUiBlock> = emptyList(),
     val tools: List<OpenUiTool> = emptyList(),
     val attachments: List<OpenUiAttachment> = emptyList(),
     val citations: List<OpenUiCitation> = emptyList(),
@@ -68,10 +114,10 @@ internal data class OpenUiMessage(
 )
 
 @Serializable
-internal data class OpenUiQueued(val id: String, val text: String)
+internal data class OpenUiQueued(val id: String, val text: String, val editing: Boolean = false)
 
 @Serializable
-internal data class OpenUiError(val id: String, val title: String, val message: String)
+internal data class OpenUiError(val id: String, val title: String, val message: String, val solution: String? = null)
 
 /** Native state that only the chat page knows; folded into the snapshot. */
 @Serializable
@@ -94,6 +140,9 @@ internal data class OpenUiChatState(
     val folderName: String? = null,
     /** Message to scroll to once (search results, notifications). */
     val focusMessageId: String? = null,
+    val pickers: OpenUiPickers = OpenUiPickers(),
+    /** Incremented by the native top bar to open the outline. */
+    val outlineRequest: Int = 0,
 )
 
 internal fun MessageRole.toBridgeRole(): String = name.lowercase()
@@ -137,6 +186,7 @@ internal fun UIMessage.toBridgeMessage(
     branchCount: Int?,
     favorite: Boolean,
     loading: Boolean,
+    sizeOf: (String) -> Long? = { null },
 ): OpenUiMessage {
     val reasoningParts = parts.filterIsInstance<UIMessagePart.Reasoning>()
     return OpenUiMessage(
@@ -155,17 +205,20 @@ internal fun UIMessage.toBridgeMessage(
                     .takeIf { it.isNotBlank() }?.clip(MAX_TOOL_TEXT),
                 state = tool.approvalState.bridgeName(),
                 executed = tool.isExecuted,
+                images = tool.output.filterIsInstance<UIMessagePart.Image>().map { openUiAssetKey(it.url) },
             )
         },
-        attachments = parts.mapNotNull { part ->
+        blocks = parts.mapNotNull { part ->
             when (part) {
-                is UIMessagePart.Image -> OpenUiAttachment("image", part.url.substringAfterLast('/').clip(60))
-                is UIMessagePart.Video -> OpenUiAttachment("video", part.url.substringAfterLast('/').clip(60))
-                is UIMessagePart.Audio -> OpenUiAttachment("audio", part.url.substringAfterLast('/').clip(60))
-                is UIMessagePart.Document -> OpenUiAttachment("file", part.fileName.clip(60))
+                is UIMessagePart.Text -> part.text.takeIf { it.isNotBlank() }?.let { OpenUiBlock("text", text = it) }
+                is UIMessagePart.Reasoning -> part.reasoning.takeIf { it.isNotBlank() }?.let {
+                    OpenUiBlock("reasoning", text = it.clip(MAX_REASONING_TEXT), ms = part.finishedAt?.let { f -> (f - part.createdAt).inWholeMilliseconds })
+                }
+                is UIMessagePart.Tool -> OpenUiBlock("tool", toolId = part.toolCallId)
                 else -> null
             }
         },
+        attachments = parts.mapNotNull { it.toBridgeAttachment(sizeOf) },
         citations = annotations.filterIsInstance<UIMessageAnnotation.UrlCitation>()
             .filter { openUiExternalLinkString(it.url) }
             .map { OpenUiCitation(it.title.clip(120), it.url) },
@@ -178,7 +231,7 @@ internal fun UIMessage.toBridgeMessage(
     )
 }
 
-internal fun Conversation.toBridgeMessages(loading: Boolean): List<OpenUiMessage> =
+internal fun Conversation.toBridgeMessages(loading: Boolean, sizeOf: (String) -> Long? = { null }): List<OpenUiMessage> =
     currentMessages.mapIndexed { index, message ->
         val node = messageNodes.getOrNull(index)
         message.toBridgeMessage(
@@ -186,6 +239,7 @@ internal fun Conversation.toBridgeMessages(loading: Boolean): List<OpenUiMessage
             branchCount = node?.messages?.size,
             favorite = node?.isFavorite == true,
             loading = loading,
+            sizeOf = sizeOf,
         )
     }
 
@@ -230,6 +284,18 @@ internal sealed interface OpenUiChatAction {
     data class RemoveQueued(val id: String) : OpenUiChatAction
     data object ResumeQueue : OpenUiChatAction
     data class OpenLink(val url: String) : OpenUiChatAction
+    data class SelectAssistant(val id: String) : OpenUiChatAction
+    data class SelectModel(val id: String) : OpenUiChatAction
+    data class SetReasoning(val level: String) : OpenUiChatAction
+    data class SetMcp(val id: String, val enabled: Boolean) : OpenUiChatAction
+    data class SetSearchMode(val mode: String) : OpenUiChatAction
+    data class SetSearchService(val id: String) : OpenUiChatAction
+    data class EditQueued(val id: String, val text: String?) : OpenUiChatAction
+    data class BeginEditQueued(val id: String) : OpenUiChatAction
+    data class ErrorSolution(val id: String, val solution: String) : OpenUiChatAction
+    data object Retry : OpenUiChatAction
+    data object DesktopSnap : OpenUiChatAction
+    data object DesktopStop : OpenUiChatAction
 }
 
 private val actionJson = Json { ignoreUnknownKeys = true }
@@ -293,6 +359,18 @@ internal fun parseOpenUiAction(payload: JsonObject, conversation: Conversation, 
         "clearErrors" -> OpenUiChatAction.ClearErrors
         "removeQueued" -> str("id")?.let { OpenUiChatAction.RemoveQueued(it) }
         "resumeQueue" -> OpenUiChatAction.ResumeQueue
+        "selectAssistant" -> str("id")?.let { OpenUiChatAction.SelectAssistant(it) }
+        "selectModel" -> str("id")?.let { OpenUiChatAction.SelectModel(it) }
+        "setReasoning" -> str("level")?.takeIf { it.length <= 16 }?.let { OpenUiChatAction.SetReasoning(it) }
+        "setMcp" -> str("id")?.let { id -> bool("enabled")?.let { OpenUiChatAction.SetMcp(id, it) } }
+        "setSearchMode" -> str("mode")?.takeIf { it in setOf("off", "local", "built_in") }?.let { OpenUiChatAction.SetSearchMode(it) }
+        "setSearchService" -> str("id")?.let { OpenUiChatAction.SetSearchService(it) }
+        "beginEditQueued" -> str("id")?.let { OpenUiChatAction.BeginEditQueued(it) }
+        "editQueued" -> str("id")?.let { id -> OpenUiChatAction.EditQueued(id, str("text")?.takeIf { it.length <= MAX_MESSAGE_LENGTH }) }
+        "errorSolution" -> str("id")?.let { id -> str("solution")?.let { OpenUiChatAction.ErrorSolution(id, it) } }
+        "retry" -> OpenUiChatAction.Retry.takeIf { !loading }
+        "desktopSnap" -> OpenUiChatAction.DesktopSnap
+        "desktopStop" -> OpenUiChatAction.DesktopStop
         "link" -> str("url")?.takeIf { openUiExternalLinkString(it) }?.let { OpenUiChatAction.OpenLink(it) }
         else -> null
     }
@@ -306,5 +384,7 @@ internal val OPEN_UI_ACTION_TYPES = setOf(
     "speak", "stopSpeaking", "branch", "delete", "fork", "share", "favorite", "toolApproval", "toolAnswer",
     "attachments", "removeAttachment", "voice", "voiceStop", "voiceInterrupt", "modelPicker", "desktop", "phone",
     "export", "dismissError", "clearErrors", "removeQueued", "resumeQueue", "link",
+    "selectAssistant", "selectModel", "setReasoning", "setMcp", "setSearchMode", "setSearchService",
+    "beginEditQueued", "editQueued", "errorSolution", "retry", "desktopSnap", "desktopStop",
 )
 
