@@ -45,6 +45,7 @@ import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileImport
 import app.friendly.assistant.R
 import app.friendly.assistant.data.datastore.ChatFontFamily
+import app.friendly.assistant.data.datastore.ChatUiMode
 import app.friendly.assistant.data.datastore.DisplaySetting
 import app.friendly.assistant.data.files.FileFolders
 import app.friendly.assistant.data.files.FileUtils
@@ -128,6 +129,22 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_message_display_settings)) },
                 ) {
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_openui_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_openui_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.chatUiMode == ChatUiMode.OPEN_UI,
+                                onCheckedChange = { enabled ->
+                                    updateDisplaySetting(
+                                        displaySetting.copy(
+                                            chatUiMode = if (enabled) ChatUiMode.OPEN_UI else ChatUiMode.NATIVE,
+                                        )
+                                    )
+                                },
+                            )
+                        },
+                    )
                     item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_show_user_avatar_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_show_user_avatar_desc)) },

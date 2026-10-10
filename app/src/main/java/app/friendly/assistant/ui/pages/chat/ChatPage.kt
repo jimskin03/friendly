@@ -65,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -101,6 +102,7 @@ import app.friendly.assistant.ui.components.ui.CreateFolderDialog
 import app.friendly.assistant.ui.components.ui.FolderBadge
 import app.friendly.assistant.ui.components.ui.MoveToFolderSheet
 import app.friendly.assistant.data.datastore.PhoneAutomationWindowMode
+import app.friendly.assistant.data.datastore.ChatUiMode
 import app.friendly.assistant.data.datastore.Settings
 import app.friendly.assistant.data.datastore.findProvider
 import app.friendly.assistant.data.datastore.getCurrentAssistant
@@ -123,6 +125,7 @@ import app.friendly.assistant.ui.components.ai.FilesPicker
 import app.friendly.assistant.ui.components.ai.SearchMode
 import app.friendly.assistant.ui.components.ai.completion.WorkspaceCompletionProvider
 import app.friendly.assistant.ui.components.ai.rememberChatAttachmentPickerActions
+import app.friendly.assistant.ui.components.openui.OpenUiChat
 import app.friendly.assistant.ui.context.LocalNavController
 import app.friendly.assistant.ui.context.LocalToaster
 import app.friendly.assistant.ui.context.Navigator
@@ -499,11 +502,12 @@ private fun ChatPageContent(
                 }
             },
             bottomBar = {
-                val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
-                val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                if (setting.displaySetting.chatUiMode == ChatUiMode.NATIVE) {
+                    val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+                    val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                     DesktopActiveBanner(
                         visible = desktopStreamUrl != null && !showDesktopSheet,
                         onOpenDesktop = { showDesktopSheet = true },
@@ -686,11 +690,66 @@ private fun ChatPageContent(
                                 .height(56.dp),
                         )
                     }
+                    }
                 }
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            ChatList(
+            if (setting.displaySetting.chatUiMode == ChatUiMode.OPEN_UI) {
+                OpenUiChat(
+                    conversation = conversation,
+                    loading = loadingJob != null,
+                    processingStatus = processingStatus,
+                    darkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                    draft = inputState.textContent.text.toString(),
+                    attachmentCount = inputState.messageContent.size,
+                    modelAvailable = currentChatModel != null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    onSend = { text ->
+                        if (currentChatModel == null) {
+                            toaster.show("Please select a model first", type = ToastType.Error)
+                        } else {
+                            // Use the canonical native input so attachments and drafts survive
+                            // switching between the web and Compose presentations.
+                            inputState.setMessageText(text)
+                            if (inputState.isEditing()) {
+                                val editingId = inputState.editingMessage
+                                if (editingId != null) vm.handleMessageEdit(inputState.getContents(), editingId)
+                            } else {
+                                vm.handleMessageSend(inputState.getContents())
+                            }
+                            inputState.clearInput()
+                        }
+                    },
+                    onStop = vm::stopGeneration,
+                    onRegenerate = vm::regenerateAtMessage,
+                    onSuggestion = { suggestion ->
+                        if (currentChatModel == null) {
+                            toaster.show("Please select a model first", type = ToastType.Error)
+                        } else {
+                            vm.handleMessageSend(listOf(UIMessagePart.Text(suggestion)))
+                        }
+                    },
+                    onDraftChange = inputState::setMessageText,
+                    onOpenAttachments = { showFilesSheet = true },
+                    onStartVoice = onStartVoiceMode,
+                    onEdit = { message ->
+                        inputState.editingMessage = message.id
+                        inputState.setContents(message.parts)
+                        vm.updateSettings(setting.copy(displaySetting = setting.displaySetting.copy(chatUiMode = ChatUiMode.NATIVE)))
+                    },
+                    onOpenNative = {
+                        vm.updateSettings(setting.copy(displaySetting = setting.displaySetting.copy(chatUiMode = ChatUiMode.NATIVE)))
+                    },
+                    onRendererFailure = {
+                        toaster.show("OpenUI could not load. Returning to native chat.", type = ToastType.Warning)
+                        vm.updateSettings(setting.copy(displaySetting = setting.displaySetting.copy(chatUiMode = ChatUiMode.NATIVE)))
+                    },
+                )
+            } else {
+                ChatList(
                 innerPadding = innerPadding,
                 conversation = conversation,
                 state = chatListState,
@@ -795,7 +854,8 @@ private fun ChatPageContent(
                     vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
                     vm.saveConversationAsync()
                 },
-            )
+                )
+            }
         }
 
         if (showFilesSheet) {

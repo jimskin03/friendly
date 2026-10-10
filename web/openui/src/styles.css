@@ -1,0 +1,189 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: transparent;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; }
+button, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+
+/* Fallback palette = Friendly amber. The native side overrides these with the active
+   Material theme (Cute Minimal, Cozy Night, ...) via snapshot.theme. */
+.app {
+  --bg: #fff8f0;
+  --surface: #fff8f0;
+  --surface-container: #fbefe2;
+  --surface-high: #f5e6d6;
+  --text: #2c2118;
+  --muted: #6b5848;
+  --line: #e8d6c4;
+  --accent: #9a4a00;
+  --on-accent: #ffffff;
+  --bubble: #fde2c4;
+  --on-bubble: #3d2a16;
+  --code-bg: color-mix(in srgb, var(--text) 6%, var(--surface));
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  height: 100%;
+  color: var(--text);
+  background: var(--bg);
+  font-family: Roboto, "Google Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Map the OpenUI component library onto the app theme (unlayered, so it wins over @layer openui). */
+  --openui-background: var(--bg);
+  --openui-foreground: var(--surface-container);
+  --openui-popover-background: var(--surface-high);
+  --openui-text-neutral-primary: var(--text);
+  --openui-text-neutral-secondary: var(--muted);
+  --openui-text-neutral-tertiary: var(--muted);
+  --openui-text-accent-primary: var(--on-accent);
+  --openui-interactive-accent-default: var(--accent);
+  --openui-interactive-accent-hover: color-mix(in srgb, var(--accent) 88%, var(--text));
+  --openui-interactive-accent-pressed: color-mix(in srgb, var(--accent) 80%, var(--text));
+  --openui-interactive-accent-disabled: color-mix(in srgb, var(--accent) 40%, var(--surface));
+  --openui-border-default: var(--line);
+  --openui-border-interactive: var(--line);
+  --openui-border-accent: color-mix(in srgb, var(--accent) 30%, transparent);
+  --openui-border-info-emphasis: var(--accent);
+  --openui-info-background: color-mix(in srgb, var(--accent) 12%, transparent);
+  --openui-chat-user-response-bg: var(--bubble);
+  --openui-chat-user-response-text: var(--on-bubble);
+  --openui-font-body: inherit;
+  --openui-font-heading: inherit;
+  --openui-font-label: inherit;
+}
+
+.app.dark {
+  --bg: #1c1612;
+  --surface: #1c1612;
+  --surface-container: #29211b;
+  --surface-high: #342a23;
+  --text: #f3e9df;
+  --muted: #cdbfb1;
+  --line: #4a3d33;
+  --accent: #ffb870;
+  --on-accent: #4a2800;
+  --bubble: #5a3d22;
+  --on-bubble: #ffe8d2;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(12px, env(safe-area-inset-top)) 18px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+}
+.chat-header h1 { margin: 0; max-width: 70vw; overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.chat-header span, .message-label { color: var(--muted); font-size: 12px; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.native-switch, .composer-tool { color: var(--text); background: var(--surface-container); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.stop { color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; }
+
+.conversation { min-height: 0; overflow-y: auto; padding: 22px 16px 10px; scroll-behavior: smooth; }
+.message { max-width: 780px; margin: 0 auto 20px; }
+.message-user { display: flex; flex-direction: column; align-items: flex-end; }
+.message-body { margin-top: 5px; line-height: 1.52; }
+.message-body p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-user .message-body { max-width: 86%; padding: 10px 14px; border-radius: 20px 20px 6px 20px; color: var(--on-bubble); background: var(--bubble); }
+.message-assistant .message-body { padding: 4px 0; }
+.message-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.message-actions button { padding: 6px 10px; color: var(--accent); font-weight: 500; background: transparent; border: 0; border-radius: 8px; }
+.message-actions button:active { background: var(--line); }
+.branch-count { color: var(--muted); font-size: 12px; }
+.processing { max-width: 780px; margin: -8px auto 18px; color: var(--muted); font-size: 13px; }
+
+.welcome { max-width: 580px; margin: 18vh auto 0; text-align: center; }
+.welcome .cat { font-size: 48px; }
+.welcome h2 { margin: 14px 0 6px; font-size: 26px; }
+.welcome p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+.suggestions { display: flex; gap: 8px; overflow-x: auto; padding: 7px 14px; }
+.suggestions button { flex: none; color: var(--text); background: var(--surface-container); border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; }
+
+.composer { display: flex; gap: 9px; align-items: flex-end; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); }
+.composer-tool { flex: none; min-width: 35px; min-height: 44px; }
+.composer textarea { flex: 1; min-height: 44px; max-height: 132px; resize: none; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 22px; outline: none; padding: 11px 15px; }
+.composer textarea:focus { border-color: var(--accent); }
+.send { width: 44px; height: 44px; flex: none; border: 0; border-radius: 50%; color: var(--on-accent); background: var(--accent); font-size: 22px; }
+/* Disabled: solid colours (no opacity) so the arrow stays legible in dark mode. */
+.send:disabled { color: var(--muted); background: var(--surface-high); }
+.loading-shell { display: grid; place-items: center; width: 100%; height: 100%; color: #6b5848; background: #fff8f0; }
+@media (prefers-color-scheme: dark) { .loading-shell { color: #cdbfb1; background: #1c1612; } }
+
+@media (min-width: 720px) {
+  .conversation { padding-inline: 28px; }
+  .composer { width: min(820px, calc(100% - 40px)); margin: 0 auto 14px; border: 1px solid var(--line); border-radius: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
+/* ---- Assistant markdown ---- */
+.markdown { overflow-wrap: anywhere; line-height: 1.55; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { margin: 0 0 10px; white-space: normal; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { margin: 16px 0 8px; line-height: 1.3; }
+.markdown h1 { font-size: 22px; } .markdown h2 { font-size: 19px; } .markdown h3 { font-size: 17px; } .markdown h4 { font-size: 15px; }
+.markdown ul, .markdown ol { margin: 0 0 10px; padding-left: 22px; }
+.markdown li { margin: 3px 0; }
+.markdown li > p { margin: 0; }
+.markdown a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.markdown blockquote { margin: 0 0 10px; padding: 4px 12px; border-left: 3px solid var(--accent); color: var(--muted); }
+.markdown hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.markdown :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--code-bg); font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 0.9em; }
+.md-image-alt, .md-link-disabled { color: var(--muted); }
+.md-table-wrap { overflow-x: auto; margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; }
+.markdown table { border-collapse: collapse; min-width: 100%; font-size: 14px; }
+.markdown th, .markdown td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.markdown th { background: var(--surface-container); font-weight: 600; }
+.markdown tr:last-child td { border-bottom: 0; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+
+.code-block { margin: 0 0 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--code-bg); }
+.code-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.code-header button { min-height: 32px; padding: 4px 10px; color: var(--accent); background: transparent; border: 0; border-radius: 8px; font-weight: 500; }
+.code-header button:active { background: var(--line); }
+.code-block pre { margin: 0; padding: 10px 12px; overflow-x: auto; }
+.code-block code { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 13px; line-height: 1.5; white-space: pre; }
+
+/* Syntax colours (AA on the code background in both modes). */
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-meta { color: #a3410c; font-weight: 600; }
+.hljs-string, .hljs-attr, .hljs-template-variable { color: #3f6b1f; }
+.hljs-number, .hljs-literal, .hljs-symbol { color: #8a3b6e; }
+.hljs-comment, .hljs-quote { color: #6e6050; font-style: italic; }
+.hljs-title, .hljs-function, .hljs-class, .hljs-type { color: #1d5a87; }
+.app.dark .hljs-keyword, .app.dark .hljs-selector-tag, .app.dark .hljs-built_in, .app.dark .hljs-meta { color: #ffb870; }
+.app.dark .hljs-string, .app.dark .hljs-attr, .app.dark .hljs-template-variable { color: #b5d98a; }
+.app.dark .hljs-number, .app.dark .hljs-literal, .app.dark .hljs-symbol { color: #f0a8d4; }
+.app.dark .hljs-comment, .app.dark .hljs-quote { color: #b9aa9a; }
+.app.dark .hljs-title, .app.dark .hljs-function, .app.dark .hljs-class, .app.dark .hljs-type { color: #9cc9f0; }
+
+/* Remote images (favicons, picsum placeholders) can never load under the CSP; hide them
+   instead of showing broken-image boxes. Only bundled/data images remain visible. */
+.message-body img:not([src^="data:"]):not([src^="./"]):not([src^="/"]) { display: none !important; }
+
+/* ---- OpenUI rich cards: native-like surface, readable step hierarchy ---- */
+.app {
+  --openui-sunk: color-mix(in srgb, var(--text) 5%, transparent);
+  --openui-sunk-light: color-mix(in srgb, var(--text) 3%, transparent);
+  --openui-sunk-deep: color-mix(in srgb, var(--text) 9%, transparent);
+  --openui-elevated: color-mix(in srgb, var(--text) 8%, transparent);
+  --openui-elevated-light: color-mix(in srgb, var(--text) 4%, transparent);
+  --openui-elevated-strong: color-mix(in srgb, var(--text) 14%, transparent);
+  --openui-highlight: color-mix(in srgb, var(--text) 5%, transparent);
+  --openui-highlight-subtle: color-mix(in srgb, var(--text) 3%, transparent);
+  --openui-highlight-strong: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.message-assistant .openui-card-card { padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-container); }
+.message-assistant .openui-step-title { color: var(--text); font-weight: 600; }
+.message-assistant .openui-step-details { color: var(--text); }
+.message-assistant .openui-step-details p { margin: 2px 0 0; }
+.message-assistant .openui-step-number-inner { color: var(--on-bubble); background: var(--bubble); }
+.message-assistant .openui-connector-line { background: var(--line); }
