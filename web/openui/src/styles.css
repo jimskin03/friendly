@@ -7,9 +7,10 @@
 
 * { box-sizing: border-box; }
 html, body, #root {
+  position: fixed;
+  inset: 0;
   width: 100%;
   height: 100%;
-  height: 100dvh;
   margin: 0;
   overflow: hidden;
   background: transparent;
@@ -32,13 +33,16 @@ button { -webkit-tap-highlight-color: transparent; }
   --bubble: #fde2c4;
   --on-bubble: #3d2a16;
   --code-bg: color-mix(in srgb, var(--text) 6%, var(--surface));
-  /* Fixed to the WebView viewport. Percentage grid rows collapse on Android
-     and pin the composer under the header. */
+  /* Fixed to the visual viewport (`--vv-*` from viewport.ts). A large
+     viewport (100dvh) or a document pan puts the composer under the keyboard.
+     Percentage grid rows also collapse on Android and pin it under the header. */
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: var(--vv-top, 0px);
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: var(--vv-height, 100%);
   min-height: 0;
   overflow: hidden;
   color: var(--text);
@@ -108,7 +112,9 @@ button { -webkit-tap-highlight-color: transparent; }
 
 /* The demo uses a single rounded input surface with a separate action row. */
 .composer { flex: none; display: flex; flex-direction: column; gap: 8px; width: calc(100% - 24px); max-width: 780px; margin: 8px auto max(12px, env(safe-area-inset-bottom)); padding: 12px; background: var(--surface-container); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 3px 16px #00000008; }
-.composer textarea { width: 100%; min-width: 0; min-height: 40px; max-height: 132px; field-sizing: content; resize: none; color: var(--text); background: transparent; border: 0; outline: none; padding: 8px 6px; line-height: 1.5; }
+/* Height is set from scrollHeight in App. field-sizing makes Android WebView
+   scroll the caret, which hides this field under the keyboard. */
+.composer textarea { width: 100%; min-width: 0; height: 40px; max-height: 132px; overflow-y: auto; resize: none; color: var(--text); background: transparent; border: 0; outline: none; padding: 8px 6px; line-height: 1.5; }
 .composer textarea::placeholder { color: var(--muted); }
 .composer:focus-within { border-color: var(--accent); }
 .composer-actions, .composer-tools { display: flex; align-items: center; gap: 4px; }
