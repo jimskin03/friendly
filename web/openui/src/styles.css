@@ -6,7 +6,14 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; height: 100%; margin: 0; }
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
 button, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 
@@ -25,9 +32,15 @@ button { -webkit-tap-highlight-color: transparent; }
   --bubble: #fde2c4;
   --on-bubble: #3d2a16;
   --code-bg: color-mix(in srgb, var(--text) 6%, var(--surface));
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  /* Fixed to the WebView viewport. Percentage grid rows collapse on Android
+     and pin the composer under the header. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   color: var(--text);
   background: var(--bg);
   font-family: Roboto, "Google Sans", ui-sans-serif, system-ui, sans-serif;
@@ -70,6 +83,7 @@ button { -webkit-tap-highlight-color: transparent; }
   --on-bubble: #ffe8d2;
 }
 
+.chat-header, .suggestions, .composer { flex: none; }
 .chat-header {
   display: flex;
   align-items: center;
@@ -85,7 +99,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .native-switch, .composer-tool { color: var(--text); background: var(--surface-container); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 .stop { color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; }
 
-.conversation { min-height: 0; overflow-y: auto; padding: 22px 16px 10px; scroll-behavior: smooth; }
+.conversation { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 22px 16px 10px; scroll-behavior: smooth; }
+.conversation:has(.welcome) { display: flex; flex-direction: column; justify-content: center; }
 .message { max-width: 780px; margin: 0 auto 20px; }
 .message-user { display: flex; flex-direction: column; align-items: flex-end; }
 .message-body { margin-top: 5px; line-height: 1.52; }
@@ -98,7 +113,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .branch-count { color: var(--muted); font-size: 12px; }
 .processing { max-width: 780px; margin: -8px auto 18px; color: var(--muted); font-size: 13px; }
 
-.welcome { max-width: 580px; margin: 18vh auto 0; text-align: center; }
+.welcome { max-width: 580px; margin: 0 auto; text-align: center; }
 .welcome .cat { font-size: 48px; }
 .welcome h2 { margin: 14px 0 6px; font-size: 26px; }
 .welcome p { margin: 0; color: var(--muted); line-height: 1.5; }
@@ -108,7 +123,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .composer { display: flex; gap: 9px; align-items: flex-end; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); }
 .composer-tool { flex: none; min-width: 35px; min-height: 44px; }
-.composer textarea { flex: 1; min-height: 44px; max-height: 132px; resize: none; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 22px; outline: none; padding: 11px 15px; }
+.composer textarea { flex: 1; min-height: 44px; max-height: 132px; field-sizing: content; resize: none; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 22px; outline: none; padding: 11px 15px; }
 .composer textarea:focus { border-color: var(--accent); }
 .send { width: 44px; height: 44px; flex: none; border: 0; border-radius: 50%; color: var(--on-accent); background: var(--accent); font-size: 22px; }
 /* Disabled: solid colours (no opacity) so the arrow stays legible in dark mode. */

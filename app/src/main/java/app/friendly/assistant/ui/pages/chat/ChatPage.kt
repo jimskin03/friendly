@@ -126,6 +126,7 @@ import app.friendly.assistant.ui.components.ai.SearchMode
 import app.friendly.assistant.ui.components.ai.completion.WorkspaceCompletionProvider
 import app.friendly.assistant.ui.components.ai.rememberChatAttachmentPickerActions
 import app.friendly.assistant.ui.components.openui.OpenUiChat
+import app.friendly.assistant.ui.components.openui.shouldPresentOpenUi
 import app.friendly.assistant.ui.context.LocalNavController
 import app.friendly.assistant.ui.context.LocalToaster
 import app.friendly.assistant.ui.context.Navigator
@@ -474,9 +475,13 @@ private fun ChatPageContent(
         modifier = Modifier.fillMaxSize()
     ) {
         AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
+        val presentOpenUi = shouldPresentOpenUi(
+            setting.displaySetting.chatUiMode,
+            conversation.messageNodes.size,
+        )
         Scaffold(
             topBar = {
-                if (conversation.messageNodes.isNotEmpty() || isFolderChat) {
+                if (!presentOpenUi && (conversation.messageNodes.isNotEmpty() || isFolderChat)) {
                     TopBar(
                         settings = setting,
                         conversation = conversation,
@@ -502,7 +507,7 @@ private fun ChatPageContent(
                 }
             },
             bottomBar = {
-                if (setting.displaySetting.chatUiMode == ChatUiMode.NATIVE) {
+                if (!presentOpenUi) {
                     val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
                     val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
                     Column(
@@ -695,7 +700,7 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            if (setting.displaySetting.chatUiMode == ChatUiMode.OPEN_UI) {
+            if (presentOpenUi) {
                 OpenUiChat(
                     conversation = conversation,
                     loading = loadingJob != null,
