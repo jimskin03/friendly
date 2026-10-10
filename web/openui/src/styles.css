@@ -103,7 +103,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .welcome h2 { margin: 14px 0 6px; font-size: 26px; }
 .welcome p { margin: 0; color: var(--muted); line-height: 1.5; }
 
-.suggestions { display: flex; gap: 8px; overflow-x: auto; padding: 7px 14px; }
+.suggestions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; min-height: 56px; overflow-x: auto; overflow-y: hidden; padding: 7px 14px; }
 .suggestions button { flex: none; color: var(--text); background: var(--surface-container); border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; }
 
 /* The demo uses a single rounded input surface with a separate action row. */
