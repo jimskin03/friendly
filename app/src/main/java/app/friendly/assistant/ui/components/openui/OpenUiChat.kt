@@ -5,7 +5,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -15,6 +14,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.material3.MaterialTheme
@@ -289,7 +289,13 @@ fun OpenUiChat(
         modifier = modifier,
         factory = {
             WebView(context).apply {
-                setBackgroundColor(Color.TRANSPARENT)
+                // Match the parent exactly. Wrap content lets the document collapse
+                // to the header and composer, leaving the chat wallpaper underneath.
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+                setBackgroundColor(colors.background.toArgb())
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
                 settings.allowContentAccess = false
@@ -306,6 +312,7 @@ fun OpenUiChat(
             }
         },
         update = { current ->
+            current.setBackgroundColor(colors.background.toArgb())
             webView = current
             pushSnapshot(current)
         },

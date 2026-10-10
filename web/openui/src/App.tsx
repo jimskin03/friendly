@@ -94,8 +94,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: snapshot?.loading ? "auto" : "smooth", block: "end" });
-  }, [snapshot?.revision, snapshot?.loading]);
+    if (!snapshot || snapshot.messages.length === 0) return;
+    endRef.current?.scrollIntoView({ behavior: snapshot.loading ? "auto" : "smooth", block: "end" });
+  }, [snapshot?.revision, snapshot?.loading, snapshot?.messages.length]);
 
   const submit = () => {
     const text = draft.trim();

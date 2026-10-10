@@ -30,4 +30,11 @@ class OpenUiCapabilitiesTest {
         assertTrue(capabilities.phoneAutomation)
         assertTrue(capabilities.desktopControl)
     }
+
+    @Test
+    fun openUiLeavesTheEmptyMainPageNative() {
+        assertFalse(shouldPresentOpenUi(app.friendly.assistant.data.datastore.ChatUiMode.OPEN_UI, 0))
+        assertFalse(shouldPresentOpenUi(app.friendly.assistant.data.datastore.ChatUiMode.NATIVE, 3))
+        assertTrue(shouldPresentOpenUi(app.friendly.assistant.data.datastore.ChatUiMode.OPEN_UI, 1))
+    }
 }
