@@ -287,3 +287,5 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .voice-orb span:nth-child(2) { animation-delay: 0.15s; } .voice-orb span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes voice-bar { 0%, 100% { height: 8px; } 50% { height: 22px; } }
 .voice-panel .btn-secondary { color: var(--on-bubble); border-color: color-mix(in srgb, var(--on-bubble) 40%, transparent); }
+.message.is-focused .message-body { animation: focus-flash 1.6s ease-out; border-radius: 12px; }
+@keyframes focus-flash { 0% { background: color-mix(in srgb, var(--accent) 22%, transparent); } 100% { background: transparent; } }

@@ -245,20 +245,12 @@ fun ChatPage(
         }
     }
 
-    val chatListState = rememberLazyListState()
-    LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (!vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
-            if (nodeId != null) {
-                val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
-                if (index >= 0) {
-                    chatListState.scrollToItem(index)
-                }
-            } else {
-                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-            }
-            vm.chatListInitialized = true
-        }
+    // Search/notification deep links focus a message in the web chat.
+    val focusMessageId = remember(nodeId, conversation.messageNodes.size) {
+        nodeId?.let { id -> conversation.messageNodes.firstOrNull { it.id == id }?.currentMessage?.id?.toString() }
     }
+    // Share intents, shortcuts and voice launches go straight to the web chat.
+    val openedWithInput = text != null || files.isNotEmpty() || autoStartVoice
 
     val handleBack: () -> Unit = {
         if (navController.canPop) {
@@ -286,7 +278,8 @@ fun ChatPage(
         folderLabelId = folderLabelId,
         navController = navController,
         vm = vm,
-        chatListState = chatListState,
+        focusMessageId = focusMessageId,
+        openedWithInput = openedWithInput,
         enableWebSearch = enableWebSearch,
         currentChatModel = currentChatModel,
         bigScreen = isBigScreen,
@@ -313,7 +306,8 @@ private fun ChatPageContent(
     folderLabelId: String? = null,
     navController: Navigator,
     vm: ChatVM,
-    chatListState: LazyListState,
+    focusMessageId: String?,
+    openedWithInput: Boolean,
     enableWebSearch: Boolean,
     currentChatModel: Model?,
     errors: List<ChatError>,
@@ -521,6 +515,7 @@ private fun ChatPageContent(
         phoneAvailable = !BuildConfig.IS_PLAY_BUILD,
         desktopStreaming = desktopStreamUrl != null,
         folderName = if (isFolderChat) (activeFolderName ?: "Folder") else null,
+        focusMessageId = focusMessageId,
     )
 
     fun handleOpenUiAction(action: OpenUiChatAction) {
@@ -611,7 +606,7 @@ private fun ChatPageContent(
         AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         val presentOpenUi = shouldPresentOpenUi(
             messageCount = conversation.messageNodes.size,
-            isFolderChat = isFolderChat,
+            isFolderChat = isFolderChat || openedWithInput,
         )
         Scaffold(
             topBar = {
@@ -771,10 +766,6 @@ private fun ChatPageContent(
                                     inputState.getContents(),
                                     fromVoiceInput = fromVoiceInput,
                                 )
-                                scope.launch {
-                                    delay(100.milliseconds)
-                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                                }
                             }
                             inputState.clearInput()
                         },
@@ -786,9 +777,6 @@ private fun ChatPageContent(
                                 )
                             } else {
                                 vm.handleMessageSend(content = inputState.getContents(), answer = false)
-                                scope.launch {
-                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                                }
                             }
                             inputState.clearInput()
                         },

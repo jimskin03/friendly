@@ -92,6 +92,8 @@ internal data class OpenUiChatState(
     val phoneAvailable: Boolean = false,
     val desktopStreaming: Boolean = false,
     val folderName: String? = null,
+    /** Message to scroll to once (search results, notifications). */
+    val focusMessageId: String? = null,
 )
 
 internal fun MessageRole.toBridgeRole(): String = name.lowercase()

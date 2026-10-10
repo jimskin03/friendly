@@ -58,6 +58,7 @@ export interface FriendlyChatState {
   phoneAvailable: boolean;
   desktopStreaming: boolean;
   folderName?: string | null;
+  focusMessageId?: string | null;
 }
 
 export interface FriendlyCapabilities {

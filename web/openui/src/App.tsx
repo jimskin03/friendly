@@ -41,6 +41,7 @@ export default function App() {
   const followOutput = useRef(true);
   const currentSession = useRef<string | null>(null);
   const lastEditing = useRef<string | null>(null);
+  const focused = useRef<string | null>(null);
 
   useEffect(() => {
     window.friendlyOpenUI = {
@@ -73,6 +74,17 @@ export default function App() {
       delete window.friendlyOpenUI;
     };
   }, []);
+
+  useEffect(() => {
+    const target = snapshot?.chat?.focusMessageId;
+    if (!target || focused.current === target) return;
+    const element = document.querySelector(`[data-message-id="${CSS.escape(target)}"]`);
+    if (!element) return;
+    focused.current = target;
+    followOutput.current = false;
+    element.scrollIntoView({ block: "start" });
+    element.classList.add("is-focused");
+  }, [snapshot?.revision]);
 
   useEffect(() => {
     if (!snapshot || snapshot.messages.length === 0 || !followOutput.current) return;
