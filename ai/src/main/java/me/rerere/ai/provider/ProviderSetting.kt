@@ -23,6 +23,12 @@ enum class ClaudePromptCacheTtl(val apiValue: String?) {
 }
 
 @Serializable
+enum class OpenAIAuthMode {
+    API_KEY,
+    CHATGPT_OAUTH,
+}
+
+@Serializable
 sealed class ProviderSetting {
     abstract val id: Uuid
     abstract val enabled: Boolean
@@ -66,6 +72,8 @@ sealed class ProviderSetting {
         var useResponseApi: Boolean = false,
         var includeHistoryReasoning: Boolean = true,
         var responsesPath: String = "/responses",
+        var authMode: OpenAIAuthMode = OpenAIAuthMode.API_KEY,
+        var oauthAccountId: String? = null,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

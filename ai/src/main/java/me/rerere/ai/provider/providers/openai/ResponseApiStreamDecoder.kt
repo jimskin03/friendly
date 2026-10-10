@@ -20,22 +20,34 @@ import me.rerere.ai.util.json
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.common.http.jsonObjectOrNull
 
-internal class ResponseApiStreamDecoder : StreamChunkDecoder {
+internal class ResponseApiStreamDecoder(
+    private val strictCompletion: Boolean = false,
+) : StreamChunkDecoder {
     private val state = ResponseStreamState()
+    var successfullyCompleted: Boolean = false
+        private set
 
     override fun accept(event: SseEvent): DecodeResult {
         if (state.finished) return DecodeResult(completed = true)
-        if (event.data == "[DONE]") return DecodeResult(state.finish(), completed = true)
+        if (event.data == "[DONE]") {
+            if (strictCompletion && !successfullyCompleted) error("Stream ended without response.completed")
+            return DecodeResult(state.finish(), completed = true)
+        }
 
         val payload = json.parseToJsonElement(event.data).jsonObject
         val eventType = payload["type"]?.jsonPrimitive?.contentOrNull
         val chunks = parseEvent(payload)
-        val completed = eventType == "response.completed" || eventType == "response.incomplete" ||
-            event.event == "response.completed" || event.event == "response.incomplete"
+        val completedEvent = eventType == "response.completed" || event.event == "response.completed"
+        val incompleteEvent = eventType == "response.incomplete" || event.event == "response.incomplete"
+        if (completedEvent) successfullyCompleted = true
+        val completed = completedEvent || (!strictCompletion && incompleteEvent)
         return DecodeResult(chunks, completed)
     }
 
-    override fun onClosed(): List<StreamChunk> = state.finish()
+    override fun onClosed(): List<StreamChunk> {
+        if (strictCompletion && !successfullyCompleted) error("Stream closed without response.completed")
+        return state.finish()
+    }
 
     private fun parseEvent(payload: JsonObject): List<StreamChunk> {
         val chunkType = payload["type"]?.jsonPrimitive?.content ?: error("chunk type not found")

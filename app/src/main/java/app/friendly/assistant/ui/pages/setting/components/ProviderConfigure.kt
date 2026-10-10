@@ -16,7 +16,11 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +37,12 @@ import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
 import app.friendly.assistant.R
 import app.friendly.assistant.data.datastore.DEFAULT_PROVIDERS
+import app.friendly.assistant.data.ai.openai.OpenAIAccountStore
+import app.friendly.assistant.data.ai.openai.OpenAIOAuthCoordinator
+import me.rerere.ai.provider.OpenAIAuthMode
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import org.koin.compose.koinInject
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
@@ -204,6 +214,23 @@ private fun ProviderConfigureOpenAI(
     onEdit: (provider: ProviderSetting.OpenAI) -> Unit
 ) {
     val toaster = LocalToaster.current
+    val oauthCoordinator: OpenAIOAuthCoordinator = koinInject()
+    val accountStore: OpenAIAccountStore = koinInject()
+    val accounts by accountStore.accounts.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var oauthError by remember { mutableStateOf<String?>(null) }
+    var showOAuthConsent by remember { mutableStateOf(false) }
+    LaunchedEffect(accountStore) { accountStore.initialize() }
+    val connectChatGpt: () -> Unit = {
+        showOAuthConsent = false
+        oauthError = null
+        scope.launch {
+            runCatching { oauthCoordinator.connect(context) }
+                .onSuccess { account -> onEdit(provider.copy(authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = account.id, apiKey = "", useResponseApi = true, baseUrl = "https://api.openai.com/v1", responsesPath = "/responses")) }
+                .onFailure { oauthError = it.message ?: "ChatGPT sign-in failed" }
+        }
+    }
 
     provider.description()
 
@@ -213,6 +240,79 @@ private fun ProviderConfigureOpenAI(
         label = { Text(stringResource(R.string.setting_provider_page_name)) },
         modifier = Modifier.fillMaxWidth(),
     )
+
+    Text(stringResource(R.string.setting_provider_openai_connection_method), style = MaterialTheme.typography.titleSmall)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        val options = listOf(OpenAIAuthMode.API_KEY, OpenAIAuthMode.CHATGPT_OAUTH)
+        options.forEachIndexed { index, mode ->
+            SegmentedButton(
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                label = { Text(if (mode == OpenAIAuthMode.API_KEY) stringResource(R.string.setting_provider_openai_api_key_method) else stringResource(R.string.setting_provider_openai_chatgpt_method)) },
+                selected = provider.authMode == mode,
+                onClick = {
+                    oauthError = null
+                    if (mode == OpenAIAuthMode.CHATGPT_OAUTH) {
+                        onEdit(provider.copy(
+                            authMode = mode,
+                            apiKey = "",
+                            useResponseApi = true,
+                            baseUrl = "https://api.openai.com/v1",
+                            responsesPath = "/responses",
+                        ))
+                    } else onEdit(provider.copy(authMode = mode, oauthAccountId = null))
+                },
+            )
+        }
+    }
+
+    if (provider.authMode == OpenAIAuthMode.CHATGPT_OAUTH) {
+        val connected = accounts.firstOrNull { it.id == provider.oauthAccountId && it.isConnected }
+        if (connected == null) {
+            Text(stringResource(R.string.setting_provider_openai_oauth_description))
+            Button(onClick = { showOAuthConsent = true }) { Text(stringResource(R.string.setting_provider_openai_connect)) }
+        } else {
+            Text(stringResource(R.string.setting_provider_openai_connected, connected.email.ifBlank { connected.name.ifBlank { connected.subject.take(8) } }))
+            OutlinedButton(onClick = { showOAuthConsent = true }) {
+                Text(stringResource(R.string.setting_provider_openai_add_account))
+            }
+            accounts.filter { it.isConnected && it.id != connected.id }.forEach { account ->
+                OutlinedButton(onClick = { onEdit(provider.copy(oauthAccountId = account.id)) }) {
+                    Text(stringResource(R.string.setting_provider_openai_use_account, account.email.ifBlank { account.name.ifBlank { account.subject.take(8) } }))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    runCatching {
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://chatgpt.com/#settings/Usage")))
+                    }
+                }) { Text(stringResource(R.string.setting_provider_openai_manage_usage)) }
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        val remoteRevoked = oauthCoordinator.disconnect(connected.id)
+                        onEdit(provider.copy(oauthAccountId = null))
+                        if (!remoteRevoked) oauthError = context.getString(R.string.setting_provider_openai_revocation_failed)
+                    }
+                }) { Text(stringResource(R.string.setting_provider_openai_sign_out)) }
+            }
+        }
+        if (showOAuthConsent) {
+            AlertDialog(
+                onDismissRequest = { showOAuthConsent = false },
+                title = { Text(stringResource(R.string.setting_provider_openai_consent_title)) },
+                text = { Text(stringResource(R.string.setting_provider_openai_consent_message)) },
+                confirmButton = {
+                    Button(onClick = { connectChatGpt() }) {
+                        Text(stringResource(R.string.setting_provider_openai_consent_continue))
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showOAuthConsent = false }) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+        }
+        oauthError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Text(stringResource(R.string.setting_provider_openai_supported_scope), style = MaterialTheme.typography.bodySmall)
+    } else {
 
     var keyVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
@@ -293,6 +393,7 @@ private fun ProviderConfigureOpenAI(
             checked = provider.includeHistoryReasoning,
             onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
         )
+    }
     }
 }
 

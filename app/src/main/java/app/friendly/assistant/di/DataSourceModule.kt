@@ -7,6 +7,7 @@ import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
+import me.rerere.ai.provider.OpenAIAccessTokenResolver
 import me.rerere.common.http.AcceptLanguageBuilder
 import app.friendly.assistant.BuildConfig
 import app.friendly.assistant.data.ai.AIRequestInterceptor
@@ -22,6 +23,8 @@ import app.friendly.assistant.data.db.AppDatabaseFactory
 import app.friendly.assistant.data.db.AppDatabase
 import app.friendly.assistant.data.db.fts.MessageFtsManager
 import app.friendly.assistant.data.ai.mcp.McpManager
+import app.friendly.assistant.data.ai.openai.OpenAIAccountStore
+import app.friendly.assistant.data.ai.openai.OpenAIOAuthCoordinator
 import app.friendly.assistant.data.network.SettingsProxySelector
 import app.friendly.assistant.data.network.SettingsProxyAuthenticator
 import app.friendly.assistant.data.network.SettingsSocks5Authenticator
@@ -31,6 +34,8 @@ import app.friendly.assistant.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import me.rerere.oauth.OAuthHttpClient
+import me.rerere.oauth.OAuthLoopbackCallbackServer
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -182,9 +187,13 @@ val dataSourceModule = module {
     }
 
 
-    single {
-        ProviderManager(client = get(), context = get())
+    single { OpenAIAccountStore(context = get()) }
+    single { OAuthHttpClient(httpClient = get()) }
+    single { OpenAIOAuthCoordinator(store = get(), oauth = get(), callbackServer = OAuthLoopbackCallbackServer(callbackPath = "/auth/callback")) }
+    single<OpenAIAccessTokenResolver> {
+        OpenAIAccessTokenResolver { accountId -> get<OpenAIOAuthCoordinator>().accessToken(accountId) }
     }
+    single { ProviderManager(client = get(), context = get(), openAITokenResolver = get()) }
 
     single { BackupManager(context = get(), database = get(), settingsStore = get(), json = get()) }
 

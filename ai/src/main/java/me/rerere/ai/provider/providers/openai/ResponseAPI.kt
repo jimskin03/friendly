@@ -30,6 +30,8 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenAIAuthMode
+import me.rerere.ai.provider.OpenAIAccessTokenResolver
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
@@ -39,6 +41,7 @@ import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.OpenAIReasoningMetadata
 import me.rerere.ai.ui.ReasoningType
 import me.rerere.ai.ui.ServerToolMetadata
@@ -58,6 +61,7 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.SensitiveRequest
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -70,18 +74,53 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import kotlin.time.Clock
+import java.io.IOException
 
 private const val TAG = "ResponseAPI"
+private const val CHATGPT_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 class ResponseAPI(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+    private val keyRoulette: KeyRoulette = KeyRoulette.default(),
+    private val oauthTokenResolver: OpenAIAccessTokenResolver? = null,
 ) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): TextGenerationResult = withContext(Dispatchers.IO) {
+    ): TextGenerationResult {
+        if (providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH) {
+            val handler = StreamChunkHandler(params.model)
+            var resultMessages = messages
+            var responseId: String? = null
+            var responseModel: String? = null
+            var finishReason: String? = null
+            var usage: TokenUsage? = null
+            streamText(providerSetting, messages, params).collect { chunk ->
+                when (chunk) {
+                    is StreamChunk.Finish -> {
+                        finishReason = chunk.finishReason
+                        responseId = chunk.responseId
+                        responseModel = chunk.model
+                        if (chunk.finishReason != "completed") {
+                            error("ChatGPT returned an incomplete response${chunk.finishReason?.let { " ($it)" }.orEmpty()}")
+                        }
+                    }
+                    is StreamChunk.Usage -> usage = chunk.usage
+                    else -> Unit
+                }
+                resultMessages = handler.handle(resultMessages, chunk)
+            }
+            check(finishReason == "completed") { "ChatGPT stream ended before response.completed" }
+            return TextGenerationResult(
+                id = responseId ?: error("ChatGPT response did not include an ID"),
+                model = responseModel ?: params.model.modelId,
+                message = resultMessages.last(),
+                finishReason = finishReason,
+                usage = usage,
+            )
+        }
+        return withContext(Dispatchers.IO) {
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -114,6 +153,7 @@ class ResponseAPI(
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
             parseResponseOutput(bodyJson)
         }
+        }
     }
 
     override suspend fun streamText(
@@ -121,27 +161,31 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<StreamChunk> = callbackFlow {
+        val oauth = providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
             params = params,
             stream = true,
         )
+        val accountId = if (oauth) providerSetting.oauthAccountId ?: error("Connect a ChatGPT account first") else null
+        val token = if (oauth) (oauthTokenResolver ?: error("ChatGPT account support is not configured")).accessToken(accountId!!) else
+            keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        require(!oauth || params.customHeaders.isEmpty()) { "Custom headers are not allowed for ChatGPT accounts" }
+        val headers = if (oauth) okhttp3.Headers.headersOf() else params.customHeaders.toHeaders()
         val request = Request.Builder()
-            .url("${providerSetting.baseUrl}${providerSetting.responsesPath}")
-            .headers(params.customHeaders.toHeaders())
+            .url(if (oauth) CHATGPT_RESPONSES_URL else "${providerSetting.baseUrl}${providerSetting.responsesPath}")
+            .headers(headers)
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader(
-                "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
-            )
-            .configureReferHeaders(providerSetting.baseUrl)
-            .configureSessionHeaders(providerSetting.baseUrl, params.sessionId)
+            .header("Authorization", "Bearer $token")
+            .apply { if (oauth) tag(SensitiveRequest::class.java, SensitiveRequest) }
+            .apply { if (!oauth) configureReferHeaders(providerSetting.baseUrl) }
+            .apply { if (!oauth) configureSessionHeaders(providerSetting.baseUrl, params.sessionId) }
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        if (!oauth) Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
-        val decoder = ResponseApiStreamDecoder()
+        val decoder = ResponseApiStreamDecoder(strictCompletion = oauth)
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
             chunks.forEach { chunk ->
@@ -158,11 +202,14 @@ class ResponseAPI(
                 type: String?,
                 data: String
             ) {
-                Log.d(TAG, "onEvent: $id/$type $data")
+                if (!oauth) Log.d(TAG, "onEvent: $id/$type $data")
                 try {
                     val result = decoder.accept(SseEvent(id = id, event = type, data = data))
                     sendChunks(result.chunks)
-                    if (result.completed) close()
+                    if (result.completed) {
+                        if (oauth && !decoder.successfullyCompleted) close(IllegalStateException("ChatGPT response did not complete"))
+                        else close()
+                    }
                 } catch (e: Throwable) {
                     close(e)
                 }
@@ -171,10 +218,9 @@ class ResponseAPI(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                t?.printStackTrace()
-                println("[onFailure] Error: ${t?.javaClass?.name} ${t?.message} / $response")
+                if (!oauth) t?.printStackTrace()
 
-                val bodyRaw = response?.body?.stringSafe()
+                val bodyRaw = if (oauth) null else response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
@@ -186,13 +232,16 @@ class ResponseAPI(
                     Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
                     e.printStackTrace()
                 } finally {
-                    close(exception)
+                    close(if (oauth && exception == null) IOException("ChatGPT request failed (HTTP ${response?.code ?: "network"})") else exception)
                 }
             }
 
             override fun onClosed(eventSource: EventSource) {
-                sendChunks(decoder.onClosed())
-                close()
+                try {
+                    sendChunks(decoder.onClosed())
+                    if (oauth && !decoder.successfullyCompleted) close(IOException("ChatGPT stream closed before response.completed"))
+                    else close()
+                } catch (error: Throwable) { close(error) }
             }
         }
 
@@ -212,18 +261,33 @@ class ResponseAPI(
         params: TextGenerationParams,
         stream: Boolean
     ): JsonObject {
-        val host = providerSetting.baseUrl.toHttpUrl().host
+        val oauth = providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH
+        if (oauth) {
+            require(stream) { "ChatGPT account requests must stream Responses API output" }
+            require(params.tools.isEmpty() && params.model.tools.isEmpty()) {
+                "This ChatGPT connection does not support tools yet"
+            }
+            require(messages.all { message ->
+                message.parts.all { it is UIMessagePart.Text || it is UIMessagePart.Reasoning }
+            }) { "This ChatGPT connection currently supports text-only conversations" }
+            require(params.temperature == null && params.topP == null && params.maxTokens == null) {
+                "This ChatGPT connection does not support custom sampling or output-token limits"
+            }
+            require(providerSetting.oauthAccountId.isNullOrBlank().not()) { "Connect a ChatGPT account first" }
+            require(params.customHeaders.isEmpty()) { "Custom headers are not allowed for ChatGPT accounts" }
+        }
+        val host = if (oauth) "api.openai.com" else providerSetting.baseUrl.toHttpUrl().host
         val capabilities = resolveResponseProviderCapabilities(host)
-        return buildJsonObject {
+        val body = buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
             put("store", false)
 
-            if (isModelAllowTemperature(params.model)) {
+            if (!oauth && isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
             }
-            if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
+            if (!oauth && params.maxTokens != null) put("max_output_tokens", params.maxTokens)
 
             // system instructions
             if (messages.any { it.role == MessageRole.SYSTEM }) {
@@ -298,6 +362,14 @@ class ResponseAPI(
                 }
             }
         }.mergeCustomBody(params.customBody)
+        if (oauth) {
+            val supportedFields = setOf("model", "stream", "store", "instructions", "input", "reasoning", "include")
+            require(body.keys.all { it in supportedFields }) { "A custom request body contains fields unavailable to ChatGPT connections" }
+            require(body["stream"] == kotlinx.serialization.json.JsonPrimitive(true)) { "ChatGPT requests must use streaming" }
+            require(body["store"] == kotlinx.serialization.json.JsonPrimitive(false)) { "ChatGPT requests must disable storage" }
+            require(body["input"] is kotlinx.serialization.json.JsonArray) { "ChatGPT requests require an input array" }
+        }
+        return body
     }
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {

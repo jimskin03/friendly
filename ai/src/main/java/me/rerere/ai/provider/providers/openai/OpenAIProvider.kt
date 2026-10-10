@@ -21,6 +21,8 @@ import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.OpenAIAuthMode
+import me.rerere.ai.provider.OpenAIAccessTokenResolver
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ImageGenerationItem
@@ -47,16 +49,39 @@ private const val TAG = "OpenAIProvider"
 
 class OpenAIProvider(
     private val client: OkHttpClient,
-    context: Context? = null
+    context: Context? = null,
+    private val oauthTokenResolver: OpenAIAccessTokenResolver? = null,
 ) : Provider<ProviderSetting.OpenAI> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
+    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette, oauthTokenResolver = oauthTokenResolver)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
+            if (providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH) {
+                val accountId = providerSetting.oauthAccountId ?: error("Connect a ChatGPT account first")
+                val resolver = oauthTokenResolver ?: error("ChatGPT account support is not configured")
+                val token = resolver.accessToken(accountId)
+                val request = Request.Builder()
+                    .url("https://api.openai.com/v1/models")
+                    .header("Authorization", "Bearer $token")
+                    .tag(me.rerere.common.http.SensitiveRequest::class.java, me.rerere.common.http.SensitiveRequest)
+                    .get()
+                    .build()
+                client.newCall(request).await().use { response ->
+                    if (!response.isSuccessful) error("ChatGPT model discovery failed (HTTP ${response.code})")
+                    val models = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject["models"]
+                        ?.jsonArray ?: return@withContext emptyList()
+                    return@withContext models.mapNotNull { item ->
+                        val obj = item.jsonObject
+                        val slug = obj["slug"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                        if (obj["visibility"]?.jsonPrimitive?.contentOrNull == "hidden") return@mapNotNull null
+                        Model(modelId = slug, displayName = obj["display_name"]?.jsonPrimitive?.contentOrNull ?: slug)
+                    }
+                }
+            }
             val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
@@ -85,6 +110,9 @@ class OpenAIProvider(
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
+        require(providerSetting.authMode != OpenAIAuthMode.CHATGPT_OAUTH) {
+            "Balance lookup is unavailable for ChatGPT account connections"
+        }
         val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
@@ -123,6 +151,9 @@ class OpenAIProvider(
             params = params
         )
     } else {
+        require(providerSetting.authMode != OpenAIAuthMode.CHATGPT_OAUTH) {
+            "ChatGPT account connections support the Responses API only. Enable Responses API in provider settings."
+        }
         chatCompletionsAPI.streamText(
             providerSetting = providerSetting,
             messages = messages,
@@ -141,6 +172,9 @@ class OpenAIProvider(
             params = params
         )
     } else {
+        require(providerSetting.authMode != OpenAIAuthMode.CHATGPT_OAUTH) {
+            "ChatGPT account connections support the Responses API only. Enable Responses API in provider settings."
+        }
         chatCompletionsAPI.generateText(
             providerSetting = providerSetting,
             messages = messages,
@@ -152,6 +186,9 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         params: EmbeddingGenerationParams
     ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
+        require(providerSetting.authMode != OpenAIAuthMode.CHATGPT_OAUTH) {
+            "Embeddings are unavailable for ChatGPT account connections"
+        }
         require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
 
         val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
@@ -206,6 +243,9 @@ class OpenAIProvider(
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
+        require(providerSetting.authMode != OpenAIAuthMode.CHATGPT_OAUTH) {
+            "Image generation is unavailable for ChatGPT account connections"
+        }
 
         val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
 
@@ -253,6 +293,9 @@ class OpenAIProvider(
     ): Flow<ImageGenerationItem> = flow {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
+        }
+        require(providerSetting.authMode != OpenAIAuthMode.CHATGPT_OAUTH) {
+            "Image editing is unavailable for ChatGPT account connections"
         }
         require(params.images.isNotEmpty()) {
             "At least one image is required"
