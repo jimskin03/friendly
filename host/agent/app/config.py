@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     tunnel_mode: str = "auto"
     # Keep the viewer separate from any Funnel-backed HTTPS listener (usually :443).
     tailscale_serve_port: int = 8443
+    # Comma-separated ports tried when the preferred one has a foreign route.
+    tailscale_serve_fallback_ports: str = "8445,8446,8447,10000"
+    # Externally managed https viewer base (e.g. https://vm.tailnet.ts.net:8443).
+    tailscale_viewer_url: str = ""
     cloudflared_token: str = ""
     cloudflared_config: str = ""
 

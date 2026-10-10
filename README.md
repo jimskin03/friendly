@@ -214,6 +214,20 @@ The **Play** build only accepts trusted HTTPS for the desktop Screen viewer and 
 
 ---
 
+### Host troubleshooting
+
+1. **Services:** `systemctl list-units 'friendly*'`
+2. **Logs:** `sudo journalctl -u friendly-agent -n 40`
+3. **`status=200/CHDIR` / Permission denied:** the service user can't enter the install dir (e.g. a `750` home). Re-run `sudo ./host/scripts/setup-ubuntu-headless.sh`; it installs to `/opt/friendly-host` (owned by the service user) and checks access before starting.
+4. **Health:** `curl -s http://127.0.0.1:8787/health` (path is `/health`).
+5. **Expose the API** (443 already used by Funnel? use 8444; 443/Funnel stay untouched):
+   `sudo tailscale serve --bg --https=8444 http://127.0.0.1:8787`
+   (or run the setup script with `--serve-api`).
+6. **Base URL** in Friendly: `https://<machine>.<tailnet>.ts.net:8444`
+7. **Black viewer:** the viewer needs its own Tailscale route: `sudo tailscale serve --bg --https=8443 http://127.0.0.1:6099` (the agent adds it itself, or picks the next free port if 8443 is taken), or set `TAILSCALE_VIEWER_URL=https://<machine>.<tailnet>.ts.net:8443` in `/etc/friendly-host.env`, then `sudo systemctl restart friendly-agent`.
+8. **Token:** `sudo grep API_TOKEN /etc/friendly-host.env`
+9. In Friendly: **Stop**, then **Start** the desktop stream.
+
 ## Architecture (brief)
 
 ```

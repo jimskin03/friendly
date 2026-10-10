@@ -30,6 +30,8 @@ def _settings() -> Settings:
         api_token="a" * 48,
         novnc_port=6099,
         tailscale_serve_port=PORT,
+        # These tests pin behaviour on the preferred port; fallback has its own tests.
+        tailscale_serve_fallback_ports="",
     )
 
 
