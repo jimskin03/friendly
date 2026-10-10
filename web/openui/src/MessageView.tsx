@@ -1,13 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { postNative } from "./native";
 import { RichResponse, openUiProgram } from "./RichResponse";
 import { Markdown, safeLinkTarget } from "./Markdown";
 import { formatBytes, formatSeconds, formatTokens } from "./format";
 import { useAsset } from "./assets";
-import { ToolPreview, toolTitle } from "./ToolPreviews";
+import { parseJson, ToolPreview, toolTitle } from "./ToolPreviews";
 import type { FriendlyAttachment, FriendlyBlock, FriendlyChatState, FriendlyMessage, FriendlyTool } from "./types";
 import {
-  IconBolt, IconChevronLeft, IconChevronRight, IconClock, IconCopy, IconDown, IconEdit, IconFile, IconFork, IconImage,
+  IconBolt, IconBrain, IconChevronDown, IconChevronLeft, IconChevronRight, IconClock, IconCopy, IconDown, IconEdit, IconFile, IconFork, IconImage,
   IconMore, IconRegenerate, IconShare, IconSpeaker, IconStar, IconStopCircle, IconTool, IconTrash, IconUp,
 } from "./icons";
 
@@ -47,15 +47,14 @@ function ToolCard({ tool, interactive }: { tool: FriendlyTool; interactive: bool
   const [answer, setAnswer] = useState("");
   const pending = tool.state === "pending" && !tool.executed;
   const preview = ToolPreview({ tool });
-  const hasPreview = Boolean(preview);
-  const status = tool.executed ? "Done" : pending ? "Needs approval" : tool.state === "denied" ? "Denied" : "Running…";
+  const status = tool.state === "failed" ? "Failed" : tool.state === "denied" ? "Denied" : tool.executed ? "Done" : pending ? "Needs approval" : "Running…";
   return (
     <div className={`tool-card${pending ? " tool-pending" : ""}`}>
-      <details open={pending || hasPreview}>
+      <details open={pending}>
         <summary>
           <IconTool size={16} />
           <span className="tool-name">{toolTitle(tool)}</span>
-          <span className={`tool-status status-${pending ? "pending" : tool.executed ? "done" : tool.state}`}>{status}</span>
+          <span className={`tool-status status-${pending ? "pending" : tool.state === "failed" || tool.state === "denied" ? tool.state : tool.executed ? "done" : tool.state}`}>{status}</span>
         </summary>
         {preview ?? <>
           {tool.input && <pre className="tool-io"><code>{tool.input}</code></pre>}
@@ -155,6 +154,60 @@ export function orderedBlocks(message: FriendlyMessage): FriendlyBlock[] {
   return out;
 }
 
+function MessageActivity({ blocks, tools, streaming, interactive, stats }: {
+  blocks: FriendlyBlock[]; tools: FriendlyTool[]; streaming: boolean; interactive: boolean;
+  stats?: FriendlyMessage["stats"];
+}) {
+  const [expanded, setExpanded] = useState(streaming);
+  const contentId = useId();
+  // A completed or stopped response always folds its history. Later manual expansion
+  // survives unrelated snapshots; pending decisions remain outside the folded history.
+  useEffect(() => { setExpanded(streaming); }, [streaming]);
+
+  const steps = blocks.filter(block => block.kind !== "text");
+  const toolIds = new Set(steps.filter(block => block.kind === "tool").map(block => block.toolId));
+  const activityTools = tools.filter(tool => toolIds.has(tool.id));
+  const pending = activityTools.filter(tool => tool.state === "pending" && !tool.executed);
+  const reasoning = steps.filter(block => block.kind === "reasoning");
+  const reasoningMs = reasoning.reduce((sum, block) => sum + Math.max(0, block.ms ?? 0), 0);
+  const summary = [
+    reasoning.length ? reasoningMs > 0 ? `${formatSeconds(reasoningMs)} thinking` : "Thinking" : null,
+    activityTools.length ? `${activityTools.length} ${activityTools.length === 1 ? "action" : "actions"}` : null,
+  ].filter(Boolean).join(" · ");
+  if (!steps.length && !stats) return null;
+
+  return (
+    <section className={`message-activity${streaming ? " activity-live" : ""}`} aria-label="Response activity">
+      <button type="button" className="activity-toggle" aria-expanded={expanded} aria-controls={contentId}
+        onClick={() => setExpanded(open => !open)}>
+        <IconBrain size={17} />
+        <span className="activity-label">{pending.length ? "Needs your input" : streaming ? "Working…" : steps.length ? "Activity" : "Response details"}</span>
+        {summary && <span className="activity-summary">{summary}</span>}
+        {streaming && <span className="activity-dot" aria-hidden="true" />}
+        <span className={`activity-chevron${expanded ? " is-open" : ""}`}><IconChevronDown size={16} /></span>
+      </button>
+      <div id={contentId} className="activity-body" hidden={!expanded}>
+        {expanded && <>
+          {steps.map((block, index) => {
+            if (block.kind === "reasoning") {
+              return <Reasoning key={`reasoning-${index}`} text={block.text ?? ""} ms={block.ms}
+                streaming={streaming && block === blocks[blocks.length - 1]} />;
+            }
+            const tool = activityTools.find(item => item.id === block.toolId);
+            // Approval and ask_user forms are rendered once, always visible below.
+            if (!tool || pending.some(item => item.id === tool.id)) return null;
+            return <ToolCard key={tool.id} tool={tool} interactive={interactive} />;
+          })}
+          {!streaming && stats && <StatsLine stats={stats} />}
+        </>}
+      </div>
+      {pending.length > 0 && <div className="activity-decisions">
+        {pending.map(tool => <ToolCard key={tool.id} tool={tool} interactive={interactive} />)}
+      </div>}
+    </section>
+  );
+}
+
 export function MessageView({ message, streaming, interactive, chat, busy }: {
   message: FriendlyMessage; streaming: boolean; interactive: boolean; chat: FriendlyChatState; busy: boolean;
 }) {
@@ -175,13 +228,17 @@ export function MessageView({ message, streaming, interactive, chat, busy }: {
         const lastText = blocks.map(b => b.kind).lastIndexOf("text");
         let programShown = false;
         const nodes = blocks.map((block, i) => {
-          if (block.kind === "reasoning") {
-            const live = streaming && i === blocks.length - 1;
-            return <Reasoning key={i} text={block.text ?? ""} ms={block.ms} streaming={live} />;
-          }
+          if (block.kind === "reasoning") return null;
           if (block.kind === "tool") {
             const tool = message.tools?.find(t => t.id === block.toolId);
-            return tool ? <ToolCard key={i} tool={tool} interactive={interactive} /> : null;
+            // A generated chart is answer content, while its call and raw data belong
+            // to Activity. Keep the chart visible when the activity history folds.
+            if (tool?.name === "chart_display" && tool.executed && parseJson(tool.output)?.success === true) {
+              return <section key={i} className="message-artifact" aria-label="Generated chart">
+                <h3>{toolTitle(tool)}</h3><ToolPreview tool={tool} />
+              </section>;
+            }
+            return null;
           }
           if (program) {
             // An OpenUI program renders once, where the reply text ends.
@@ -193,7 +250,11 @@ export function MessageView({ message, streaming, interactive, chat, busy }: {
         });
         if (program && !programShown) nodes.push(<div key="program" className="message-body"><RichResponse text={message.text} program={program} loading={streaming} interactive={interactive} /></div>);
         if (streaming && blocks.length === 0) nodes.push(<div key="thinking" className="message-body"><p className="thinking">Thinking…</p></div>);
-        return nodes;
+        return <>
+          <MessageActivity blocks={blocks} tools={message.tools ?? []} streaming={streaming} interactive={interactive}
+            stats={chat.showStats ? message.stats : null} />
+          {nodes}
+        </>;
       })()}
       {!isUser && (message.citations?.length ?? 0) > 0 && (
         <ol className="citations" aria-label="Sources">
@@ -227,7 +288,6 @@ export function MessageView({ message, streaming, interactive, chat, busy }: {
         </div>
       )}
       {selecting && <SelectSheet text={message.text} onClose={() => setSelecting(false)} />}
-      {!isUser && !streaming && chat.showStats && message.stats && <StatsLine stats={message.stats} />}
     </article>
   );
 }

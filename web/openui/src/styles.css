@@ -234,6 +234,24 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .menu button.danger { color: #b3261e; }
 .app.dark .menu button.danger { color: #ffb4ab; }
 
+.message-activity { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-container); overflow: hidden; }
+.activity-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 10px 12px; border: 0; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
+.activity-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 13px; }
+.activity-toggle > svg, .activity-chevron { flex: none; }
+.activity-label { flex: none; color: var(--text); font-size: 13px; font-weight: 600; }
+.activity-summary { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-chevron { margin-left: auto; display: flex; transition: transform 150ms; }
+.activity-chevron.is-open { transform: rotate(180deg); }
+.activity-body { padding: 4px 10px 10px; border-top: 1px solid var(--line); max-height: min(55vh, 440px); overflow: auto; overscroll-behavior: contain; }
+.activity-live .activity-body { max-height: min(35vh, 240px); }
+.activity-body .tool-card { background: transparent; border-radius: 10px; }
+.activity-body .stats-line { margin: 8px 2px 0; }
+.activity-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--accent); animation: activity-pulse 1.2s infinite; }
+@keyframes activity-pulse { 50% { opacity: 0.35; } }
+.activity-decisions { padding: 8px 10px 0; border-top: 1px solid var(--line); }
+.message-artifact { margin: 8px 0; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.message-artifact h3 { margin: 0 0 10px; font-size: 16px; }
+.message-artifact .tool-preview { padding: 0; }
 .reasoning { margin: 0 0 8px; border-left: 3px solid var(--line); padding-left: 12px; }
 .reasoning summary { color: var(--muted); font-size: 14px; font-weight: 500; cursor: pointer; min-height: 32px; display: flex; align-items: center; }
 .reasoning-body { color: var(--muted); font-size: 14px; }
@@ -243,6 +261,8 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .tool-name { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-status { font-size: 12px; color: var(--muted); }
 .tool-status.status-pending { color: var(--accent); font-weight: 600; }
+.tool-status.status-failed, .tool-status.status-denied { color: #b3261e; }
+.app.dark .tool-status.status-failed, .app.dark .tool-status.status-denied { color: #ffb4ab; }
 .tool-pending { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .tool-io { margin: 0; padding: 8px 12px; max-height: 180px; overflow: auto; border-top: 1px solid var(--line); font-size: 12px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool-output { color: var(--muted); }

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.ToolApprovalState
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
@@ -82,7 +83,7 @@ internal data class OpenUiTool(
     val name: String,
     val input: String,
     val output: String? = null,
-    /** auto | pending | approved | denied | answered */
+    /** auto | pending | approved | denied | answered | failed */
     val state: String,
     val executed: Boolean,
     /** Asset keys of images the tool returned (screenshots). */
@@ -196,17 +197,28 @@ internal fun UIMessage.toBridgeMessage(
         openui = openUiProgram(),
         reasoning = reasoningParts.joinToString("\n\n") { it.reasoning }.takeIf { it.isNotBlank() }?.clip(MAX_REASONING_TEXT),
         reasoningMs = reasoningParts.mapNotNull { r -> r.finishedAt?.let { (it - r.createdAt).inWholeMilliseconds } }.sum().takeIf { it > 0 },
-        tools = parts.filterIsInstance<UIMessagePart.Tool>().map { tool ->
-            OpenUiTool(
-                id = tool.toolCallId,
-                name = tool.toolName,
-                input = tool.input.clip(MAX_TOOL_TEXT),
-                output = tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-                    .takeIf { it.isNotBlank() }?.clip(MAX_TOOL_TEXT),
-                state = tool.approvalState.bridgeName(),
-                executed = tool.isExecuted,
-                images = tool.output.filterIsInstance<UIMessagePart.Image>().map { openUiAssetKey(it.url) },
-            )
+        tools = parts.mapNotNull { part ->
+            when (part) {
+                is UIMessagePart.Tool -> OpenUiTool(
+                    id = part.toolCallId,
+                    name = part.toolName,
+                    input = part.input.clip(MAX_TOOL_TEXT),
+                    output = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                        .takeIf { it.isNotBlank() }?.clip(MAX_TOOL_TEXT),
+                    state = part.approvalState.bridgeName(),
+                    executed = part.isExecuted,
+                    images = part.output.filterIsInstance<UIMessagePart.Image>().map { openUiAssetKey(it.url) },
+                )
+                is UIMessagePart.ServerTool -> OpenUiTool(
+                    id = part.toolCallId,
+                    name = part.toolName,
+                    input = part.input?.toString().orEmpty().clip(MAX_TOOL_TEXT),
+                    output = part.output?.toString()?.clip(MAX_TOOL_TEXT),
+                    state = if (part.status == ServerToolStatus.FAILED) "failed" else "auto",
+                    executed = part.isFinished,
+                )
+                else -> null
+            }
         },
         blocks = parts.mapNotNull { part ->
             when (part) {
@@ -215,6 +227,7 @@ internal fun UIMessage.toBridgeMessage(
                     OpenUiBlock("reasoning", text = it.clip(MAX_REASONING_TEXT), ms = part.finishedAt?.let { f -> (f - part.createdAt).inWholeMilliseconds })
                 }
                 is UIMessagePart.Tool -> OpenUiBlock("tool", toolId = part.toolCallId)
+                is UIMessagePart.ServerTool -> OpenUiBlock("tool", toolId = part.toolCallId)
                 else -> null
             }
         },

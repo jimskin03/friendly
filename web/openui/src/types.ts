@@ -33,7 +33,7 @@ export interface FriendlyTool {
   name: string;
   input: string;
   output?: string | null;
-  state: "auto" | "pending" | "approved" | "denied" | "answered";
+  state: "auto" | "pending" | "approved" | "denied" | "answered" | "failed";
   executed: boolean;
   images?: string[];
 }
