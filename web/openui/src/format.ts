@@ -9,3 +9,16 @@ export function formatTokens(n: number): string {
 export function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
+
+export function formatBytes(bytes?: number | null): string {
+  if (bytes == null || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function formatMinutes(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+}

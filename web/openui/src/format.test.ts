@@ -12,3 +12,18 @@ describe("stats formatting", () => {
     expect(formatSeconds(9900)).toBe("9.9s");
   });
 });
+
+import { formatBytes, formatMinutes } from "./format";
+
+describe("formatBytes/formatMinutes", () => {
+  it("formats sizes", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2048)).toBe("2.0 KB");
+    expect(formatBytes(3 * 1024 * 1024)).toBe("3.0 MB");
+    expect(formatBytes(null)).toBe("");
+  });
+  it("formats minutes", () => {
+    expect(formatMinutes(42)).toBe("42m");
+    expect(formatMinutes(135)).toBe("2h 15m");
+  });
+});

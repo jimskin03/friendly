@@ -78,4 +78,23 @@ class OpenUiBridgeModelTest {
         assertNull(parse("not json"))
         assertNull(parse("""{"type":"send","text":"${"x".repeat(MAX_MESSAGE_LENGTH + 1)}"}"""))
     }
+
+    @Test
+    fun `parses composer picker and queue actions`() {
+        assertEquals(OpenUiChatAction.SetSearchMode("built_in"), parse("""{"type":"setSearchMode","mode":"built_in"}"""))
+        assertNull(parse("""{"type":"setSearchMode","mode":"evil"}"""))
+        assertEquals(OpenUiChatAction.SetMcp("a", true), parse("""{"type":"setMcp","id":"a","enabled":true}"""))
+        assertNull(parse("""{"type":"setMcp","id":"a"}"""))
+        assertEquals(OpenUiChatAction.EditQueued("q", null), parse("""{"type":"editQueued","id":"q"}"""))
+        assertEquals(OpenUiChatAction.EditQueued("q", "hi"), parse("""{"type":"editQueued","id":"q","text":"hi"}"""))
+        assertNull(parse("""{"type":"retry"}""", loading = true))
+        assertEquals(OpenUiChatAction.DesktopStop, parse("""{"type":"desktopStop"}"""))
+    }
+
+    @Test
+    fun `asset keys are stable hex and hide the url`() {
+        val key = openUiAssetKey("file:///data/user/0/app/files/upload/a.jpg")
+        assertEquals(key, openUiAssetKey("file:///data/user/0/app/files/upload/a.jpg"))
+        assertTrue(key.matches(Regex("[0-9a-f]{20}")))
+    }
 }
