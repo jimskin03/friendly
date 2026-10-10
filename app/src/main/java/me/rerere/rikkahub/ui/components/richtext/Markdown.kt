@@ -523,13 +523,12 @@ private fun MarkdownNode(
                 modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
-                ZoomableAsyncImage(
-                    model = imageUrl,
+                MarkdownImage(
+                    src = imageUrl,
                     contentDescription = altText,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .widthIn(min = 120.dp)
-                        .heightIn(min = 120.dp),
+                        .widthIn(min = 120.dp),
                 )
             }
         }

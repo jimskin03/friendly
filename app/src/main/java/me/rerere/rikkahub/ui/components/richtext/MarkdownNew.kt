@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +26,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -147,10 +147,13 @@ fun MarkdownNew(
         runCatching { Jsoup.parse(html) }.getOrElse { Jsoup.parse("") }
     }
 
+    val layoutStyles = remember(html) { layoutStylesFromHtml(html) }
     ProvideTextStyle(style) {
-        Column(modifier = modifier.padding(start = 4.dp)) {
-            document.body().childNodes().fastForEach { node ->
-                HtmlBodyNode(node = node, onClickCitation = onClickCitation)
+        CompositionLocalProvider(LocalRichHtmlStyles provides layoutStyles) {
+            Column(modifier = modifier.padding(start = 4.dp)) {
+                document.body().childNodes().fastForEach { node ->
+                    HtmlBodyNode(node = node, onClickCitation = onClickCitation)
+                }
             }
         }
     }
@@ -199,7 +202,20 @@ private fun HtmlBlockElement(
     onClickCitation: (String) -> Unit,
     listLevel: Int = 0,
 ) {
-    when (element.tagName().lowercase()) {
+    val tag = element.tagName().lowercase()
+    if (tag == "style" || tag == "script") return
+    val layoutStyles = LocalRichHtmlStyles.current
+    if (elementNeedsRichHtml(element, layoutStyles)) {
+        RichHtmlBlock(
+            html = element.outerHtml(),
+            extraStyles = layoutStyles,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+        )
+        return
+    }
+    when (tag) {
         "p" -> HtmlParagraph(
             element = element,
             onClickCitation = onClickCitation,
@@ -246,15 +262,14 @@ private fun HtmlBlockElement(
         "img" -> {
             val src = element.attr("src")
             val alt = element.attr("alt")
-            if (src.isNotEmpty()) {
+            if (src.isNotEmpty() || alt.isNotEmpty()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    ZoomableAsyncImage(
-                        model = src,
+                    MarkdownImage(
+                        src = src,
                         contentDescription = alt.takeIf { it.isNotEmpty() },
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .widthIn(min = 120.dp)
-                            .heightIn(min = 120.dp),
+                            .widthIn(min = 120.dp),
                     )
                 }
             }
@@ -748,14 +763,13 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
                 tag == "img" -> {
                     val src = node.attr("src")
                     val alt = node.attr("alt")
-                    if (src.isNotEmpty()) {
-                        ZoomableAsyncImage(
-                            model = src,
+                    if (src.isNotEmpty() || alt.isNotEmpty()) {
+                        MarkdownImage(
+                            src = src,
                             contentDescription = alt.takeIf { it.isNotEmpty() },
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .widthIn(min = 120.dp)
-                                .heightIn(min = 120.dp),
+                                .widthIn(min = 120.dp),
                         )
                     }
                 }
