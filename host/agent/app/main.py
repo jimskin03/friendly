@@ -65,6 +65,7 @@ class TypeBody(BaseModel):
 
 class HotkeyBody(BaseModel):
     keys: list[str] = Field(..., min_length=1)
+    repeat: int = Field(default=1, ge=1, le=256)
 
 
 class BrowserOpenBody(BaseModel):
@@ -177,7 +178,7 @@ def action_hotkey(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     try:
-        desktop.hotkey(body.keys, settings)
+        desktop.hotkey(body.keys, settings, repeat=body.repeat)
     except DesktopError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE

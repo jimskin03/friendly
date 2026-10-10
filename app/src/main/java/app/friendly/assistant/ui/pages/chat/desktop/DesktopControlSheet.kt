@@ -90,6 +90,7 @@ import com.dokar.sonner.ToastType
 import io.ktor.client.HttpClient
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -339,7 +340,12 @@ private suspend fun DesktopControlClient.applyRemoteEdit(previous: String, next:
     var index = 0
     val limit = minOf(previous.length, next.length)
     while (index < limit && previous[index] == next[index]) index++
-    repeat(previous.length - index) { hotkey(listOf("BackSpace")) }
+    var deletions = previous.length - index
+    while (deletions > 0) {
+        val batch = minOf(deletions, 256)
+        hotkey(listOf("BackSpace"), repeat = batch)
+        deletions -= batch
+    }
     val insert = next.substring(index)
     if (insert.isNotEmpty()) typeText(insert)
 }
@@ -590,7 +596,6 @@ fun DesktopControlSheet(
 
     fun flushTyping(pressEnter: Boolean) {
         pendingType?.cancel()
-        val target = draft
         scope.launch {
             typeMutex.withLock {
                 try {
@@ -598,11 +603,13 @@ fun DesktopControlSheet(
                         baseUrl = networkSetting.desktopControlBaseUrl,
                         token = networkSetting.desktopControlApiToken,
                     )
-                    if (target != sentDraft) {
+                    while (draft != sentDraft) {
+                        val target = draft
                         client.applyRemoteEdit(sentDraft, target)
                         sentDraft = target
                     }
                     if (pressEnter) {
+                        val submittedDraft = sentDraft
                         val enterKeys = if (ctrlArmed) {
                             ctrlArmed = false
                             listOf("Control_L", "Return")
@@ -611,8 +618,10 @@ fun DesktopControlSheet(
                         }
                         client.hotkey(enterKeys)
                         sentDraft = ""
-                        draft = ""
+                        if (draft == submittedDraft) draft = ""
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     toaster.show(e.message ?: "Failed to type", ToastType.Error)
                 }
@@ -634,7 +643,20 @@ fun DesktopControlSheet(
                 draft = previous
                 pendingType?.cancel()
                 ctrlArmed = false
-                sendHotkey(listOf("Control_L", key), "Ctrl+$key")
+                scope.launch {
+                    typeMutex.withLock {
+                        try {
+                            createClient(
+                                baseUrl = networkSetting.desktopControlBaseUrl,
+                                token = networkSetting.desktopControlApiToken,
+                            ).hotkey(listOf("Control_L", key))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            toaster.show(e.message ?: "Couldn't send Ctrl+$key", ToastType.Error)
+                        }
+                    }
+                }
                 return
             }
         }
@@ -643,18 +665,25 @@ fun DesktopControlSheet(
         pendingType?.cancel()
         pendingType = scope.launch {
             delay(220)
-            typeMutex.withLock {
-                val target = draft
-                val base = sentDraft
-                if (target == base) return@withLock
-                try {
-                    createClient(
-                        baseUrl = networkSetting.desktopControlBaseUrl,
-                        token = networkSetting.desktopControlApiToken,
-                    ).applyRemoteEdit(base, target)
-                    sentDraft = target
-                } catch (e: Exception) {
-                    toaster.show(e.message ?: "Failed to type", ToastType.Error)
+            // Keep the cancellable debounce separate from network work: the
+            // next edit may cancel this timer, but never an in-flight request.
+            scope.launch {
+                typeMutex.withLock {
+                    try {
+                        val client = createClient(
+                            baseUrl = networkSetting.desktopControlBaseUrl,
+                            token = networkSetting.desktopControlApiToken,
+                        )
+                        while (draft != sentDraft) {
+                            val target = draft
+                            client.applyRemoteEdit(sentDraft, target)
+                            sentDraft = target
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        toaster.show(e.message ?: "Failed to type", ToastType.Error)
+                    }
                 }
             }
         }

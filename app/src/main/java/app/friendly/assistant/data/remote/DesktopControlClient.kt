@@ -74,6 +74,7 @@ data class TypeRequest(
 @Serializable
 data class HotkeyRequest(
     val keys: List<String>,
+    val repeat: Int = 1,
 )
 
 @Serializable
@@ -227,10 +228,10 @@ class DesktopControlClient(
         return true
     }
 
-    suspend fun hotkey(keys: List<String>): Boolean {
+    suspend fun hotkey(keys: List<String>, repeat: Int = 1): Boolean {
         val response = http.post("${normalizedBaseUrl()}/v1/actions/hotkey") {
             auth()
-            setBody(JsonInstant.encodeToString(HotkeyRequest(keys = keys)))
+            setBody(JsonInstant.encodeToString(HotkeyRequest(keys = keys, repeat = repeat)))
         }
         if (!response.status.isSuccess()) {
             val err = response.bodyAsText()

@@ -72,7 +72,7 @@ All `/v1/*` routes and `/mcp` require `Authorization: Bearer <API_TOKEN>`.
 | POST | `/v1/actions/screenshot` | `{}` | `{ image_b64, mime }` |
 | POST | `/v1/actions/click` | `{ x, y, button? }` | `{ ok, x, y, button }` |
 | POST | `/v1/actions/type` | `{ text }` | `{ ok, chars }` |
-| POST | `/v1/actions/hotkey` | `{ keys: ["ctrl","t"] }` | `{ ok, keys }` |
+| POST | `/v1/actions/hotkey` | `{ keys: ["ctrl","t"], repeat?: 1..256 }` | `{ ok, keys }` |
 | POST | `/v1/browser/open` | `{ url }` | `{ ok, url, pid }` |
 | POST | `/v1/desktop/prepare` | — | `{ ok }` (layout helper) |
 | POST | `/v1/desktop/launch` | `{ app }` | `{ ok, app }` |

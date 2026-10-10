@@ -176,7 +176,9 @@ def type_text(text: str, settings: Settings | None = None) -> None:
     _run(["xdotool", "type", "--clearmodifiers", "--", text], display=disp, timeout=60)
 
 
-def hotkey(keys: list[str], settings: Settings | None = None) -> None:
+def hotkey(
+    keys: list[str], settings: Settings | None = None, repeat: int = 1
+) -> None:
     s = settings or get_settings()
     disp = require_display(s)
     if shutil.which("xdotool") is None:
@@ -190,7 +192,13 @@ def hotkey(keys: list[str], settings: Settings | None = None) -> None:
     chord = "+".join(k.strip() for k in keys if k.strip())
     if not chord:
         raise DesktopError("keys must be a non-empty list", code="bad_keys")
-    _run(["xdotool", "key", "--clearmodifiers", chord], display=disp)
+    if not 1 <= repeat <= 256:
+        raise DesktopError("repeat must be between 1 and 256", code="bad_repeat")
+    argv = ["xdotool", "key", "--clearmodifiers"]
+    if repeat > 1:
+        argv.extend(["--repeat", str(repeat), "--delay", "0"])
+    argv.append(chord)
+    _run(argv, display=disp)
 
 
 def launch_app(name: str, settings: Settings | None = None) -> dict:
