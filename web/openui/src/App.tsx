@@ -46,7 +46,6 @@ export default function App() {
   const outlineSeen = useRef<number | null>(null);
   const longPress = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
   const scrollRef = useRef<HTMLElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const followOutput = useRef(true);
   const currentSession = useRef<string | null>(null);
   const lastEditing = useRef<string | null>(null);
@@ -108,7 +107,10 @@ export default function App() {
 
   useEffect(() => {
     if (!snapshot || snapshot.messages.length === 0 || !followOutput.current) return;
-    endRef.current?.scrollIntoView({ behavior: snapshot.loading ? "auto" : "smooth", block: "end" });
+    // Scroll only the transcript. scrollIntoView also scrolls the WebView's
+    // viewport during IME updates and can move the focused composer offscreen.
+    const transcript = scrollRef.current;
+    transcript?.scrollTo({ top: transcript.scrollHeight, behavior: snapshot.loading ? "auto" : "smooth" });
   }, [snapshot?.revision, snapshot?.loading, snapshot?.messages.length]);
 
   if (!snapshot) return <main className="loading-shell" aria-live="polite">Loading Friendly…</main>;
@@ -198,13 +200,13 @@ export default function App() {
             {chat.errors.length > 1 && <button type="button" className="text-btn" onClick={() => postNative({ type: "clearErrors" })}>Clear all</button>}
           </div>
         )}
-        <div ref={endRef} />
       </section>
 
       {!atBottom && snapshot.messages.length > 0 && (
         <button type="button" className="scroll-bottom" aria-label="Scroll to bottom" onClick={() => {
           followOutput.current = true;
-          endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+          const transcript = scrollRef.current;
+          transcript?.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" });
         }}><IconDown /></button>
       )}
 

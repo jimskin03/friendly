@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -882,7 +884,10 @@ private fun ChatPageContent(
                     modelAvailable = currentChatModel != null,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding),
+                        .padding(innerPadding)
+                        // Scaffold handles system bars; resize the WebView for the remaining IME inset.
+                        .consumeWindowInsets(innerPadding)
+                        .imePadding(),
                     onAction = { action -> handleOpenUiAction(action) },
                     onRendererFailure = {
                         // No native fallback: the web chat is the only transcript UI.
