@@ -221,7 +221,20 @@ def _build_local_viewer_url(
 
 
 _TAILSCALE_ROOT_PATH = "/"
-_TAILSCALE_HTTPS_PORTS = {8443, 10000}
+# Ports this host never takes for the viewer: Funnel's usual 443 and the
+# Control API convention 8444 (tailscale serve --https=8444 -> :8787).
+_TAILSCALE_RESERVED_PORTS = {443, 8444}
+
+
+def _valid_viewer_port(port: Any) -> bool:
+    return isinstance(port, int) and 1024 <= port <= 65535 and port not in _TAILSCALE_RESERVED_PORTS
+
+
+def _is_loopback_url(url: str | None) -> bool:
+    if not url:
+        return True
+    host = (urlsplit(url).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1") or host.startswith("127.")
 
 
 def _is_canonical_service_id(service_id: Any) -> bool:
@@ -447,22 +460,66 @@ def _tailscale_tcp_scopes(status: dict[str, Any], port: int) -> list[str | None]
     ]
 
 
+def _viewer_port_candidates(settings: Settings) -> list[int]:
+    ports = [settings.tailscale_serve_port]
+    # Empty string disables fallback ports.
+    raw = getattr(settings, "tailscale_serve_fallback_ports", "") or ""
+    extra = [int(p) for p in raw.replace(" ", "").split(",") if p.isdigit()]
+    for port in extra:
+        if port not in ports:
+            ports.append(port)
+    return ports
+
+
 def _try_tailscale_serve(local_http: str, settings: Settings) -> dict[str, Any]:
-    """Serve noVNC privately on a dedicated Tailscale HTTPS port."""
+    """Serve noVNC privately on our own Tailscale HTTPS port.
+
+    Only the viewer port is inspected: Funnel on 443 and routes on other ports
+    are never touched. If the preferred port is held by a foreign route, the
+    next free fallback port is used. TAILSCALE_VIEWER_URL overrides all of it.
+    """
+    override = (getattr(settings, "tailscale_viewer_url", "") or "").strip().rstrip("/")
+    if override:
+        if not override.startswith("https://") or _is_loopback_url(override):
+            return {
+                "mode": "tailscale",
+                "provisioned": False,
+                "detail": "TAILSCALE_VIEWER_URL must be an https:// URL reachable from the phone",
+                "local_http": local_http,
+            }
+        token_q = "?" + local_http.split("?", 1)[1] if "?" in local_http else ""
+        return {
+            "mode": "tailscale",
+            "provisioned": False,
+            "public_base": override,
+            "viewer_url": f"{override}/vnc.html{token_q}",
+            "detail": "Using TAILSCALE_VIEWER_URL (route managed outside Friendly)",
+        }
     if not shutil.which("tailscale"):
         return {
             "mode": "tailscale",
             "provisioned": False,
             "detail": "tailscale binary not found — using localhost viewer URL",
         }
+    tried: list[str] = []
+    result: dict[str, Any] = {}
+    for port in _viewer_port_candidates(settings):
+        result = _try_tailscale_serve_port(local_http, settings, port)
+        if result.get("viewer_url") or not result.get("occupied"):
+            break
+        tried.append(f":{port} ({result.get('detail')})")
+    if tried and not result.get("viewer_url"):
+        result = {**result, "detail": "No free Tailscale viewer port; tried " + "; ".join(tried)}
+    return result
 
-    port = settings.tailscale_serve_port
+
+def _try_tailscale_serve_port(local_http: str, settings: Settings, port: int) -> dict[str, Any]:
     local_target = f"http://127.0.0.1:{settings.novnc_port}"
-    if port not in _TAILSCALE_HTTPS_PORTS:
+    if not _valid_viewer_port(port):
         return {
             "mode": "tailscale",
             "provisioned": False,
-            "detail": "Tailscale viewer port must be 8443 or 10000 (never the Funnel port 443)",
+            "detail": f"Tailscale viewer port {port} is not allowed (443 is for Funnel, 8444 for the Control API)",
             "local_http": local_http,
         }
 
@@ -482,6 +539,7 @@ def _try_tailscale_serve(local_http: str, settings: Settings) -> dict[str, Any]:
             "provisioned": False,
             "detail": f"Funnel is enabled on :{port}; refusing to expose the viewer",
             "local_http": local_http,
+            "occupied": True,
         }
 
     web_handlers = _tailscale_web_handlers(before, port)
@@ -502,6 +560,7 @@ def _try_tailscale_serve(local_http: str, settings: Settings) -> dict[str, Any]:
             "provisioned": False,
             "detail": f"Tailscale Serve :{port} is already configured for another service",
             "local_http": local_http,
+            "occupied": True,
         }
     if not web_handlers and tcp_scopes:
         return {
@@ -509,6 +568,7 @@ def _try_tailscale_serve(local_http: str, settings: Settings) -> dict[str, Any]:
             "provisioned": False,
             "detail": f"Tailscale Serve :{port} is already occupied",
             "local_http": local_http,
+            "occupied": True,
         }
 
     created = existing is None
@@ -784,7 +844,7 @@ def _teardown_tunnel(tunnel: dict[str, Any], settings: Settings) -> bool:
                 logger.warning("skipping Tailscale Serve cleanup with invalid hostport")
                 return False
         if (
-            port not in _TAILSCALE_HTTPS_PORTS
+            not _valid_viewer_port(port)
             or path != _TAILSCALE_ROOT_PATH
             or target != expected_target
         ):
@@ -1019,7 +1079,7 @@ class StreamManager:
             }
 
     def start(
-        self, settings: Settings | None = None, mode: str = "view"
+        self, settings: Settings | None = None, mode: str = "view", *, remote_client: bool = True
     ) -> dict[str, Any]:
         s = settings or get_settings()
         if mode not in ("view", "interactive"):
@@ -1083,6 +1143,23 @@ class StreamManager:
                 }
 
             viewer_url = tunnel.get("viewer_url") or local_url
+            explicit_localhost = (s.tunnel_mode or "localhost").lower() == "localhost"
+            if remote_client and not explicit_localhost and _is_loopback_url(viewer_url):
+                # A 127.0.0.1 viewer is a black screen on the phone: fail with a fix instead.
+                _teardown_tunnel(tunnel, s)
+                if ws_pid:
+                    _terminate(ws_pid, "websockify")
+                if x11_pid:
+                    _terminate(x11_pid, "x11vnc")
+                reason = tunnel.get("detail") or "no tunnel available"
+                raise StreamError(
+                    "The desktop viewer is only reachable on the host (127.0.0.1), so it would "
+                    f"show a black screen on your phone. Reason: {reason}. Fix: on the host run "
+                    f"`sudo tailscale serve --bg --https={s.tailscale_serve_port} http://127.0.0.1:{s.novnc_port}` "
+                    "(or set TAILSCALE_SERVE_PORT to a free port), or set TAILSCALE_VIEWER_URL "
+                    "in /etc/friendly-host.env, then restart friendly-agent.",
+                    code="viewer_unreachable",
+                )
 
             sess = StreamSession(
                 session_id=session_id,

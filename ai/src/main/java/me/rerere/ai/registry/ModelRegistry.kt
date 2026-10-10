@@ -724,6 +724,9 @@ object ModelRegistry {
         }
     }
 
+    /** True when the model ID matches a known model definition (modalities/abilities are reliable). */
+    fun isKnown(modelId: String): Boolean = resolveModels(modelId).isNotEmpty()
+
     val MODEL_CONTEXT_LENGTH = ModelData { modelId ->
         resolveModels(modelId).firstNotNullOfOrNull { it.contextLength }
     }

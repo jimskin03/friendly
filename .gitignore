@@ -16,3 +16,16 @@ host/.env
 host/agent/.venv/
 host/data/
 host/logs/
+
+# Signing (never commit keys or passwords)
+keystore.properties
+*.jks
+*.keystore
+# Local build outputs from scripts/build.*
+/dist
+
+# Embedded OpenUI build dependencies and local pnpm store
+web/openui/node_modules/
+web/openui/.pnpm-store/
+/.android-sdk/
+/.local-build/

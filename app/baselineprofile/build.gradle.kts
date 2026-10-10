@@ -24,6 +24,9 @@ android {
 
         // Allow generating Baseline Profile on emulator (downgrade EMULATOR error to warning)
         testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] = "EMULATOR"
+
+        // App uses distribution flavors; default baseline profiles against nightly.
+        missingDimensionStrategy("distribution", "nightly")
     }
 
     targetProjectPath = ":app"

@@ -5,13 +5,13 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
     <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84.svg" alt="Android 8+" />
-    <img src="https://img.shields.io/badge/version-2.0.0-informational.svg" alt="Version 2.0.0" />
+    <img src="https://img.shields.io/badge/version-3.0.0-informational.svg" alt="Version 3.0.0" />
     <img src="https://img.shields.io/badge/language-Kotlin-7F52FF.svg" alt="Kotlin" />
   </p>
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/hero-features.jpg" alt="Friendly 2.0 product showcase" width="100%" />
+  <img src="docs/screenshots/hero-features.jpg" alt="Friendly 2.0 orange neon cat product showcase" width="100%" />
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
 
 ## What is Friendly?
 
-Friendly is an open-source **Android AI Catsistant** (Kotlin, Material 3) that goes beyond chat. Bring your own model providers, organize conversations, and optionally let the assistant:
+Friendly (a Rikka Hub fork) is an open-source **Android AI Catsistant** (Kotlin, Material 3) that goes beyond chat. Bring your own model providers, organize conversations, and optionally let the assistant:
 
 - **Automate your phone** — inspect the screen, tap, swipe, type, and launch apps (TikTok, Grab, and more) via an Accessibility service you control
 - **Control a remote Linux computer** — connect over a private network (Tailscale recommended) to a self-hosted Control API, live desktop stream, and MCP tools
@@ -110,9 +110,9 @@ Full host docs: [`host/README.md`](host/README.md) · [`host/SETUP_UBUNTU.md`](h
 | | |
 |---|---|
 | **Android** | 8.0 (API 26) or newer · `targetSdk` 37 |
-| **Application ID** | `app.friendly.assistant` (debug builds use `.debug`) |
-| **Version** | 2.0.0 (`versionCode` 200) |
-| **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358`, Node.js 22 + pnpm 11 |
+| **Application ID** | `friendly.cryptgregresearch.org` (debug builds use `.debug` → `friendly.cryptgregresearch.org.debug`) |
+| **Version** | 3.0.0 (`versionCode` 300) |
+| **Build machine** | JDK 17, Android SDK Platform 37, NDK `28.2.13676358` |
 
 ### Permissions (honest summary)
 
@@ -124,19 +124,20 @@ Declared in the app manifest; optional features only work when you grant the mat
 | Microphone | Speech input |
 | Camera | Scanning / capture features |
 | Notifications | Generation / foreground service updates |
-| Foreground services | Long-running chat generation / web server |
+| Foreground services | Long-running chat generation |
 | Calendar (read/write) | Calendar tools when enabled |
-| Usage access | Screen-time style features when enabled |
+| Usage access | Screen-time style features when enabled (**nightly** flavor only) |
 | Storage (legacy, max SDK 28) | Older Android file access |
-| **Accessibility service** | Phone Automation (inspect / gestures) — user must enable explicitly |
+| **Accessibility service** | Phone Automation (inspect / gestures) — user must enable explicitly (**nightly** flavor only; not registered in Play builds) |
+| Overlay / phone call permissions | Mini indicator + cellular place/answer call paths (**nightly** only) |
 
-Core chat works without accessibility, camera, or calendar. Review each provider’s privacy policy before sending prompts or attachments.
+Core chat works without accessibility, camera, or calendar. Review each provider’s privacy policy before sending prompts or attachments. The **play** product flavor omits or gates policy-risky phone automation, overlay, call, and usage-stats features for store submission.
 
 ---
 
 ## Quick start (end users)
 
-1. Install from [GitHub Releases](https://github.com/jimskin03/friendly/releases) (Play Store listing TBD) or [build from source](#build-from-source).
+1. Install **3.0.0** from the [nightly release](https://github.com/jimskin03/friendly/releases/tag/nightly) (Play Store listing TBD) or [build from source](#build-from-source). Prefer `app-nightly-arm64-v8a-release.apk` on most phones.
 2. Open Friendly → **Settings → Providers** → add a provider and API key.
 3. Pick a model and start chatting or create an assistant.
 4. Optional:
@@ -194,7 +195,39 @@ Friendly’s host is meant for a **private network**:
 
 Optional MCP registration for the host: name `friendly-desktop`, Streamable HTTP URL `http://<host>:8787/mcp`, header `Authorization: Bearer <API_TOKEN>`.
 
+### Desktop Screen over HTTPS (Play version)
+
+The **Play** build only accepts trusted HTTPS for the desktop Screen viewer and the Control API: self-signed certificates are rejected and cleartext `http://` is blocked. The easiest fix is **Tailscale HTTPS**:
+
+1. In the Tailscale admin console [DNS page](https://login.tailscale.com/admin/dns), enable **MagicDNS** and **HTTPS Certificates**.
+2. On the computer running the host (cert is issued automatically):
+   ```bash
+   tailscale serve --bg --https=443  http://127.0.0.1:8787   # Control API
+   tailscale serve --bg --https=8443 http://127.0.0.1:6099   # noVNC Screen viewer
+   ```
+   With `TUNNEL_MODE=auto` (default) or `tailscale`, the host sets up the `:8443` viewer route itself when a stream starts. Running your own server instead? `tailscale cert <machine>.<tailnet>.ts.net` writes `.crt`/`.key` files for it.
+3. In Friendly, set the Base URL to `https://<machine>.<tailnet>.ts.net`. The Screen opens at `https://<machine>.<tailnet>.ts.net:8443/vnc.html`, the `viewer_url` returned by the host.
+
+**Alternative:** install your own CA on the phone (Android Settings → Security → Encryption & credentials → Install a certificate → CA certificate). Friendly trusts user-installed CAs.
+
+**Nightly** builds can still use plain `http://` on LAN/Tailscale (e.g. `http://100.x.y.z:8787`).
+
 ---
+
+### Host troubleshooting
+
+1. **Services:** `systemctl list-units 'friendly*'`
+2. **Logs:** `sudo journalctl -u friendly-agent -n 40`
+3. **`status=200/CHDIR` / Permission denied:** the service user can't enter the install dir (e.g. a `750` home). Re-run `sudo ./host/scripts/setup-ubuntu-headless.sh`; it installs to `/opt/friendly-host` (owned by the service user) and checks access before starting.
+4. **Health:** `curl -s http://127.0.0.1:8787/health` (path is `/health`).
+5. **Expose the API** (443 already used by Funnel? use 8444; 443/Funnel stay untouched):
+   `sudo tailscale serve --bg --https=8444 http://127.0.0.1:8787`
+   (or run the setup script with `--serve-api`).
+6. **Base URL** in Friendly: `https://<machine>.<tailnet>.ts.net:8444`
+7. **Black viewer:** the viewer needs its own Tailscale route: `sudo tailscale serve --bg --https=8443 http://127.0.0.1:6099` (the agent adds it itself, or picks the next free port if 8443 is taken), or set `TAILSCALE_VIEWER_URL=https://<machine>.<tailnet>.ts.net:8443` in `/etc/friendly-host.env`, then `sudo systemctl restart friendly-agent`.
+8. **Token:** `sudo grep API_TOKEN /etc/friendly-host.env`
+9. **Browser won't open** (terminal works): snap Chromium can't run as the service user. Check `curl -s 127.0.0.1:8787/health` → `browser`, and `/opt/friendly-host/logs/browser.log`. Fix: re-run the setup script (installs Google Chrome `.deb` on amd64), or install a non-snap browser and set `CHROMIUM_BIN=` in `/etc/friendly-host.env`; then `sudo systemctl restart friendly-agent friendly-openbox friendly-tint2`.
+10. In Friendly: **Stop**, then **Start** the desktop stream.
 
 ## Architecture (brief)
 
@@ -220,7 +253,6 @@ See [`host/docs/architecture.md`](host/docs/architecture.md) for host defaults.
 | `app/` | Android app (Compose UI, settings, phone & desktop clients) |
 | `ai/` | Model/provider abstractions and tools |
 | `search/`, `speech/`, `workspace/` | Search, ASR/TTS, workspace agents |
-| `web/`, `web-ui/` | Embedded web server + bundled UI |
 | `host/` | Self-hosted Linux Control API, MCP, stream stack |
 | `docs/` | Icons, screenshots, references |
 
@@ -232,29 +264,45 @@ See [`host/docs/architecture.md`](host/docs/architecture.md) for host defaults.
 git clone --branch friendly-2.0 --recurse-submodules https://github.com/jimskin03/friendly.git
 cd friendly
 
-corepack enable
-corepack prepare pnpm@11 --activate
-cd web-ui && pnpm install --frozen-lockfile && cd ..
-
-./gradlew :app:assembleDebug
+# Nightly (full features: phone automation, overlay, cellular calls, LAN cleartext)
+./gradlew :app:assembleNightlyDebug
+# Play-safer (gates a11y phone automation, overlay, call APIs, usage-stats screen time; cleartext off)
+./gradlew :app:assemblePlayDebug
 ```
 
-Install from `app/build/outputs/apk/debug/`. Release builds need your own signing config — keep keystores, `local.properties`, and `google-services.json` out of git.
+APKs land under `app/build/outputs/apk/<nightly|play>/debug/`. For signed nightly/release builds use `scripts/build.sh` or `scripts\build.ps1` (`scripts/build.sh help`); CI, releases and signing are summarized in [AGENTS.md](AGENTS.md). Both flavors share `applicationId` `friendly.cryptgregresearch.org` — Play and sideload builds cannot both be installed with different signing under the same ID.
+
+Release builds need your own signing config (`keystore.properties`, see `keystore.properties.example`) — keep keystores, `local.properties`, and `google-services.json` out of git.
+
+### Play bundle and paid themes
+
+The **play** flavor sells the four paid themes through Google Play Billing (one non-consumable in-app product per theme, plus a bundle):
+
+| Theme | Product ID |
+|---|---|
+| Cute Minimal | `theme_cute_minimal` |
+| Cozy Night | `theme_cozy_night` |
+| Playful Doodle | `theme_playful_doodle` |
+| Glass Frost | `theme_glass_frost` |
+| All four | `theme_pack_all` |
+
+The **nightly** flavor has no Play billing and keeps the themes unlocked (`BuildConfig.UNLOCK_PAID_THEMES`).
+
+To build an upload bundle, run the **Build** workflow with `channel=release` (see AGENTS.md), or locally `scripts/build.sh release --version-code N` (`scripts\build.ps1 release -VersionCode N` on Windows).
 
 ### Tests
 
 ```bash
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testNightlyDebugUnitTest
 ./gradlew test
-./gradlew :app:connectedDebugAndroidTest   # device/emulator required
+./gradlew :app:connectedNightlyDebugAndroidTest   # device/emulator required
 ```
 
 ### Troubleshooting
 
 - **SDK not found:** set `ANDROID_HOME` / `sdk.dir` in untracked `local.properties`
 - **NDK:** install side-by-side `28.2.13676358`
-- **Web UI build:** Node 22 + Corepack pnpm 11 inside `web-ui/`
-- **Wrong Java:** `JAVA_HOME` → JDK 17
+- **Wrong Java:** `JAVA_HOME` → JDK 21 (the build targets Java 17)
 - **Computer offline:** verify Tailscale connectivity, Base URL, and Bearer token; `curl` host `/health` and `/v1/desktop/status`
 
 ---
@@ -302,6 +350,7 @@ Friendly is licensed under the [GNU Affero General Public License v3.0](LICENSE)
 
 ## Links
 
+- X Profiles: [[x.com/cryptgreg](https://x.com/cryptgreg)](https://[x.com/cryptgreg](https://x.com/cryptgreg))
 - Repository: [github.com/jimskin03/friendly](https://github.com/jimskin03/friendly)
 - Branch: [`friendly-2.0`](https://github.com/jimskin03/friendly/tree/friendly-2.0)
 - Host setup: [`host/SETUP_UBUNTU.md`](host/SETUP_UBUNTU.md)

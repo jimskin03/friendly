@@ -1,0 +1,67 @@
+﻿package app.friendly.assistant.data.repository
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import app.friendly.assistant.data.db.dao.ConversationDAO
+import app.friendly.assistant.data.db.dao.FolderDAO
+import app.friendly.assistant.data.db.entity.FolderEntity
+import app.friendly.assistant.data.model.Folder
+import java.time.Instant
+import kotlin.uuid.Uuid
+
+class FolderRepository(
+    private val folderDAO: FolderDAO,
+    private val conversationDAO: ConversationDAO,
+) {
+    fun getFoldersOfAssistant(assistantId: Uuid): Flow<List<Folder>> {
+        return folderDAO.getFoldersOfAssistant(assistantId.toString())
+            .map { list -> list.map { it.toFolder() } }
+    }
+
+    suspend fun getFolderById(id: Uuid): Folder? {
+        return folderDAO.getFolderById(id.toString())?.toFolder()
+    }
+
+    suspend fun createFolder(assistantId: Uuid, name: String, label: String = "planning"): Folder {
+        val folder = Folder(
+            assistantId = assistantId,
+            name = name,
+            label = label,
+            createAt = Instant.now(),
+        )
+        folderDAO.insert(folder.toEntity())
+        return folder
+    }
+
+    suspend fun renameFolder(id: Uuid, name: String) {
+        folderDAO.rename(id.toString(), name)
+    }
+
+    suspend fun updateFolderLabel(id: Uuid, label: String) {
+        folderDAO.updateLabel(id.toString(), label)
+    }
+
+
+    suspend fun deleteFolder(id: Uuid) {
+        conversationDAO.clearFolder(id.toString())
+        folderDAO.deleteById(id.toString())
+    }
+}
+
+private fun FolderEntity.toFolder(): Folder = Folder(
+    id = Uuid.parse(id),
+    assistantId = Uuid.parse(assistantId),
+    name = name,
+    label = label,
+    sortIndex = sortIndex,
+    createAt = Instant.ofEpochMilli(createAt),
+)
+
+private fun Folder.toEntity(): FolderEntity = FolderEntity(
+    id = id.toString(),
+    assistantId = assistantId.toString(),
+    name = name,
+    label = label,
+    sortIndex = sortIndex,
+    createAt = createAt.toEpochMilli(),
+)

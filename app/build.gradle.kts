@@ -1,6 +1,7 @@
 import com.android.build.api.dsl.Packaging
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -28,7 +29,7 @@ if (hasGoogleServices) {
 }
 
 android {
-    namespace = "me.rerere.rikkahub"
+    namespace = "app.friendly.assistant"
     compileSdk {
         version = release(37) {
             minorApiLevel = 2
@@ -36,11 +37,12 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.friendly.assistant"
+        applicationId = "friendly.cryptgregresearch.org"
         minSdk = 26
         targetSdk = 37
-        versionCode = 200
-        versionName = "2.0.0"
+        // Overridable for releases: -Pfriendly.versionCode=N -Pfriendly.versionName=X (see AGENTS.md).
+        versionCode = (project.findProperty("friendly.versionCode") as String?)?.toIntOrNull() ?: 300
+        versionName = (project.findProperty("friendly.versionName") as String?)?.takeIf { it.isNotBlank() } ?: "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -61,6 +63,23 @@ android {
         }
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("nightly") {
+            dimension = "distribution"
+            isDefault = true
+            buildConfigField("boolean", "IS_PLAY_BUILD", "false")
+            // Sideloaded nightly has no Play billing: paid themes stay usable for testing.
+            buildConfigField("boolean", "UNLOCK_PAID_THEMES", "true")
+        }
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("boolean", "IS_PLAY_BUILD", "true")
+            // Play build: paid themes unlock only through Play billing purchases.
+            buildConfigField("boolean", "UNLOCK_PAID_THEMES", "false")
+        }
+    }
+
     signingConfigs {
         create("release") {
             val localProperties = Properties()
@@ -68,16 +87,31 @@ android {
 
             if (localPropertiesFile.exists()) {
                 localProperties.load(FileInputStream(localPropertiesFile))
+            }
 
-                val storeFilePath = localProperties.getProperty("storeFile")
-                val storePasswordValue = localProperties.getProperty("storePassword")
-                val keyAliasValue = localProperties.getProperty("keyAlias")
-                val keyPasswordValue = localProperties.getProperty("keyPassword")
+            // Env first (CI and scripts/build.* set these per build), then local.properties.
+            val storeFilePath = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("storeFile")
+            val storePasswordValue = System.getenv("KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("storePassword")
+            val keyAliasValue = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("keyAlias")
+            val keyPasswordValue = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+                ?: localProperties.getProperty("keyPassword")
 
-                if (storeFilePath != null && storePasswordValue != null &&
-                    keyAliasValue != null && keyPasswordValue != null
-                ) {
-                    storeFile = file(storeFilePath)
+            if (!storeFilePath.isNullOrBlank() &&
+                !storePasswordValue.isNullOrBlank() &&
+                !keyAliasValue.isNullOrBlank() &&
+                !keyPasswordValue.isNullOrBlank()
+            ) {
+                val candidateFiles = listOf(
+                    file(storeFilePath),
+                    rootProject.file(storeFilePath),
+                    File(storeFilePath)
+                )
+                val resolvedFile = candidateFiles.firstOrNull { it.exists() && it.length() > 0 }
+                if (resolvedFile != null) {
+                    storeFile = resolvedFile
                     storePassword = storePasswordValue
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
@@ -88,7 +122,12 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning?.storeFile != null && releaseSigning.storeFile!!.exists() && releaseSigning.storeFile!!.length() > 0) {
+                signingConfig = releaseSigning
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
             optimization {
                 enable = true
             }
@@ -108,6 +147,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    lint {
+        // Pre-existing issues on friendly-2.0 (both flavors) are recorded here so
+        // PR checks fail only on new ones. Regenerate with :app:updateLintBaseline*.
+        baseline = file("lint-baseline.xml")
     }
     sourceSets {
         getByName("androidTest").assets.srcDirs("$projectDir/schemas")
@@ -144,8 +188,20 @@ composeCompiler {
 }
 
 tasks.register("buildAll") {
-    dependsOn("assembleRelease", "bundleRelease")
-    description = "Build both APK and AAB"
+    dependsOn("assembleNightlyRelease", "bundleNightlyRelease")
+    description = "Build nightly APK and AAB (full features)"
+}
+
+// Legacy CI path: softprops publish still looks under apk/release/*.apk until
+// daily-build.yml can be updated to assembleNightlyRelease (needs workflow OAuth scope).
+tasks.register<Copy>("syncNightlyReleaseApksToLegacyPath") {
+    from(layout.buildDirectory.dir("outputs/apk/nightly/release"))
+    into(layout.buildDirectory.dir("outputs/apk/release"))
+    include("*.apk")
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+tasks.matching { it.name == "assembleNightlyRelease" }.configureEach {
+    finalizedBy("syncNightlyReleaseApksToLegacyPath")
 }
 
 ksp {
@@ -211,6 +267,9 @@ dependencies {
     implementation(libs.haze.blur.material3)
     implementation(libs.haze.glass)
     implementation(libs.haze.glass.material3)
+
+    // Google Play Billing (paid themes). Merges com.android.vending.BILLING into the manifest.
+    implementation(libs.billing.ktx)
 
     // koin
     implementation(platform(libs.koin.bom))
@@ -290,8 +349,7 @@ dependencies {
     // image viewer
     implementation(libs.image.viewer)
 
-    // JLatexMath
-    // https://github.com/rikkahub/jlatexmath-android
+    // JLatexMath (LaTeX rendering)
     implementation(libs.jlatexmath)
     implementation(libs.jlatexmath.font.greek)
     implementation(libs.jlatexmath.font.cyrillic)
@@ -311,7 +369,6 @@ dependencies {
 
     // modules
     implementation(project(":ai"))
-    implementation(project(":web"))
     implementation(project(":document"))
     implementation(project(":highlight"))
     implementation(project(":search"))

@@ -13,6 +13,18 @@ sealed class ASRProviderSetting {
     val supportsServerVadVoiceMode: Boolean
         get() = this is OpenAIRealtime || this is DashScope || this is Volcengine
 
+    val hasCredentials: Boolean
+        get() = when (this) {
+            is System -> true
+            is OpenAIRealtime -> apiKey.isNotBlank()
+            is DashScope -> apiKey.isNotBlank()
+            is Volcengine -> apiKey.isNotBlank()
+            is MiMo -> apiKey.isNotBlank()
+            is Step -> apiKey.isNotBlank()
+            is Gemini -> apiKey.isNotBlank()
+            is Whisper -> apiKey.isNotBlank()
+        }
+
     abstract fun copyProvider(
         id: Uuid = this.id,
         name: String = this.name,
@@ -196,19 +208,39 @@ sealed class ASRProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("system")
+    data class System(
+        override val id: Uuid = DEFAULT_SYSTEM_ASR_ID,
+        override val name: String = "System ASR",
+        val language: String = "auto",
+    ) : ASRProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): ASRProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
+                System::class,
+                Gemini::class,
+                Whisper::class,
                 OpenAIRealtime::class,
                 DashScope::class,
                 Volcengine::class,
                 MiMo::class,
                 Step::class,
-                Gemini::class,
-                Whisper::class,
             )
         }
     }
 }
 
+val DEFAULT_SYSTEM_ASR_ID = Uuid.parse("026a01a2-c3a0-4fd5-8075-80e03bdef201")
 const val VOLCENGINE_ASR_WEBSOCKET_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"

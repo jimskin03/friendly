@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Host-side reference copy of the Friendly Android Control API client.
  *
  * Canonical implementation (source of truth):
@@ -12,7 +12,7 @@
  * Configure base URL + token in the app under Settings → Preferences → Network
  * (`desktopControlBaseUrl` / `desktopControlApiToken`), or [DesktopControlDefaults].
  */
-package me.rerere.rikkahub.data.remote
+package app.friendly.assistant.data.remote
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -26,7 +26,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
-import me.rerere.rikkahub.utils.JsonInstant
+import app.friendly.assistant.utils.JsonInstant
 
 object DesktopControlDefaults {
     /** Emulator loopback → host machine. Use Tailscale/LAN IP on a real device. */

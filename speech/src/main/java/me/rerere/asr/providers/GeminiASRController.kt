@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,6 +59,7 @@ class GeminiASRController(
     private var onTranscriptChange: ((String) -> Unit)? = null
 
     private var flushJob: Job? = null
+    private var reportErrors = true
 
     private val bufferLock = Any()
     private var currentBuffer = ByteArrayOutputStream()
@@ -75,6 +77,7 @@ class GeminiASRController(
             return
         }
 
+        reportErrors = true
         this.onTranscriptChange = onTranscriptChange
         synchronized(bufferLock) {
             currentBuffer = ByteArrayOutputStream()
@@ -93,6 +96,7 @@ class GeminiASRController(
     }
 
     override fun stop() {
+        reportErrors = false
         recorderJob?.cancel()
         releaseRecorder()
         _state.update { it.copy(status = ASRStatus.Stopping) }
@@ -101,11 +105,15 @@ class GeminiASRController(
             try {
                 flushJob?.join()
                 flushSegment()
+                _state.update { it.copy(status = ASRStatus.Idle) }
             } catch (e: Exception) {
                 Log.e(TAG, "Final flush failed", e)
-                setError(e.message ?: "Gemini ASR final flush failed")
-            } finally {
-                _state.update { it.copy(status = ASRStatus.Idle) }
+                _state.update {
+                    it.copy(
+                        status = ASRStatus.Error,
+                        errorMessage = e.message ?: "Gemini ASR final flush failed"
+                    )
+                }
             }
         }
     }
@@ -131,13 +139,11 @@ class GeminiASRController(
                 .coerceAtLeast(sampleRate / 10 * 2)
                 .coerceAtLeast(4096)
 
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 2
-            )
+            val recorder = openAudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, sampleRate, bufferSize)
+                ?: openAudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, bufferSize)
+            check(recorder != null && recorder.state == AudioRecord.STATE_INITIALIZED) {
+                "Failed to initialize AudioRecord for Gemini ASR"
+            }
             audioRecord = recorder
 
             try {
@@ -167,6 +173,8 @@ class GeminiASRController(
                         throw IllegalStateException("AudioRecord read error: $read")
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Audio recording failed", e)
                 setError(e.message ?: "Audio recording failed")
@@ -180,7 +188,11 @@ class GeminiASRController(
         if (flushJob?.isActive == true) return
         flushJob = scope.launch(Dispatchers.IO) {
             runCatching { flushSegment() }
-                .onFailure { Log.e(TAG, "Segment flush failed", it) }
+                .onFailure {
+                    if (it is CancellationException) return@onFailure
+                    Log.e(TAG, "Segment flush failed", it)
+                    setError(it.message ?: "Gemini ASR segment flush failed")
+                }
         }
     }
 
@@ -223,11 +235,16 @@ class GeminiASRController(
                 )
         )
 
+        val generationConfig = JSONObject()
+            .put("temperature", 0.0)
+            .put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
+
         val requestJson = JSONObject()
             .put("contents", contents)
-            .put("generationConfig", JSONObject().put("temperature", 0.0))
+            .put("generationConfig", generationConfig)
 
-        val url = "${provider.baseUrl.trimEnd('/')}/models/${provider.model}:generateContent"
+        val modelName = provider.model.trim().removePrefix("models/").ifBlank { "gemini-flash-latest" }
+        val url = "${provider.baseUrl.trimEnd('/')}/models/$modelName:generateContent"
         val request = Request.Builder()
             .url(url)
             .addHeader("x-goog-api-key", provider.apiKey)
@@ -247,14 +264,22 @@ class GeminiASRController(
                 val json = runCatching { JSONObject(respBody) }.getOrElse {
                     throw IOException("Gemini ASR response is not valid JSON: $respBody")
                 }
-                json.optJSONArray("candidates")
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts")
-                    ?.optJSONObject(0)
-                    ?.optString("text", "")
-                    ?.trim()
-                    ?: ""
+                val candidates = json.optJSONArray("candidates")
+                val content = candidates?.optJSONObject(0)?.optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+                val sb = StringBuilder()
+                if (parts != null) {
+                    for (i in 0 until parts.length()) {
+                        val part = parts.optJSONObject(i)
+                        if (part != null && !part.optBoolean("thought", false)) {
+                            val partText = part.optString("text")
+                            if (!partText.isNullOrBlank()) {
+                                sb.append(partText)
+                            }
+                        }
+                    }
+                }
+                sb.toString().trim()
             }
         }
 
@@ -273,11 +298,33 @@ class GeminiASRController(
     }
 
     private fun setError(message: String) {
+        if (!reportErrors) return
         _state.update {
             it.copy(
                 status = ASRStatus.Error,
                 errorMessage = message
             )
+        }
+    }
+
+    private fun openAudioRecord(source: Int, sampleRate: Int, bufferSize: Int): AudioRecord? {
+        return try {
+            val record = AudioRecord(
+                source,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize * 2
+            )
+            if (record.state == AudioRecord.STATE_INITIALIZED) {
+                record
+            } else {
+                record.release()
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "AudioRecord source $source failed to initialize", e)
+            null
         }
     }
 

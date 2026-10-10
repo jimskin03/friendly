@@ -27,12 +27,22 @@ import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.PlaybackState
 import me.rerere.tts.model.PlaybackStatus
 import me.rerere.tts.model.TTSResponse
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class AudioPlayer(context: Context) {
-    private val player = ExoPlayer.Builder(context).build()
+    private val player = ExoPlayer.Builder(context)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_VOICE_COMMUNICATION)
+                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                .build(),
+            /* handleAudioFocus = */ false
+        )
+        .build()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _playbackState = MutableStateFlow(PlaybackState())
@@ -42,7 +52,11 @@ class AudioPlayer(context: Context) {
 
     fun pause() = player.pause()
     fun resume() = player.play()
-    fun stop() = player.stop()
+    fun stop() {
+        player.stop()
+        player.clearMediaItems()
+        stopPositionUpdates()
+    }
     fun clear() = player.clearMediaItems()
     fun release() = player.release()
     fun seekBy(ms: Long) = player.seekTo(player.currentPosition + ms)

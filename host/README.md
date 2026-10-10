@@ -46,7 +46,7 @@ Copy `.env.example` → `.env` if bootstrap did not already. Set a strong `API_T
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `API_TOKEN` | (required) | Bearer token for all `/v1/*` routes |
+| `API_TOKEN` | (required) | Bearer token for all `/v1/*` routes and `/mcp`. Startup fails if it is empty or the `.env.example` placeholder |
 | `DISPLAY` | `:99` | Xvfb display |
 | `API_HOST` / `API_PORT` | `127.0.0.1` / `8787` | Bind address |
 | `SCREEN_WIDTH` / `HEIGHT` / `DEPTH` | `1280` / `720` / `24` | Xvfb geometry |
@@ -72,7 +72,7 @@ All `/v1/*` routes and `/mcp` require `Authorization: Bearer <API_TOKEN>`.
 | POST | `/v1/actions/screenshot` | `{}` | `{ image_b64, mime }` |
 | POST | `/v1/actions/click` | `{ x, y, button? }` | `{ ok, x, y, button }` |
 | POST | `/v1/actions/type` | `{ text }` | `{ ok, chars }` |
-| POST | `/v1/actions/hotkey` | `{ keys: ["ctrl","t"] }` | `{ ok, keys }` |
+| POST | `/v1/actions/hotkey` | `{ keys: ["ctrl","t"], repeat?: 1..256 }` | `{ ok, keys }` |
 | POST | `/v1/browser/open` | `{ url }` | `{ ok, url, pid }` |
 | POST | `/v1/desktop/prepare` | — | `{ ok }` (layout helper) |
 | POST | `/v1/desktop/launch` | `{ app }` | `{ ok, app }` |
