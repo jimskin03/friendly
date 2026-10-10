@@ -5,6 +5,8 @@ import app.friendly.assistant.data.ai.tools.local.LocalToolOption
 
 /**
  * Immutable compiled-edition policy. Importing Nightly settings cannot grant Play-only exclusions.
+ * Play blocks only phone automation (with its overlay/call paths) and screen time (usage stats);
+ * desktop control, JavaScript, workspace/terminal, skills and MCP stay available in both editions.
  * Actual tool/permission checks remain in each native execution path.
  */
 data class EditionCapabilities(
@@ -37,10 +39,10 @@ data class EditionCapabilities(
             overlaysAndCalls = !isPlayBuild,
             usageStats = !isPlayBuild,
             desktopViewer = true,
-            desktopExecution = !isPlayBuild,
-            javascriptExecution = !isPlayBuild,
-            workspaceExecution = !isPlayBuild,
-            mcpExecution = !isPlayBuild,
+            desktopExecution = true,
+            javascriptExecution = true,
+            workspaceExecution = true,
+            mcpExecution = true,
             githubUpdates = !isPlayBuild,
             openUiActions = true,
         )

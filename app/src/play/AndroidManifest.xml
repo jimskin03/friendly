@@ -4,12 +4,19 @@
   xmlns:tools="http://schemas.android.com/tools">
 
   <!-- Remove permissions which could be merged from Nightly-only dependencies.
-       Enforcement is also applied to the compiled native tool registry. -->
-  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
-  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:node="remove" />
-  <uses-permission android:name="android.permission.CALL_PHONE" tools:node="remove" />
-  <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" tools:node="remove" />
-  <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+       Only phone automation (overlay pill, cellular calls) and screen time use them;
+       both are blocked on Play. Desktop control, JS, workspace and MCP need none of them.
+       tools:ignore: lint flags these removal lines as if they requested the permission. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove"
+    tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware" />
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:node="remove"
+    tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware" />
+  <uses-permission android:name="android.permission.CALL_PHONE" tools:node="remove"
+    tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware" />
+  <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" tools:node="remove"
+    tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware" />
+  <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove"
+    tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware" />
 
   <application
     android:usesCleartextTraffic="false"

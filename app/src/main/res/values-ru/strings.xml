@@ -1234,4 +1234,6 @@
   <string name="chart_mode_table">Таблица</string>
   <string name="chart_series">Ряд</string>
   <string name="chart_series_name">Ряд %1$d</string>
+  <string name="setting_display_page_openui_title">Чат OpenUI (экспериментально)</string>
+  <string name="setting_display_page_openui_desc">Предпросмотр встроенного чата OpenUI. Вложения, голос и некоторые встроенные элементы управления пока недоступны в этом режиме. Выключите, чтобы вернуться к полноценному встроенному чату.</string>
 </resources>

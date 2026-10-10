@@ -8,24 +8,22 @@ import org.junit.Test
 
 class EditionCapabilitiesTest {
     @Test
-    fun playExcludesUnreviewedExecutionRoutesEvenWithImportedSettings() {
+    fun playBlocksOnlyPhoneAutomationAndScreenTimeEvenWithImportedSettings() {
         val policy = EditionCapabilities.forEdition(isPlayBuild = true)
         assertEquals("play", policy.edition)
         assertFalse(policy.phoneAutomation)
         assertFalse(policy.overlaysAndCalls)
         assertFalse(policy.usageStats)
-        assertFalse(policy.desktopExecution)
-        assertFalse(policy.javascriptExecution)
-        assertFalse(policy.workspaceExecution)
-        assertFalse(policy.mcpExecution)
+        assertTrue(policy.desktopExecution)
+        assertTrue(policy.javascriptExecution)
+        assertTrue(policy.workspaceExecution)
+        assertTrue(policy.mcpExecution)
         assertFalse(policy.githubUpdates)
-        for (option in listOf(
-            LocalToolOption.PhoneAutomation,
-            LocalToolOption.ScreenTime,
-            LocalToolOption.DesktopControl,
-            LocalToolOption.JavascriptEngine,
-        )) {
+        for (option in listOf(LocalToolOption.PhoneAutomation, LocalToolOption.ScreenTime)) {
             assertFalse("Play must reject imported $option", policy.allowsLocalTool(option))
+        }
+        for (option in listOf(LocalToolOption.DesktopControl, LocalToolOption.JavascriptEngine)) {
+            assertTrue("Play keeps $option", policy.allowsLocalTool(option))
         }
         assertTrue(policy.desktopViewer)
         assertTrue(policy.allowsLocalTool(LocalToolOption.TimeInfo))

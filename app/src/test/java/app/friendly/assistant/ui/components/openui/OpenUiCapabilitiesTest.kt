@@ -14,6 +14,12 @@ class OpenUiCapabilitiesTest {
         assertFalse(capabilities.phoneAutomation)
         assertTrue(capabilities.desktopControl)
         assertFalse(capabilities.contentReporting)
+
+        val policy = app.friendly.assistant.data.edition.EditionCapabilities.forEdition(isPlayBuild = true)
+        assertTrue("Play keeps JavaScript", policy.javascriptExecution)
+        assertTrue("Play keeps workspace/terminal and skills", policy.workspaceExecution)
+        assertTrue("Play keeps MCP", policy.mcpExecution)
+        assertFalse("Play blocks screen time", policy.usageStats)
     }
 
     @Test
