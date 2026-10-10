@@ -264,9 +264,6 @@ class ResponseAPI(
         val oauth = providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH
         if (oauth) {
             require(stream) { "ChatGPT account requests must stream Responses API output" }
-            require(params.tools.isEmpty() && params.model.tools.isEmpty()) {
-                "This ChatGPT connection does not support tools yet"
-            }
             require(messages.all { message ->
                 message.parts.all { it is UIMessagePart.Text || it is UIMessagePart.Reasoning }
             }) { "This ChatGPT connection currently supports text-only conversations" }
@@ -318,12 +315,12 @@ class ResponseAPI(
                 }
             }
 
-            // tools
-
-
+            // The default assistant always exposes local tools such as get_time_info.
+            // This ChatGPT connection accepts text Responses requests only, so those
+            // tools are left off the body instead of failing the message.
             val useFunctionTools =
-                params.model.hasToolAbility && params.tools.isNotEmpty()
-            if (useFunctionTools || params.model.tools.isNotEmpty()) {
+                !oauth && params.model.hasToolAbility && params.tools.isNotEmpty()
+            if (useFunctionTools || (!oauth && params.model.tools.isNotEmpty())) {
                 putJsonArray("tools") {
                     if (useFunctionTools) {
                         params.tools.forEach { tool ->

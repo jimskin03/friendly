@@ -14,6 +14,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.OpenAIAuthMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.OpenAIReasoningMetadata
@@ -512,6 +513,45 @@ class ResponseApiRequestMessageTest {
 
         assertEquals(1, items.size)
         assertEquals("user", items.single().jsonObject["role"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chatgpt account request omits assistant and built-in tools`() {
+        val provider = ProviderSetting.OpenAI(
+            authMode = OpenAIAuthMode.CHATGPT_OAUTH,
+            oauthAccountId = "account",
+        )
+        val params = createToolParams(
+            tools = listOf(createFunctionTool("get_time_info")),
+            builtInTools = setOf(BuiltInTools.Search),
+        )
+
+        val body = api.buildRequestBody(
+            provider,
+            listOf(UIMessage.user("Who are you?")),
+            params,
+            stream = true,
+        )
+
+        assertFalse(body.containsKey("tools"))
+        assertEquals("test-model", body["model"]?.jsonPrimitive?.content)
+        assertEquals("false", body["store"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `api key request still sends function and built-in tools`() {
+        val body = invokeBuildRequestBody(
+            ProviderSetting.OpenAI(),
+            createToolParams(
+                tools = listOf(createFunctionTool("get_time_info")),
+                builtInTools = setOf(BuiltInTools.Search),
+            ),
+        )
+        val tools = body["tools"]?.jsonArray ?: error("tools missing")
+        assertEquals(2, tools.size)
+        assertEquals("function", tools[0].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("get_time_info", tools[0].jsonObject["name"]?.jsonPrimitive?.content)
+        assertEquals("web_search", tools[1].jsonObject["type"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================
