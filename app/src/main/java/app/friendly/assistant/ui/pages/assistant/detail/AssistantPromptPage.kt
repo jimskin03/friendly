@@ -80,7 +80,7 @@ import app.friendly.assistant.data.model.AssistantAffectScope
 import app.friendly.assistant.data.model.AssistantRegex
 import app.friendly.assistant.data.model.Conversation
 import app.friendly.assistant.data.model.toMessageNode
-import app.friendly.assistant.ui.components.message.ChatMessage
+import app.friendly.assistant.ui.components.richtext.MarkdownBlock
 import app.friendly.assistant.ui.components.nav.BackButton
 import app.friendly.assistant.ui.components.ui.FormItem
 import app.friendly.assistant.ui.components.ui.ItemAction
@@ -386,16 +386,21 @@ private fun AssistantPromptContent(
                 preview.onSuccess {
                     ChatFontProvider(displaySetting = settings.displaySetting) {
                         it.fastForEach { message ->
-                            ChatMessage(
-                                node = message.toMessageNode(),
-                                onFork = {},
-                                onRegenerate = {},
-                                onEdit = {},
-                                onShare = {},
-                                onDelete = {},
-                                onUpdate = {},
-                                lastMessage = false,
-                            )
+                            // Static preview; the interactive transcript lives in the web chat.
+                            androidx.compose.material3.Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                color = if (message.role == me.rerere.ai.core.MessageRole.USER) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            ) {
+                                MarkdownBlock(
+                                    content = message.toText().substringAfter("]: "),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                )
+                            }
                         }
                     }
                 }
