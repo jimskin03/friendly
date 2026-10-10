@@ -1,16 +1,14 @@
 package app.friendly.assistant.data.ai.transformers
 
-import app.friendly.assistant.data.datastore.ChatUiMode
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 
-/** Only installed on the chat generation path, not title/suggestion/background tasks. */
+/** The web chat is the only chat UI, so every chat generation gets the OpenUI prompt. Only installed on the chat generation path, not title/suggestion/background tasks. */
 class OpenUiPromptTransformer : InputMessageTransformer {
     private var prompt: String? = null
 
     override suspend fun transform(ctx: TransformerContext, messages: List<UIMessage>): List<UIMessage> {
-        if (ctx.settings.displaySetting.chatUiMode != ChatUiMode.OPEN_UI) return messages
         val presentation = prompt ?: ctx.context.assets.open("openui/system-prompt.txt")
             .bufferedReader().use { it.readText() }.also { prompt = it }
         return appendOpenUiPrompt(messages, presentation)

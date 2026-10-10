@@ -849,7 +849,8 @@ data class DisplaySetting(
     val chatCustomFontPath: String = "",
     val chatCustomFontName: String = "",
     // Preserve the full native chat until the experimental renderer reaches feature parity.
-    val chatUiMode: ChatUiMode = ChatUiMode.NATIVE,
+    // Unused: the web chat is the only chat UI. Kept so stored settings still decode.
+    val chatUiMode: ChatUiMode = ChatUiMode.OPEN_UI,
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
     /** Show ongoing notification (+ optional overlay bubble) while Phone Automation is active and Friendly is backgrounded. Default ON. */

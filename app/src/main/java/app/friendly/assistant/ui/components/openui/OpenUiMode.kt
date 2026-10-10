@@ -1,11 +1,9 @@
 package app.friendly.assistant.ui.components.openui
 
-import app.friendly.assistant.data.datastore.ChatUiMode
-
 /**
- * OpenUI draws the transcript. An empty conversation stays on the native main
- * page (home, wallpaper, and input bar).
+ * The web chat is the only transcript UI. Only an empty, non-folder conversation shows
+ * the native home page (dashboard, folders and the home composer).
  */
-internal fun shouldPresentOpenUi(mode: ChatUiMode, messageCount: Int): Boolean {
-    return mode == ChatUiMode.OPEN_UI && messageCount > 0
+internal fun shouldPresentOpenUi(messageCount: Int, isFolderChat: Boolean): Boolean {
+    return messageCount > 0 || isFolderChat
 }

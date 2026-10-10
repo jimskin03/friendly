@@ -436,6 +436,7 @@
     <string name="confirm">Confirm</string>
   <string name="confirm_delete">Confirm Delete</string>
   <string name="copied">Copied</string>
+  <string name="openui_renderer_failed">The chat view could not load. Please restart Friendly.</string>
   <string name="copy">Copy</string>
   <string name="copy_all">Copy All</string>
   <string name="create_fork">Create a fork</string>
