@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -104,6 +104,7 @@ def health(settings: Settings = Depends(get_settings)) -> dict:
             "server_name": "friendly-desktop",
         },
         "display": info,
+        "browser": browser.browser_status(settings),
     }
 
 
@@ -203,7 +204,7 @@ def browser_open(
     except DesktopError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
-            if e.code in ("no_display", "missing_tool", "browser_launch")
+            if e.code in ("viewer_unreachable", "no_display", "missing_tool", "browser_launch")
             else status.HTTP_400_BAD_REQUEST,
             detail={"error": e.code, "message": e.message},
         ) from e
@@ -221,7 +222,7 @@ def desktop_launch(
     except DesktopError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
-            if e.code in ("no_display", "missing_tool")
+            if e.code in ("viewer_unreachable", "no_display", "missing_tool")
             else status.HTTP_400_BAD_REQUEST,
             detail={"error": e.code, "message": e.message},
         ) from e
@@ -239,7 +240,7 @@ def desktop_prepare(
     except DesktopError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
-            if e.code in ("no_display", "missing_tool")
+            if e.code in ("viewer_unreachable", "no_display", "missing_tool")
             else status.HTTP_400_BAD_REQUEST,
             detail={"error": e.code, "message": e.message},
         ) from e
@@ -257,7 +258,7 @@ def desktop_close(
     except DesktopError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
-            if e.code in ("no_display", "missing_tool")
+            if e.code in ("viewer_unreachable", "no_display", "missing_tool")
             else status.HTTP_400_BAD_REQUEST,
             detail={"error": e.code, "message": e.message},
         ) from e
@@ -276,7 +277,7 @@ def desktop_kill(
     except DesktopError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
-            if e.code in ("no_display", "missing_tool")
+            if e.code in ("viewer_unreachable", "no_display", "missing_tool")
             else status.HTTP_400_BAD_REQUEST,
             detail={"error": e.code, "message": e.message},
         ) from e
@@ -288,13 +289,16 @@ def desktop_kill(
 
 @app.post("/v1/stream/start")
 def stream_start(
+    request: Request,
     body: StreamStartBody | None = None,
     _: None = Depends(require_bearer),
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
     mode = body.mode if body else "view"
     try:
-        data = stream.stream_manager.start(settings, mode=mode)
+        client = (request.client.host if request.client else "") or ""
+        remote = client not in ("127.0.0.1", "::1", "localhost")
+        data = stream.stream_manager.start(settings, mode=mode, remote_client=remote)
     except StreamNotImplemented as e:
         return JSONResponse(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -305,7 +309,7 @@ def stream_start(
             status.HTTP_409_CONFLICT
             if e.code == "already_active"
             else status.HTTP_503_SERVICE_UNAVAILABLE
-            if e.code in ("no_display", "missing_tool", "missing_novnc", "vnc_start_failed", "novnc_start_failed")
+            if e.code in ("viewer_unreachable", "no_display", "missing_tool", "missing_novnc", "vnc_start_failed", "novnc_start_failed")
             else status.HTTP_400_BAD_REQUEST
         )
         return JSONResponse(

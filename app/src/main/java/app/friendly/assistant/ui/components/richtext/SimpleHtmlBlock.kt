@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +16,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,19 +53,22 @@ fun SimpleHtmlBlock(
     }
 
     val uriHandler = LocalUriHandler.current
+    val layoutStyles = remember(html) { layoutStylesFromHtml(html) }
 
-    Column(modifier = modifier) {
-        document.body().childNodes().forEach { node ->
-            RenderNode(
-                node = node,
-                onLinkClick = { url ->
-                    try {
-                        uriHandler.openUri(url)
-                    } catch (e: Exception) {
-                        // Handle link click error silently
+    CompositionLocalProvider(LocalRichHtmlStyles provides layoutStyles) {
+        Column(modifier = modifier) {
+            document.body().childNodes().forEach { node ->
+                RenderNode(
+                    node = node,
+                    onLinkClick = { url ->
+                        try {
+                            uriHandler.openUri(url)
+                        } catch (e: Exception) {
+                            // Handle link click error silently
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }
@@ -88,7 +91,18 @@ private fun RenderNode(
         }
 
         is Element -> {
-            when (node.tagName().lowercase()) {
+            val tag = node.tagName().lowercase()
+            if (tag == "style" || tag == "script") return
+            val layoutStyles = LocalRichHtmlStyles.current
+            if (elementNeedsRichHtml(node, layoutStyles)) {
+                RichHtmlBlock(
+                    html = node.outerHtml(),
+                    extraStyles = layoutStyles,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                return
+            }
+            when (tag) {
                 "p" -> {
                     val annotatedString = buildAnnotatedStringFromElement(node, onLinkClick)
                     if (annotatedString.text.isNotBlank()) {
@@ -290,21 +304,22 @@ private fun RenderImage(
 ) {
     val src = imgElement.attr("src")
     val alt = imgElement.attr("alt")
-    if (src.isNotEmpty()) {
+    if (src.isNotEmpty() || alt.isNotEmpty()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
-            ZoomableAsyncImage(
-                model = src,
+            MarkdownImage(
+                src = src,
                 contentDescription = alt.takeIf { it.isNotEmpty() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 400.dp)
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Fit,
+                minHeight = 0.dp,
+                maxHeight = 400.dp,
             )
         }
     }

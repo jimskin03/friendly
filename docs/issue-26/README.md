@@ -16,4 +16,4 @@ Activity expands during generation and folds when generation finishes or stops. 
 
 No automated tests were added or run for this change. A device run has not been performed.
 
-Per AGENTS.md, Greg must approve these UI previews before the change reaches `friendly-2.0`.
+Greg approved these UI previews on 2026-10-10, satisfying the AGENTS.md gate for merging into `friendly-2.0`.
