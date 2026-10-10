@@ -57,6 +57,7 @@ import app.friendly.assistant.data.ai.transformers.RegexOutputTransformer
 import app.friendly.assistant.data.ai.transformers.TemplateTransformer
 import app.friendly.assistant.data.ai.transformers.ThinkTagTransformer
 import app.friendly.assistant.data.ai.transformers.TimeReminderTransformer
+import app.friendly.assistant.data.ai.transformers.OpenUiPromptTransformer
 import app.friendly.assistant.data.ai.transformers.WorkspaceReminderTransformer
 import app.friendly.assistant.data.event.AppEvent
 import app.friendly.assistant.data.event.AppEventBus
@@ -181,6 +182,7 @@ class ChatService(
     private val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager,
 ) {
 
+    private val openUiPromptTransformer = OpenUiPromptTransformer()
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
     private val sessionManager = ConversationSessionManager(
@@ -720,6 +722,7 @@ class ChatService(
                     addAll(inputTransformers)
                     add(templateTransformer)
                     add(workspaceReminderTransformer)
+                    add(openUiPromptTransformer)
                 },
                 outputTransformers = outputTransformers,
                 tools = tools,
