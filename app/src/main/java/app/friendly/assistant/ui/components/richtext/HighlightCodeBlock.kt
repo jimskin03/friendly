@@ -107,8 +107,11 @@ fun HighlightCodeBlock(
     val settings = LocalSettings.current
     val normalizedLanguage = remember(language) { language.lowercase() }
     val canInlinePreview = completeCodeBlock && normalizedLanguage in PREVIEWABLE_LANGUAGES
+    val layoutHtml = remember(code, canInlinePreview) {
+        canInlinePreview && shouldAutoPreviewHtml(code)
+    }
     var previewMode by remember(canInlinePreview, code, normalizedLanguage) {
-        mutableStateOf(false)
+        mutableStateOf(layoutHtml)
     }
 
     var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
@@ -164,6 +167,12 @@ fun HighlightCodeBlock(
             modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
             when {
+                canInlinePreview && previewMode && layoutHtml -> {
+                    RichHtmlBlock(
+                        html = code,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 canInlinePreview && previewMode -> {
                     CodeBlockPreview(
                         code = code,

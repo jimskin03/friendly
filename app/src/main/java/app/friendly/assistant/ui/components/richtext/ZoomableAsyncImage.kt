@@ -1,6 +1,12 @@
 ﻿package app.friendly.assistant.ui.components.richtext
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,6 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.DefaultAlpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
@@ -23,6 +33,72 @@ import app.friendly.assistant.ui.modifier.shimmer
 import app.friendly.assistant.ui.theme.LocalDarkMode
 
 @Composable
+fun MarkdownImage(
+    src: String,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit,
+    minHeight: Dp = 120.dp,
+    maxHeight: Dp = Dp.Unspecified,
+) {
+    var failed by remember(src) { mutableStateOf(src.isBlank()) }
+    if (failed) {
+        BrokenMarkdownImage(
+            src = src,
+            contentDescription = contentDescription,
+            modifier = modifier,
+        )
+        return
+    }
+    var imageModifier = modifier
+    if (minHeight > 0.dp) imageModifier = imageModifier.heightIn(min = minHeight)
+    if (maxHeight != Dp.Unspecified) imageModifier = imageModifier.heightIn(max = maxHeight)
+    ZoomableAsyncImage(
+        model = src,
+        contentDescription = contentDescription,
+        modifier = imageModifier,
+        contentScale = contentScale,
+        onError = { failed = true },
+    )
+}
+
+@Composable
+private fun BrokenMarkdownImage(
+    src: String,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
+    val alt = contentDescription?.trim().orEmpty()
+    val url = src.trim()
+    if (alt.isEmpty() && url.isEmpty()) return
+    val uriHandler = LocalUriHandler.current
+    Column(
+        modifier = modifier.padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (alt.isNotEmpty()) {
+            Text(
+                text = alt,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (url.isNotEmpty() && url != alt) {
+            Text(
+                text = url,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable {
+                    runCatching { uriHandler.openUri(url) }
+                },
+            )
+        }
+    }
+}
+
+@Composable
 fun ZoomableAsyncImage(
     model: String?,
     contentDescription: String?,
@@ -30,6 +106,7 @@ fun ZoomableAsyncImage(
     alignment: Alignment = Alignment.Center,
     contentScale: ContentScale = ContentScale.Fit,
     alpha: Float = DefaultAlpha,
+    onError: () -> Unit = {},
 ) {
     var showImageViewer by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -61,6 +138,7 @@ fun ZoomableAsyncImage(
         },
         onError = {
             loading = false
+            onError()
         },
     )
     if (showImageViewer) {
