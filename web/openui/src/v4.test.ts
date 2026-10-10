@@ -49,3 +49,10 @@ describe("ordered blocks", () => {
     expect(orderedBlocks({ id: "m", role: "assistant", text: "x", reasoning: "r" }).map(b => b.kind)).toEqual(["reasoning", "text"]);
   });
 });
+
+import { plainText } from "./Outline";
+describe("plainText", () => {
+  it("strips markdown", () => {
+    expect(plainText("Here's **Mochi**\n\n| a | b |\n|---|---|\n| 1 | 2 |\n```js\nx\n```")).toBe("Here's Mochi a b 1 2");
+  });
+});

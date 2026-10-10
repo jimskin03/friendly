@@ -1,10 +1,21 @@
 import { useMemo, useState } from "react";
 import type { FriendlyMessage } from "./types";
 
+/** Markdown → plain one-line text for previews. */
+export function plainText(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s*\|?[-:| ]+\|[-:| ]*$/gm, " ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`#>|~]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function outlineEntries(messages: FriendlyMessage[], query: string) {
   const q = query.trim().toLowerCase();
   return messages
-    .map((m, index) => ({ id: m.id, role: m.role, index, text: m.text.replace(/\s+/g, " ").trim() }))
+    .map((m, index) => ({ id: m.id, role: m.role, index, text: plainText(m.text) }))
     .filter(e => (e.role === "user" || e.role === "assistant") && (e.text || !q))
     .filter(e => !q || e.text.toLowerCase().includes(q))
     .map(e => {

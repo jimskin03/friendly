@@ -376,3 +376,12 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 3px rgb(229 72 77 / 25%); }
 .app { --diff-add-bg: #e3f4e6; --diff-add-text: #1d6b34; --diff-del-bg: #fbe5e3; --diff-del-text: #a3261c; }
 .app.dark { --diff-add-bg: #17331f; --diff-add-text: #8fdca2; --diff-del-bg: #3a1a17; --diff-del-text: #ffb4ab; }
+.file-icon, .picker-check { color: color-mix(in srgb, var(--accent) 62%, var(--text)); }
+.dl > span { opacity: 1; }
+.live-banner .text-btn { color: var(--text); text-decoration: underline; }
+.tool-card .tool-name { font-family: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-preview { padding: 4px 12px 8px; }
+.tool-raw { padding: 0 12px 6px; }
+.model-chip { max-width: 108px; flex: none; }
+.model-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-tools > * { flex: none; }
