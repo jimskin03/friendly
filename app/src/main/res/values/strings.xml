@@ -436,6 +436,7 @@
     <string name="confirm">Confirm</string>
   <string name="confirm_delete">Confirm Delete</string>
   <string name="copied">Copied</string>
+  <string name="openui_renderer_failed">The chat view could not load. Please restart Friendly.</string>
   <string name="copy">Copy</string>
   <string name="copy_all">Copy All</string>
   <string name="create_fork">Create a fork</string>
@@ -1494,4 +1495,5 @@
   <string name="home_action_no_apps">Install an app from the home screen before choosing Launch app.</string>
   <string name="setting_display_page_openui_title">OpenUI chat (experimental)</string>
   <string name="setting_display_page_openui_desc">Preview the embedded OpenUI chat. Attachments, voice and some native controls are not yet available in this preview. Turn this off to return to the full native chat.</string>
+  <string name="chat_outline">Outline</string>
 </resources>

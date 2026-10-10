@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book02
+import me.rerere.hugeicons.stroke.Tools
+import androidx.compose.material3.LocalContentColor
 import me.rerere.hugeicons.stroke.Book04
 import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.File02
@@ -82,7 +84,6 @@ import app.friendly.assistant.data.datastore.findModelById
 import app.friendly.assistant.data.model.Conversation
 import app.friendly.assistant.ui.components.message.MessagePartBlock
 import app.friendly.assistant.ui.components.message.ThinkingStep
-import app.friendly.assistant.ui.components.message.ChatMessageServerToolStep
 import app.friendly.assistant.ui.components.message.groupMessageParts
 import app.friendly.assistant.ui.components.richtext.MarkdownBlock
 import app.friendly.assistant.ui.components.ui.AutoAIIcon
@@ -582,7 +583,7 @@ private fun ExportedChatMessage(
                                     }
 
                                     is ThinkingStep.ServerToolStep -> {
-                                        ChatMessageServerToolStep(tool = step.tool)
+                                        ExportedServerToolStep(tool = step.tool)
                                     }
                                 }
                             }
@@ -798,5 +799,28 @@ private fun shareFile(context: Context, uri: Uri, mimeType: String) {
             intent,
             context.getString(R.string.chat_page_export_share_via)
         )
+    )
+}
+
+@Composable
+private fun ChainOfThoughtScope.ExportedServerToolStep(tool: UIMessagePart.ServerTool) {
+    ChainOfThoughtStep(
+        icon = {
+            Icon(
+                imageVector = HugeIcons.Tools,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = LocalContentColor.current.copy(alpha = 0.7f),
+            )
+        },
+        label = {
+            Text(
+                text = stringResource(R.string.chat_message_tool_call_generic, tool.toolName),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
     )
 }

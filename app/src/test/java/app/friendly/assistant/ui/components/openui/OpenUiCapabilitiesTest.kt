@@ -32,9 +32,9 @@ class OpenUiCapabilitiesTest {
     }
 
     @Test
-    fun openUiLeavesTheEmptyMainPageNative() {
-        assertFalse(shouldPresentOpenUi(app.friendly.assistant.data.datastore.ChatUiMode.OPEN_UI, 0))
-        assertFalse(shouldPresentOpenUi(app.friendly.assistant.data.datastore.ChatUiMode.NATIVE, 3))
-        assertTrue(shouldPresentOpenUi(app.friendly.assistant.data.datastore.ChatUiMode.OPEN_UI, 1))
+    fun webChatIsTheOnlyTranscriptUi() {
+        assertFalse(shouldPresentOpenUi(messageCount = 0, isFolderChat = false))
+        assertTrue(shouldPresentOpenUi(messageCount = 0, isFolderChat = true))
+        assertTrue(shouldPresentOpenUi(messageCount = 3, isFolderChat = false))
     }
 }

@@ -102,7 +102,6 @@ import app.friendly.assistant.ui.components.ui.CreateFolderDialog
 import app.friendly.assistant.ui.components.ui.FolderBadge
 import app.friendly.assistant.ui.components.ui.MoveToFolderSheet
 import app.friendly.assistant.data.datastore.PhoneAutomationWindowMode
-import app.friendly.assistant.data.datastore.ChatUiMode
 import app.friendly.assistant.data.datastore.Settings
 import app.friendly.assistant.data.datastore.findProvider
 import app.friendly.assistant.data.datastore.getCurrentAssistant
@@ -126,6 +125,22 @@ import app.friendly.assistant.ui.components.ai.SearchMode
 import app.friendly.assistant.ui.components.ai.completion.WorkspaceCompletionProvider
 import app.friendly.assistant.ui.components.ai.rememberChatAttachmentPickerActions
 import app.friendly.assistant.ui.components.openui.OpenUiChat
+import app.friendly.assistant.ui.components.openui.OpenUiThumbnails
+import app.friendly.assistant.ui.components.openui.toBridgeAttachment
+import app.friendly.assistant.ui.components.openui.buildOpenUiPickers
+import app.friendly.assistant.service.ChatErrorSolution
+import me.rerere.ai.core.ReasoningLevel
+import androidx.compose.runtime.mutableIntStateOf
+import me.rerere.ai.ui.UIMessage
+import app.friendly.assistant.utils.extractQuotedContentAsText
+import app.friendly.assistant.utils.removeBracketedContent
+import app.friendly.assistant.ui.components.openui.OpenUiChatAction
+import app.friendly.assistant.ui.components.openui.OpenUiAttachment
+import app.friendly.assistant.ui.components.openui.OpenUiChatState
+import app.friendly.assistant.ui.components.openui.OpenUiError
+import app.friendly.assistant.ui.components.openui.OpenUiQueued
+import app.friendly.assistant.ui.context.LocalTTSState
+import me.rerere.ai.provider.ModelType
 import app.friendly.assistant.ui.components.openui.shouldPresentOpenUi
 import app.friendly.assistant.ui.context.LocalNavController
 import app.friendly.assistant.ui.context.LocalToaster
@@ -140,6 +155,8 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
+
+private const val MAX_QUEUED_PREVIEW = 2000
 
 @Composable
 fun ChatPage(
@@ -233,20 +250,12 @@ fun ChatPage(
         }
     }
 
-    val chatListState = rememberLazyListState()
-    LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (!vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
-            if (nodeId != null) {
-                val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
-                if (index >= 0) {
-                    chatListState.scrollToItem(index)
-                }
-            } else {
-                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-            }
-            vm.chatListInitialized = true
-        }
+    // Search/notification deep links focus a message in the web chat.
+    val focusMessageId = remember(nodeId, conversation.messageNodes.size) {
+        nodeId?.let { id -> conversation.messageNodes.firstOrNull { it.id == id }?.currentMessage?.id?.toString() }
     }
+    // Share intents, shortcuts and voice launches go straight to the web chat.
+    val openedWithInput = text != null || files.isNotEmpty() || autoStartVoice
 
     val handleBack: () -> Unit = {
         if (navController.canPop) {
@@ -274,7 +283,8 @@ fun ChatPage(
         folderLabelId = folderLabelId,
         navController = navController,
         vm = vm,
-        chatListState = chatListState,
+        focusMessageId = focusMessageId,
+        openedWithInput = openedWithInput,
         enableWebSearch = enableWebSearch,
         currentChatModel = currentChatModel,
         bigScreen = isBigScreen,
@@ -301,7 +311,8 @@ private fun ChatPageContent(
     folderLabelId: String? = null,
     navController: Navigator,
     vm: ChatVM,
-    chatListState: LazyListState,
+    focusMessageId: String?,
+    openedWithInput: Boolean,
     enableWebSearch: Boolean,
     currentChatModel: Model?,
     errors: List<ChatError>,
@@ -319,7 +330,8 @@ private fun ChatPageContent(
     var showPhoneMiniOverlayDialog by remember { mutableStateOf(false) }
     var pendingPhoneMiniActivate by remember { mutableStateOf(false) }
     val phoneMiniIndicator: PhoneAutomationMiniIndicatorManager = koinInject()
-    var previewMode by rememberSaveable { mutableStateOf(false) }
+    var exportMessages by remember { mutableStateOf<List<UIMessage>?>(null) }
+    var outlineRequest by remember { mutableIntStateOf(0) }
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
     val attachmentPickerActions = rememberChatAttachmentPickerActions(
@@ -470,15 +482,247 @@ private fun ChatPageContent(
         )
     }
 
+    fun updateAssistant(updated: app.friendly.assistant.data.model.Assistant) {
+        vm.updateSettings(setting.copy(assistants = setting.assistants.map { if (it.id == updated.id) updated else it }))
+    }
+
+    fun applySearchMode(mode: SearchMode) {
+                            val current = setting.getCurrentAssistant()
+                            val model = setting.getCurrentChatModel()
+                            vm.updateSettings(
+                                setting.copy(
+                                    assistants = setting.assistants.map { assistant ->
+                                        if (assistant.id == current.id) {
+                                            assistant.copy(enableWebSearch = mode == SearchMode.LOCAL)
+                                        } else {
+                                            assistant
+                                        }
+                                    },
+                                    providers = if (model == null) {
+                                        setting.providers
+                                    } else {
+                                        setting.providers.map { provider ->
+                                            provider.editModel(
+                                                model.copy(
+                                                    tools = if (mode == SearchMode.BUILT_IN) {
+                                                        model.tools + BuiltInTools.Search
+                                                    } else {
+                                                        model.tools - BuiltInTools.Search
+                                                    }
+                                                )
+                                            )
+                                        }
+                                    },
+                                )
+                            )
+    }
+
+    fun snapDesktopToChat() {
+        val token = setting.networkSetting.desktopControlApiToken
+        if (token.isNotBlank()) {
+            scope.launch {
+                try {
+                    val baseUrl = setting.networkSetting.desktopControlBaseUrl.ifBlank { DesktopControlDefaults.BASE_URL }
+                    val client = DesktopControlClient(httpClient, baseUrl, token)
+                    val res = client.screenshot()
+                    val bytes = android.util.Base64.decode(res.image_b64, android.util.Base64.DEFAULT)
+                    val filesManager: FilesManager = org.koin.java.KoinJavaComponent.getKoin().get()
+                    val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
+                    if (uris.isNotEmpty()) {
+                        inputState.addImages(uris)
+                        toaster.show("Screenshot attached to chat", ToastType.Success)
+                    }
+                } catch (e: Exception) {
+                    toaster.show(e.message ?: "Failed to snap desktop", ToastType.Error)
+                }
+            }
+        }
+    }
+
+    fun stopDesktopStream() {
+        val token = setting.networkSetting.desktopControlApiToken
+        if (token.isNotBlank()) {
+            scope.launch {
+                try {
+                    val baseUrl = setting.networkSetting.desktopControlBaseUrl.ifBlank { DesktopControlDefaults.BASE_URL }
+                    val client = DesktopControlClient(httpClient, baseUrl, token)
+                    client.stopStream()
+                    desktopStreamUrl = null
+                    toaster.show("Desktop stream stopped", ToastType.Info)
+                } catch (e: Exception) {
+                    toaster.show(e.message ?: "Failed to stop desktop stream", ToastType.Error)
+                }
+            }
+        } else {
+            desktopStreamUrl = null
+        }
+    }
+
+    val copiedText = stringResource(R.string.copied)
+    val rendererFailedText = stringResource(R.string.openui_renderer_failed)
+    val tts = LocalTTSState.current
+    val ttsSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
+    val ttsAvailable by tts.isAvailable.collectAsStateWithLifecycle()
+    var ttsMessageId by remember { mutableStateOf<String?>(null) }
+    val pageVoiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+    val pageMessageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+    val openUiState = OpenUiChatState(
+        editingMessageId = inputState.editingMessage?.toString(),
+        pendingAttachments = inputState.messageContent.mapNotNull { it.toBridgeAttachment(OpenUiThumbnails::sizeOf) },
+        voice = pageVoiceState.phase.name.lowercase(),
+        voiceTranscript = pageVoiceState.transcript.takeLast(500),
+        ttsSpeakingMessageId = ttsMessageId.takeIf { ttsSpeaking },
+        ttsAvailable = ttsAvailable,
+        modelName = currentChatModel?.displayName,
+        assistantName = assistant.name.ifBlank { null },
+        showStats = setting.displaySetting.showTokenUsage,
+        queue = pageMessageQueue.messages.map { queued ->
+            OpenUiQueued(queued.id.toString(), queued.parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }.take(MAX_QUEUED_PREVIEW), queued.isEditing)
+        },
+        errors = errors.filter { it.conversationId == null || it.conversationId == conversation.id }.map { error ->
+            OpenUiError(
+                error.id.toString(),
+                error.title.orEmpty(),
+                (error.error.message ?: error.error.javaClass.simpleName).take(500),
+                solution = when (error.solution) {
+                    ChatErrorSolution.CheckFastModelSettings -> "fastModelSettings"
+                    null -> null
+                },
+                retryable = error.retryable,
+            )
+        },
+        desktopAvailable = true,
+        phoneAvailable = !BuildConfig.IS_PLAY_BUILD,
+        desktopStreaming = desktopStreamUrl != null,
+        folderName = if (isFolderChat) (activeFolderName ?: "Folder") else null,
+        focusMessageId = focusMessageId,
+        pickers = buildOpenUiPickers(setting, assistant, currentChatModel, enableWebSearch),
+        outlineRequest = outlineRequest,
+    )
+
+    fun handleOpenUiAction(action: OpenUiChatAction) {
+        when (action) {
+            is OpenUiChatAction.Send -> {
+                if (currentChatModel == null) {
+                    toaster.show("Please select a model first", type = ToastType.Error)
+                    return
+                }
+                // The canonical input keeps attachments; the web composer only owns the text.
+                inputState.setMessageText(action.text)
+                val editingId = inputState.editingMessage
+                if (editingId != null) {
+                    vm.handleMessageEdit(parts = inputState.getContents(), messageId = editingId)
+                } else {
+                    vm.handleMessageSend(inputState.getContents(), answer = action.answer)
+                }
+                inputState.clearInput()
+            }
+            OpenUiChatAction.Stop -> vm.stopGeneration()
+            is OpenUiChatAction.Suggestion -> if (currentChatModel == null) {
+                toaster.show("Please select a model first", type = ToastType.Error)
+            } else {
+                vm.handleMessageSend(listOf(UIMessagePart.Text(action.text)))
+            }
+            is OpenUiChatAction.Draft -> inputState.setMessageText(action.text)
+            is OpenUiChatAction.Regenerate -> vm.regenerateAtMessage(action.message)
+            is OpenUiChatAction.BeginEdit -> {
+                inputState.editingMessage = action.message.id
+                inputState.setContents(action.message.parts)
+            }
+            OpenUiChatAction.CancelEdit -> inputState.clearInput()
+            is OpenUiChatAction.CopyMessage -> {
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("message", action.message.toText()))
+                toaster.show(copiedText, type = ToastType.Success)
+            }
+            is OpenUiChatAction.CopyText -> Unit // handled inside OpenUiChat
+            is OpenUiChatAction.Speak -> {
+                var text = action.message.toText()
+                if (setting.displaySetting.ttsOnlyReadQuoted) text = text.extractQuotedContentAsText() ?: text
+                if (setting.displaySetting.ttsOnlyReadOutsideBrackets) text = text.removeBracketedContent() ?: text
+                ttsMessageId = action.message.id.toString()
+                tts.speak(text)
+            }
+            OpenUiChatAction.StopSpeaking -> tts.stop()
+            is OpenUiChatAction.SelectBranch -> {
+                val node = conversation.messageNodes.getOrNull(action.nodeIndex) ?: return
+                vm.updateConversation(
+                    conversation.copy(messageNodes = conversation.messageNodes.map {
+                        if (it.id == node.id) node.copy(selectIndex = action.branchIndex) else it
+                    })
+                )
+                vm.saveConversationAsync()
+            }
+            is OpenUiChatAction.Delete -> vm.deleteMessage(action.message)
+            is OpenUiChatAction.Fork -> scope.launch {
+                val fork = vm.forkMessage(message = action.message)
+                navigateToChatPage(navController, chatId = fork.id)
+            }
+            is OpenUiChatAction.Share -> exportMessages = listOf(action.message)
+            is OpenUiChatAction.ToggleFavorite -> conversation.messageNodes.getOrNull(action.nodeIndex)?.let(vm::toggleMessageFavorite)
+            is OpenUiChatAction.ToolApproval -> vm.handleToolApproval(action.toolCallId, action.approved, action.reason)
+            is OpenUiChatAction.ToolAnswer -> vm.handleToolAnswer(action.toolCallId, action.answer)
+            OpenUiChatAction.OpenAttachments -> showFilesSheet = true
+            is OpenUiChatAction.RemoveAttachment -> inputState.messageContent.getOrNull(action.index)?.let { part ->
+                inputState.messageContent = inputState.messageContent - part
+            }
+            OpenUiChatAction.StartVoice -> onStartVoiceMode()
+            OpenUiChatAction.StopVoice -> vm.voiceSession.stop()
+            OpenUiChatAction.InterruptVoice -> vm.voiceSession.interrupt()
+            OpenUiChatAction.OpenModelPicker -> Unit // the web composer has its own model picker
+            OpenUiChatAction.OpenDesktop -> showDesktopSheet = true
+            OpenUiChatAction.OpenPhone -> if (!BuildConfig.IS_PLAY_BUILD) showPhoneAutomationSheet = true
+            OpenUiChatAction.ExportConversation -> exportMessages = conversation.currentMessages
+            is OpenUiChatAction.DismissError -> runCatching { Uuid.parse(action.id) }.getOrNull()?.let(onDismissError)
+            OpenUiChatAction.ClearErrors -> onClearAllErrors()
+            is OpenUiChatAction.RemoveQueued -> runCatching { Uuid.parse(action.id) }.getOrNull()?.let(vm::removeQueuedMessage)
+            OpenUiChatAction.ResumeQueue -> vm.resumeMessageQueue()
+            is OpenUiChatAction.OpenLink -> Unit // handled inside OpenUiChat
+            is OpenUiChatAction.SelectAssistant -> setting.assistants.firstOrNull { it.id.toString() == action.id }?.let {
+                vm.updateSettings(setting.copy(assistantId = it.id))
+            }
+            is OpenUiChatAction.SelectModel -> setting.providers.asSequence().flatMap { it.models.asSequence() }
+                .firstOrNull { it.id.toString() == action.id && it.type == ModelType.CHAT }
+                ?.let { vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it) }
+            is OpenUiChatAction.SetReasoning -> ReasoningLevel.entries.firstOrNull { it.name.equals(action.level, ignoreCase = true) }?.let { level ->
+                updateAssistant(assistant.copy(reasoningLevel = level))
+            }
+            is OpenUiChatAction.SetMcp -> setting.mcpServers.firstOrNull { it.id.toString() == action.id }?.let { server ->
+                updateAssistant(assistant.copy(mcpServers = if (action.enabled) assistant.mcpServers + server.id else assistant.mcpServers - server.id))
+            }
+            is OpenUiChatAction.SetSearchMode -> applySearchMode(
+                when (action.mode) { "local" -> SearchMode.LOCAL; "built_in" -> SearchMode.BUILT_IN; else -> SearchMode.OFF }
+            )
+            is OpenUiChatAction.SetSearchService -> setting.searchServices.indexOfFirst { it.id.toString() == action.id }
+                .takeIf { it >= 0 }?.let { vm.updateSettings(setting.copy(searchServiceSelected = it)) }
+            is OpenUiChatAction.BeginEditQueued -> runCatching { Uuid.parse(action.id) }.getOrNull()?.let(vm::beginEditQueuedMessage)
+            is OpenUiChatAction.EditQueued -> runCatching { Uuid.parse(action.id) }.getOrNull()?.let { id ->
+                val queued = pageMessageQueue.messages.firstOrNull { it.id == id } ?: return
+                val parts = action.text?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
+                    queued.parts.filterNot { it is UIMessagePart.Text } + UIMessagePart.Text(text)
+                }
+                vm.finishEditQueuedMessage(id, parts)
+            }
+            is OpenUiChatAction.ErrorSolution -> when (action.solution) {
+                "fastModelSettings" -> navController.navigate(Screen.SettingModels)
+                "retry" -> conversation.currentMessages.lastOrNull { it.role == me.rerere.ai.core.MessageRole.USER }?.let(vm::regenerateAtMessage)
+                else -> Unit
+            }
+            OpenUiChatAction.Retry -> conversation.currentMessages.lastOrNull { it.role == me.rerere.ai.core.MessageRole.USER }?.let(vm::regenerateAtMessage)
+            OpenUiChatAction.DesktopSnap -> snapDesktopToChat()
+            OpenUiChatAction.DesktopStop -> stopDesktopStream()
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
         AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         val presentOpenUi = shouldPresentOpenUi(
-            setting.displaySetting.chatUiMode,
-            conversation.messageNodes.size,
-        ) && !previewMode
+            messageCount = conversation.messageNodes.size,
+            isFolderChat = isFolderChat || openedWithInput,
+        )
         Scaffold(
             topBar = {
                 if (conversation.messageNodes.isNotEmpty() || isFolderChat) {
@@ -486,7 +730,6 @@ private fun ChatPageContent(
                         settings = setting,
                         conversation = conversation,
                         folders = folders,
-                        previewMode = previewMode,
                         currentFolder = currentFolder,
                         folderName = activeFolderName,
                         folderLabelId = activeFolderLabelId,
@@ -498,7 +741,7 @@ private fun ChatPageContent(
                             navController.clearAndNavigate(Screen.Chat(Uuid.random().toString()))
                         },
                         onClickMenu = {
-                            previewMode = !previewMode
+                            if (presentOpenUi) outlineRequest++ else exportMessages = conversation.currentMessages
                         },
                         onUpdateTitle = {
                             vm.updateTitle(it)
@@ -516,45 +759,8 @@ private fun ChatPageContent(
                     DesktopActiveBanner(
                         visible = desktopStreamUrl != null && !showDesktopSheet,
                         onOpenDesktop = { showDesktopSheet = true },
-                        onSnapToChat = {
-                            val token = setting.networkSetting.desktopControlApiToken
-                            if (token.isNotBlank()) {
-                                scope.launch {
-                                    try {
-                                        val baseUrl = setting.networkSetting.desktopControlBaseUrl.ifBlank { DesktopControlDefaults.BASE_URL }
-                                        val client = DesktopControlClient(httpClient, baseUrl, token)
-                                        val res = client.screenshot()
-                                        val bytes = android.util.Base64.decode(res.image_b64, android.util.Base64.DEFAULT)
-                                        val filesManager: FilesManager = org.koin.java.KoinJavaComponent.getKoin().get()
-                                        val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
-                                        if (uris.isNotEmpty()) {
-                                            inputState.addImages(uris)
-                                            toaster.show("Screenshot attached to chat", ToastType.Success)
-                                        }
-                                    } catch (e: Exception) {
-                                        toaster.show(e.message ?: "Failed to snap desktop", ToastType.Error)
-                                    }
-                                }
-                            }
-                        },
-                        onStopStream = {
-                            val token = setting.networkSetting.desktopControlApiToken
-                            if (token.isNotBlank()) {
-                                scope.launch {
-                                    try {
-                                        val baseUrl = setting.networkSetting.desktopControlBaseUrl.ifBlank { DesktopControlDefaults.BASE_URL }
-                                        val client = DesktopControlClient(httpClient, baseUrl, token)
-                                        client.stopStream()
-                                        desktopStreamUrl = null
-                                        toaster.show("Desktop stream stopped", ToastType.Info)
-                                    } catch (e: Exception) {
-                                        toaster.show(e.message ?: "Failed to stop desktop stream", ToastType.Error)
-                                    }
-                                }
-                            } else {
-                                desktopStreamUrl = null
-                            }
-                        }
+                        onSnapToChat = { snapDesktopToChat() },
+                        onStopStream = { stopDesktopStream() }
                     )
 
                     ChatInput(
@@ -593,36 +799,7 @@ private fun ChatPageContent(
                             vm.stopGeneration()
                         },
                         enableSearch = enableWebSearch,
-                        onUpdateSearchMode = { mode ->
-                            val current = setting.getCurrentAssistant()
-                            val model = setting.getCurrentChatModel()
-                            vm.updateSettings(
-                                setting.copy(
-                                    assistants = setting.assistants.map { assistant ->
-                                        if (assistant.id == current.id) {
-                                            assistant.copy(enableWebSearch = mode == SearchMode.LOCAL)
-                                        } else {
-                                            assistant
-                                        }
-                                    },
-                                    providers = if (model == null) {
-                                        setting.providers
-                                    } else {
-                                        setting.providers.map { provider ->
-                                            provider.editModel(
-                                                model.copy(
-                                                    tools = if (mode == SearchMode.BUILT_IN) {
-                                                        model.tools + BuiltInTools.Search
-                                                    } else {
-                                                        model.tools - BuiltInTools.Search
-                                                    }
-                                                )
-                                            )
-                                        }
-                                    },
-                                )
-                            )
-                        },
+                        onUpdateSearchMode = { mode -> applySearchMode(mode) },
                         onSendClick = { fromVoiceInput ->
                             if (currentChatModel == null) {
                                 toaster.show("Please select a model first", type = ToastType.Error)
@@ -638,10 +815,6 @@ private fun ChatPageContent(
                                     inputState.getContents(),
                                     fromVoiceInput = fromVoiceInput,
                                 )
-                                scope.launch {
-                                    delay(100.milliseconds)
-                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                                }
                             }
                             inputState.clearInput()
                         },
@@ -653,9 +826,6 @@ private fun ChatPageContent(
                                 )
                             } else {
                                 vm.handleMessageSend(content = inputState.getContents(), answer = false)
-                                scope.launch {
-                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                                }
                             }
                             inputState.clearInput()
                         },
@@ -707,161 +877,62 @@ private fun ChatPageContent(
                     processingStatus = processingStatus,
                     darkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f,
                     draft = inputState.textContent.text.toString(),
-                    attachmentCount = inputState.messageContent.size,
+                    chatState = openUiState,
+                    pendingImageUrls = inputState.messageContent.filterIsInstance<UIMessagePart.Image>().map { it.url },
                     modelAvailable = currentChatModel != null,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    onSend = { text ->
-                        if (currentChatModel == null) {
-                            toaster.show("Please select a model first", type = ToastType.Error)
-                        } else {
-                            // Use the canonical native input so attachments and drafts survive
-                            // switching between the web and Compose presentations.
-                            inputState.setMessageText(text)
-                            if (inputState.isEditing()) {
-                                val editingId = inputState.editingMessage
-                                if (editingId != null) vm.handleMessageEdit(inputState.getContents(), editingId)
-                            } else {
-                                vm.handleMessageSend(inputState.getContents())
-                            }
-                            inputState.clearInput()
-                        }
-                    },
-                    onStop = vm::stopGeneration,
-                    onRegenerate = vm::regenerateAtMessage,
-                    onSuggestion = { suggestion ->
-                        if (currentChatModel == null) {
-                            toaster.show("Please select a model first", type = ToastType.Error)
-                        } else {
-                            vm.handleMessageSend(listOf(UIMessagePart.Text(suggestion)))
-                        }
-                    },
-                    onDraftChange = inputState::setMessageText,
-                    onOpenAttachments = { showFilesSheet = true },
-                    onStartVoice = onStartVoiceMode,
-                    onEdit = { message ->
-                        inputState.editingMessage = message.id
-                        inputState.setContents(message.parts)
-                        vm.updateSettings(setting.copy(displaySetting = setting.displaySetting.copy(chatUiMode = ChatUiMode.NATIVE)))
-                    },
-                    onOpenNative = {
-                        vm.updateSettings(setting.copy(displaySetting = setting.displaySetting.copy(chatUiMode = ChatUiMode.NATIVE)))
-                    },
+                    onAction = { action -> handleOpenUiAction(action) },
                     onRendererFailure = {
-                        toaster.show("OpenUI could not load. Returning to native chat.", type = ToastType.Warning)
-                        vm.updateSettings(setting.copy(displaySetting = setting.displaySetting.copy(chatUiMode = ChatUiMode.NATIVE)))
+                        // No native fallback: the web chat is the only transcript UI.
+                        toaster.show(rendererFailedText, type = ToastType.Error)
                     },
                 )
             } else {
-                ChatList(
-                innerPadding = innerPadding,
-                conversation = conversation,
-                state = chatListState,
-                loading = loadingJob != null,
-                processingStatus = processingStatus,
-                previewMode = previewMode,
-                settings = setting,
-                hazeState = hazeState,
-                errors = errors,
-                folders = folders,
-                folderName = if (isFolderChat) (activeFolderName ?: "Folder") else null,
-                folderLabelId = activeFolderLabelId,
-                isInitializing = isInitializing,
-                onSelectFolder = { folder ->
-                    navController.navigate(
-                        Screen.FolderConversations(
-                            folderId = folder.id.toString(),
-                            folderName = folder.name,
-                            folderLabelId = folder.label,
+                ChatHome(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    settings = setting,
+                    hazeState = hazeState,
+                    isInitializing = isInitializing,
+                    folders = folders,
+                    onSelectFolder = { folder ->
+                        navController.navigate(
+                            Screen.FolderConversations(
+                                folderId = folder.id.toString(),
+                                folderName = folder.name,
+                                folderLabelId = folder.label,
+                            )
                         )
-                    )
-                },
-                onSeeAllFolders = {
-                    navController.navigate(Screen.Folders)
-                },
-                onOpenSearch = {
-                    navController.navigate(Screen.MessageSearch)
-                },
-                onOpenActivity = {
-                    navController.navigate(Screen.History)
-                },
-                onOpenAssistant = {
-                    navController.navigate(Screen.Assistant)
-                },
-                onOpenSettings = {
-                    navController.navigate(Screen.Setting)
-                },
-                onNewFolder = {
-                    showCreateFolderDialog = true
-                },
-                onOpenFavorite = {
-                    navController.navigate(Screen.Favorite)
-                },
-                onQuickCreateFolder = { name, labelId ->
-                    drawerVm.createFolder(name, labelId)
-                },
-                onDismissError = onDismissError,
-                onClearAllErrors = onClearAllErrors,
-                onRegenerate = {
-                    vm.regenerateAtMessage(it)
-                },
-                onEdit = {
-                    inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
-                },
-                onForkMessage = {
-                    scope.launch {
-                        val fork = vm.forkMessage(message = it)
-                        navigateToChatPage(navController, chatId = fork.id)
-                    }
-                },
-                onDelete = {
-                    if (loadingJob != null) {
-                        vm.showDeleteBlockedWhileGeneratingError()
-                    } else {
-                        vm.deleteMessage(it)
-                    }
-                },
-                onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
-                                }
-                            }
-                        ))
-                    vm.saveConversationAsync()
-                },
-                onClickSuggestion = { suggestion ->
-                    inputState.editingMessage = null
-                    inputState.setMessageText(suggestion)
-                },
-                onJumpToMessage = { index ->
-                    previewMode = false
-                    scope.launch {
-                        chatListState.requestScrollToItem(index)
-                    }
-                },
-                onToolApproval = { toolCallId, approved, reason ->
-                    vm.handleToolApproval(toolCallId, approved, reason)
-                },
-                onToolAnswer = { toolCallId, answer ->
-                    vm.handleToolAnswer(toolCallId, answer)
-                },
-                onToggleFavorite = { node ->
-                    vm.toggleMessageFavorite(node)
-                },
-                onConversationSystemPromptChange = { newPrompt ->
-                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
-                    vm.saveConversationAsync()
-                },
+                    },
+                    onSeeAllFolders = { navController.navigate(Screen.Folders) },
+                    onStarterClick = { suggestion ->
+                        inputState.editingMessage = null
+                        inputState.setMessageText(suggestion)
+                    },
+                    onOpenSearch = { navController.navigate(Screen.MessageSearch) },
+                    onOpenActivity = { navController.navigate(Screen.History) },
+                    onOpenAssistant = { navController.navigate(Screen.Assistant) },
+                    onOpenSettings = { navController.navigate(Screen.Setting) },
+                    onNewFolder = { showCreateFolderDialog = true },
+                    onOpenFavorite = { navController.navigate(Screen.Favorite) },
+                    onQuickCreateFolder = { name, labelId -> drawerVm.createFolder(name, labelId) },
+                    onConversationSystemPromptChange = { newPrompt ->
+                        vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
+                        vm.saveConversationAsync()
+                    },
                 )
             }
         }
+
+        ChatExportSheet(
+            visible = exportMessages != null,
+            onDismissRequest = { exportMessages = null },
+            conversation = conversation,
+            selectedMessages = exportMessages.orEmpty(),
+        )
+
 
         if (showFilesSheet) {
             ChatFilesPickerSheet(
@@ -1059,7 +1130,6 @@ private fun TopBar(
     settings: Settings,
     conversation: Conversation,
     folders: List<Folder>,
-    previewMode: Boolean,
     currentFolder: Folder? = null,
     folderName: String? = null,
     folderLabelId: String? = null,
@@ -1200,7 +1270,7 @@ private fun TopBar(
                     onClickMenu()
                 }
             ) {
-                Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
+                Icon(HugeIcons.LeftToRightListBullet, stringResource(R.string.chat_outline))
             }
 
             IconButton(

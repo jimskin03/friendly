@@ -1236,4 +1236,6 @@
   <string name="chart_series_name">系列 %1$d</string>
   <string name="setting_display_page_openui_title">OpenUI チャット(試験運用)</string>
   <string name="setting_display_page_openui_desc">組み込みの OpenUI チャットをプレビューします。このプレビューでは、添付ファイル、音声、一部のネイティブ操作はまだ使えません。オフにすると、すべての機能を備えたネイティブチャットに戻ります。</string>
+  <string name="openui_renderer_failed">チャット画面を読み込めませんでした。Friendly を再起動してください。</string>
+  <string name="chat_outline">アウトライン</string>
 </resources>

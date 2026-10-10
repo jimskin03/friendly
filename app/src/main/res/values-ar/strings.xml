@@ -1236,4 +1236,6 @@
   <string name="chart_series_name">سلسلة %1$d</string>
   <string name="setting_display_page_openui_title">محادثة OpenUI (تجريبية)</string>
   <string name="setting_display_page_openui_desc">معاينة محادثة OpenUI المدمجة. المرفقات والصوت وبعض عناصر التحكم الأصلية غير متاحة بعد في هذه المعاينة. أوقف هذا الخيار للعودة إلى المحادثة الأصلية الكاملة.</string>
+  <string name="openui_renderer_failed">تعذّر تحميل عرض المحادثة. يرجى إعادة تشغيل Friendly.</string>
+  <string name="chat_outline">المخطط</string>
 </resources>

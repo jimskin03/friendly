@@ -1236,4 +1236,6 @@
   <string name="chart_series_name">계열 %1$d</string>
   <string name="setting_display_page_openui_title">OpenUI 채팅 (실험적)</string>
   <string name="setting_display_page_openui_desc">내장된 OpenUI 채팅을 미리 봅니다. 이 미리보기에서는 첨부 파일, 음성 및 일부 기본 컨트롤을 아직 사용할 수 없습니다. 끄면 모든 기능을 갖춘 기본 채팅으로 돌아갑니다.</string>
+  <string name="openui_renderer_failed">채팅 화면을 불러오지 못했습니다. Friendly를 다시 시작해 주세요.</string>
+  <string name="chat_outline">개요</string>
 </resources>

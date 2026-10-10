@@ -49,7 +49,6 @@ import java.util.concurrent.atomic.AtomicLong
 private const val OPEN_UI_HOST = "openui.friendly.local"
 private const val OPEN_UI_URL = "https://$OPEN_UI_HOST/index.html"
 private const val MAX_ACTION_BYTES = 32 * 1024
-private const val MAX_MESSAGE_LENGTH = 16_000
 private const val MAX_LINK_LENGTH = 2048
 private val bridgeJson = Json { encodeDefaults = true }
 
@@ -78,19 +77,6 @@ data class OpenUiCapabilities(
 }
 
 @Serializable
-private data class OpenUiMessage(
-    val id: String,
-    val role: String,
-    val text: String,
-    val openui: String? = null,
-    val branchIndex: Int? = null,
-    val branchCount: Int? = null,
-    val canRegenerate: Boolean = false,
-    val canEdit: Boolean = false,
-    val canReport: Boolean = false,
-)
-
-@Serializable
 private data class OpenUiSnapshot(
     val protocolVersion: Int = 1,
     val sessionId: String,
@@ -103,6 +89,7 @@ private data class OpenUiSnapshot(
     val draft: String,
     val attachmentCount: Int,
     val modelAvailable: Boolean,
+    val chat: OpenUiChatState = OpenUiChatState(),
     val capabilities: OpenUiCapabilities,
     val messages: List<OpenUiMessage>,
     val suggestions: List<String>,
@@ -140,24 +127,17 @@ internal fun openUiExternalLink(url: String?): Uri? {
 
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
-fun OpenUiChat(
+internal fun OpenUiChat(
     conversation: Conversation,
     loading: Boolean,
     processingStatus: String?,
     darkMode: Boolean,
     draft: String,
-    attachmentCount: Int,
+    chatState: OpenUiChatState,
+    pendingImageUrls: List<String>,
     modelAvailable: Boolean,
     modifier: Modifier = Modifier,
-    onSend: (String) -> Unit,
-    onStop: () -> Unit,
-    onRegenerate: (UIMessage) -> Unit,
-    onSuggestion: (String) -> Unit,
-    onDraftChange: (String) -> Unit,
-    onOpenAttachments: () -> Unit,
-    onStartVoice: () -> Unit,
-    onEdit: (UIMessage) -> Unit,
-    onOpenNative: () -> Unit,
+    onAction: (OpenUiChatAction) -> Unit,
     onRendererFailure: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -167,17 +147,9 @@ fun OpenUiChat(
     val alive = remember(sessionId) { AtomicBoolean(true) }
     val revisionCounter = remember(sessionId) { AtomicLong(0L) }
 
-    val sendState = rememberUpdatedState(onSend)
-    val stopState = rememberUpdatedState(onStop)
-    val regenerateState = rememberUpdatedState(onRegenerate)
-    val suggestionState = rememberUpdatedState(onSuggestion)
+    val actionState = rememberUpdatedState(onAction)
     val conversationState = rememberUpdatedState(conversation)
     val loadingState = rememberUpdatedState(loading)
-    val draftChangeState = rememberUpdatedState(onDraftChange)
-    val attachmentsState = rememberUpdatedState(onOpenAttachments)
-    val voiceState = rememberUpdatedState(onStartVoice)
-    val editState = rememberUpdatedState(onEdit)
-    val nativeState = rememberUpdatedState(onOpenNative)
     val failureState = rememberUpdatedState(onRendererFailure)
     val modelAvailableState = rememberUpdatedState(modelAvailable)
     val colors = MaterialTheme.colorScheme
@@ -204,23 +176,11 @@ fun OpenUiChat(
         processingStatus = processingStatus,
         darkMode = darkMode,
         draft = draft,
-        attachmentCount = attachmentCount,
+        attachmentCount = chatState.pendingAttachments.size,
+        chat = chatState,
         modelAvailable = modelAvailable,
         capabilities = OpenUiCapabilities.current(),
-        messages = conversation.currentMessages.mapIndexed { index, message ->
-            val node = conversation.messageNodes.getOrNull(index)
-            OpenUiMessage(
-                id = message.id.toString(),
-                role = message.role.toBridgeRole(),
-                text = message.parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text },
-                openui = message.openUiProgram(),
-                branchIndex = node?.selectIndex,
-                branchCount = node?.messages?.size,
-                canRegenerate = message.role == MessageRole.ASSISTANT && !loading,
-                canEdit = message.role == MessageRole.USER && !loading,
-                canReport = false,
-            )
-        },
+        messages = conversation.toBridgeMessages(loading, OpenUiThumbnails::sizeOf),
         suggestions = conversation.chatSuggestions,
         theme = theme,
     )
@@ -231,6 +191,25 @@ fun OpenUiChat(
     }
     val snapshotState = rememberUpdatedState(snapshotJson)
 
+    val imageUrls = remember(conversation, pendingImageUrls) {
+        conversation.currentMessages.flatMap { message ->
+            message.parts.flatMap { part ->
+                when (part) {
+                    is UIMessagePart.Image -> listOf(part.url)
+                    is UIMessagePart.Tool -> part.output.filterIsInstance<UIMessagePart.Image>().map { it.url }
+                    else -> emptyList()
+                }
+            }
+        } + pendingImageUrls
+    }
+    val thumbnails = rememberOpenUiThumbnails(imageUrls)
+    val assetsJson = remember(thumbnails) { bridgeJson.encodeToString(thumbnails) }
+    LaunchedEffect(assetsJson, pageReady) {
+        if (pageReady && thumbnails.isNotEmpty()) {
+            webView?.evaluateJavascript("window.friendlyOpenUI?.pushAssets(${JSONObject.quote(assetsJson)})", null)
+        }
+    }
+
     fun pushSnapshot(target: WebView?) {
         if (!pageReady || target == null) return
         val argument = JSONObject.quote(snapshotState.value)
@@ -238,45 +217,25 @@ fun OpenUiChat(
     }
 
     val bridge = remember(sessionId) {
-        OpenUiBridge(sessionId) { action ->
+        OpenUiBridge(sessionId) { raw, isReady ->
             if (!alive.get()) return@OpenUiBridge
-            when (action.type) {
-                "ready" -> {
-                    pageReady = true
-                }
-                "send" -> if (!loadingState.value && modelAvailableState.value) {
-                    action.text?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_MESSAGE_LENGTH }?.let(sendState.value)
-                }
-                "stop" -> if (loadingState.value) stopState.value()
-                "suggestion" -> if (!loadingState.value && action.text in conversationState.value.chatSuggestions) {
-                    action.text?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_MESSAGE_LENGTH }?.let(suggestionState.value)
-                }
-                "regenerate" -> {
-                    if (loadingState.value) return@OpenUiBridge
-                    val id = action.messageId ?: return@OpenUiBridge
-                    conversationState.value.currentMessages.firstOrNull { it.id.toString() == id }
-                        ?.takeIf { it.role == MessageRole.ASSISTANT }
-                        ?.let(regenerateState.value)
-                }
-                "draft" -> action.text?.takeIf { it.length <= MAX_MESSAGE_LENGTH }?.let(draftChangeState.value)
-                "attachments" -> attachmentsState.value()
-                "voice" -> voiceState.value()
-                "native" -> nativeState.value()
-                "link" -> openUiExternalLink(action.url)?.let { uri ->
+            if (isReady) {
+                pageReady = true
+                return@OpenUiBridge
+            }
+            val action = parseOpenUiAction(raw, conversationState.value, loadingState.value) ?: return@OpenUiBridge
+            when (action) {
+                is OpenUiChatAction.OpenLink -> openUiExternalLink(action.url)?.let { uri ->
                     runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }
-                "copy" -> action.text?.let { text ->
+                is OpenUiChatAction.CopyText -> {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                    clipboard?.setPrimaryClip(ClipData.newPlainText("code", text))
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("code", action.text))
                 }
-                "edit" -> {
-                    if (loadingState.value) return@OpenUiBridge
-                    conversationState.value.currentMessages.firstOrNull { it.id.toString() == action.messageId }
-                        ?.takeIf { it.role == MessageRole.USER }
-                        ?.let(editState.value)
-                }
+                is OpenUiChatAction.Send -> if (modelAvailableState.value) actionState.value(action)
+                else -> actionState.value(action)
             }
         }
     }
@@ -335,16 +294,9 @@ fun OpenUiChat(
     }
 }
 
-private data class OpenUiAction(
-    val type: String,
-    val text: String? = null,
-    val messageId: String? = null,
-    val url: String? = null,
-)
-
 private class OpenUiBridge(
     private val sessionId: String,
-    private val dispatch: (OpenUiAction) -> Unit,
+    private val dispatch: (raw: String, isReady: Boolean) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var lastActionId = 0L
@@ -352,27 +304,21 @@ private class OpenUiBridge(
     @JavascriptInterface
     fun postMessage(payload: String) {
         if (payload.toByteArray(Charsets.UTF_8).size > MAX_ACTION_BYTES) return
-        val parsed = runCatching {
+        val actionId = runCatching {
             val value = JSONObject(payload)
             val type = value.getString("type")
-            if (type !in setOf("ready", "send", "stop", "suggestion", "regenerate", "draft", "attachments", "voice", "native", "edit", "link", "copy")) return
-            val actionId = if (type == "ready") 0L else value.getLong("actionId")
-            if (type != "ready" && (value.optString("sessionId") != sessionId || actionId <= 0L)) return
-            Pair(actionId, OpenUiAction(
-                type = type,
-                text = value.optString("text").takeIf { value.has("text") },
-                messageId = value.optString("messageId").takeIf { value.has("messageId") },
-                url = value.optString("url").takeIf { value.has("url") },
-            ))
+            if (type !in OPEN_UI_ACTION_TYPES) return
+            if (type == "ready") return@runCatching 0L
+            if (value.optString("sessionId") != sessionId) return
+            value.getLong("actionId").takeIf { it > 0L } ?: return
         }.getOrNull() ?: return
         mainHandler.post {
-            val (actionId, action) = parsed
-            if (action.type != "ready") {
+            if (actionId != 0L) {
                 // Drop duplicate/replayed/stale messages, even across WebView reloads.
                 if (actionId <= lastActionId) return@post
                 lastActionId = actionId
             }
-            dispatch(action)
+            dispatch(payload, actionId == 0L)
         }
     }
 }
@@ -411,24 +357,7 @@ private class OpenUiWebViewClient(private val onFailure: () -> Unit) : WebViewCl
     private fun blockedResponse() = WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", emptyMap(), "".byteInputStream())
 }
 
-private fun MessageRole.toBridgeRole(): String = when (this) {
-    MessageRole.USER -> "user"
-    MessageRole.ASSISTANT -> "assistant"
-    MessageRole.SYSTEM -> "system"
-    else -> "tool"
-}
 
-private fun UIMessage.openUiProgram(): String? {
-    return parts.asSequence()
-        .mapNotNull { part ->
-            val metadata = part.metadata ?: return@mapNotNull null
-            runCatching {
-                metadata["friendly.openui"]?.jsonPrimitive?.contentOrNull
-                    ?: metadata["openui"]?.jsonPrimitive?.contentOrNull
-            }.getOrNull()
-        }
-        .firstOrNull { it.isNotBlank() }
-}
 
 private fun mimeTypeOf(path: String): String = when (path.substringAfterLast('.', "").lowercase()) {
     "html" -> "text/html"
