@@ -43,7 +43,7 @@ object LogRedactor {
 
     /** Normalized (lowercase, no `_`/`-`) JSON field, query parameter and form field names. */
     private val SENSITIVE_NAMES = setOf(
-        "key", "apikey", "xapikey", "xgoogapikey", "token", "accesstoken", "refreshtoken", "idtoken",
+        "key", "apikey", "xapikey", "xgoogapikey", "token", "accesstoken", "refreshtoken", "idtoken", "idtokenhint",
         "authtoken", "apitoken", "sessiontoken", "bearer", "secret", "clientsecret", "password", "passwd",
         "authorization", "auth", "privatekey", "credential", "credentials",
     )

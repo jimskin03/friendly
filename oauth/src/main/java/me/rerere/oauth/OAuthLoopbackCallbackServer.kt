@@ -28,6 +28,7 @@ data class OAuthCallback(
     val state: String,
     val error: String?,
     val errorDescription: String?,
+    val clientId: String? = null,
 )
 
 
@@ -129,9 +130,10 @@ class OAuthLoopbackCallbackServer(
 
     private suspend fun handleCallback(call: ApplicationCall) {
         call.response.header(HttpHeaders.CacheControl, "no-store")
+        val parameters = call.request.queryParameters
         val state = call.request.queryParameters["state"]
         val registration = state?.let(callbacks::get)
-        if (state.isNullOrBlank() || registration == null) {
+        if (state.isNullOrBlank() || registration == null || parameters.getAll("state")?.size != 1) {
             call.respondText(
                 text = invalidCallbackHtml(),
                 contentType = ContentType.Text.Html,
@@ -140,8 +142,21 @@ class OAuthLoopbackCallbackServer(
             return
         }
 
-        val code = call.request.queryParameters["code"]
-        val error = call.request.queryParameters["error"]
+        val codeValues = parameters.getAll("code").orEmpty()
+        val errorValues = parameters.getAll("error").orEmpty()
+        val clientIdValues = parameters.getAll("client_id").orEmpty()
+        if (codeValues.size > 1 || errorValues.size > 1 || clientIdValues.size > 1 ||
+            (codeValues.isNotEmpty() && errorValues.isNotEmpty())
+        ) {
+            call.respondText(
+                text = invalidCallbackHtml(),
+                contentType = ContentType.Text.Html,
+                status = HttpStatusCode.BadRequest,
+            )
+            return
+        }
+        val code = codeValues.singleOrNull()
+        val error = errorValues.singleOrNull()
         if (code.isNullOrBlank() && error.isNullOrBlank()) {
             call.respondText(
                 text = invalidCallbackHtml(),
@@ -156,6 +171,7 @@ class OAuthLoopbackCallbackServer(
             state = state,
             error = error,
             errorDescription = call.request.queryParameters["error_description"],
+            clientId = clientIdValues.singleOrNull(),
         )
         if (!registration.claimed.compareAndSet(false, true)) {
             call.respondText(

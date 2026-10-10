@@ -6,6 +6,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.FormBody
@@ -15,6 +18,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import me.rerere.common.http.SensitiveRequest
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -57,6 +61,8 @@ class OAuthHttpClient(
         @SerialName("token_type") val tokenType: String = "Bearer",
         @SerialName("expires_in") val expiresIn: Long? = null,
         @SerialName("refresh_token") val refreshToken: String? = null,
+        @SerialName("id_token") val idToken: String? = null,
+        @SerialName("earliest_refresh_at") val earliestRefreshAt: Long? = null,
         val scope: String? = null,
     )
 
@@ -71,6 +77,12 @@ class OAuthHttpClient(
         val scope: String? = null,
         val resources: List<String> = emptyList(),
         val additionalParameters: Map<String, String> = emptyMap(),
+    )
+
+    data class RevocationRequest(
+        val revocationEndpoint: String,
+        val clientId: String,
+        val refreshToken: String,
     )
 
     data class AuthorizationCodeTokenRequest(
@@ -103,6 +115,7 @@ class OAuthHttpClient(
             .url(registrationEndpoint)
             .header("Accept", "application/json")
             .post(body.toRequestBody(JSON_MEDIA_TYPE))
+            .tag(SensitiveRequest::class.java, SensitiveRequest)
             .build()
         val text = execute(httpRequest)
         json.decodeFromString(ClientRegistrationResponse.serializer(), text)
@@ -174,11 +187,39 @@ class OAuthHttpClient(
             postToken(request.tokenEndpoint, form)
         }
 
+    suspend fun revokeToken(request: RevocationRequest) = withContext(Dispatchers.IO) {
+        val form = FormBody.Builder()
+            .add("token", request.refreshToken)
+            .add("token_type_hint", "refresh_token")
+            .add("client_id", request.clientId)
+            .build()
+        val httpRequest = Request.Builder()
+            .url(request.revocationEndpoint)
+            .header("Accept", "application/json")
+            .post(form)
+            .tag(SensitiveRequest::class.java, SensitiveRequest)
+            .build()
+        executeRaw(httpRequest).use { response ->
+            if (!response.isSuccessful) throw IOException("OAuth revocation failed (HTTP ${response.code})")
+        }
+    }
+
+    suspend fun getJson(url: String): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/json")
+            .get()
+            .tag(SensitiveRequest::class.java, SensitiveRequest)
+            .build()
+        execute(request)
+    }
+
     private suspend fun postToken(tokenEndpoint: String, form: FormBody): TokenResponse {
         val request = Request.Builder()
             .url(tokenEndpoint)
             .header("Accept", "application/json")
             .post(form)
+            .tag(SensitiveRequest::class.java, SensitiveRequest)
             .build()
         val text = execute(request)
         return json.decodeFromString(TokenResponse.serializer(), text)
@@ -188,7 +229,12 @@ class OAuthHttpClient(
         executeRaw(request).use { response ->
             val body = response.body.string()
             if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code} for ${request.url}: ${body.take(300)}")
+                val errorCode = runCatching {
+                    json.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+                }.getOrNull()
+                val suffix = errorCode?.takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,80}")) }
+                    ?.let { " ($it)" }.orEmpty()
+                throw IOException("OAuth request failed (HTTP ${response.code})$suffix")
             }
             return body
         }

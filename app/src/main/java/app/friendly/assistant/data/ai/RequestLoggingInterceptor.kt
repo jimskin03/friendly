@@ -2,6 +2,7 @@
 
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
+import me.rerere.common.http.SensitiveRequest
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -15,8 +16,12 @@ class RequestLoggingInterceptor : Interceptor {
         val startTime = System.currentTimeMillis()
 
         val requestHeaders = LogRedactor.redactHeaders(request.headers)
-        val requestBody = runCatching { LogRedactor.captureRequestBody(request.body) }
-            .getOrElse { "[body not captured: ${it.javaClass.simpleName}]" }
+        val requestBody = if (request.tag(SensitiveRequest::class.java) != null) {
+            "[body not captured: sensitive request]"
+        } else {
+            runCatching { LogRedactor.captureRequestBody(request.body) }
+                .getOrElse { "[body not captured: ${it.javaClass.simpleName}]" }
+        }
         val loggedUrl = LogRedactor.redactUrl(request.url)
 
         val response: Response

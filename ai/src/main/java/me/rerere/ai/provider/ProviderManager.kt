@@ -7,13 +7,17 @@ import me.rerere.ai.provider.providers.openai.OpenAIProvider
 import okhttp3.OkHttpClient
 
 
-class ProviderManager(client: OkHttpClient, context: Context) {
+class ProviderManager(
+    client: OkHttpClient,
+    context: Context,
+    openAITokenResolver: OpenAIAccessTokenResolver? = null,
+) {
 
     private val providers = mutableMapOf<String, Provider<*>>()
 
     init {
 
-        registerProvider("openai", OpenAIProvider(client, context))
+        registerProvider("openai", OpenAIProvider(client, context, openAITokenResolver))
         registerProvider("google", GoogleProvider(client, context))
         registerProvider("claude", ClaudeProvider(client, context))
     }
