@@ -15,6 +15,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -309,84 +311,64 @@ private fun DashboardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clickable(onClick = onOpenAssistant)
+            Spacer(Modifier.size(40.dp))
+            BoxWithConstraints(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                val greetingMaxWidth = (maxWidth - 68.dp).coerceAtLeast(80.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    if (userAvatar != Avatar.Dummy) {
-                        UIAvatar(
-                            name = displayName,
-                            value = userAvatar,
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(CircleShape),
-                        )
-                    } else {
-                        // Default avatar = the Friendly brand cat (same art as the launcher icon).
-                        Image(
-                            painter = painterResource(R.drawable.ic_brand_avatar),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(CircleShape)
-                                .border(2.dp, chrome.avatarRing, CircleShape),
+                    Box(
+                        modifier = Modifier.size(54.dp).clickable(onClick = onOpenAssistant)
+                    ) {
+                        if (userAvatar != Avatar.Dummy) {
+                            UIAvatar(
+                                name = displayName,
+                                value = userAvatar,
+                                modifier = Modifier.size(54.dp).clip(CircleShape),
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(R.drawable.ic_brand_avatar),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(54.dp).clip(CircleShape)
+                                    .border(2.dp, chrome.avatarRing, CircleShape),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier.align(Alignment.BottomEnd).size(14.dp)
+                                .clip(CircleShape).background(chrome.online)
+                                .border(2.dp, if (chrome.darkChrome) Color(0xFF0F172A) else Color(0xFFFFFFF8), CircleShape)
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(14.dp)
-                            .clip(CircleShape)
-                            .background(chrome.online)
-                            .border(
-                                2.dp,
-                                if (chrome.darkChrome) Color(0xFF0F172A) else Color(0xFFFFFFF8),
-                                CircleShape,
-                            )
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "$cleanGreeting, $displayName 👋",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 19.sp,
-                        ),
-                        color = chrome.title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = assistantName.ifBlank { "Your AI assistant" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = chrome.subtitle,
-                        maxLines = 1,
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.padding(top = 1.dp),
+                    Column(
+                        modifier = Modifier.widthIn(max = greetingMaxWidth),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(chrome.online)
+                        Text(
+                            text = "$cleanGreeting, $displayName 👋",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 19.sp),
+                            color = chrome.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = "Online",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = chrome.online,
+                            text = assistantName.ifBlank { "Your AI assistant" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.subtitle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.padding(top = 1.dp),
+                        ) {
+                            Box(Modifier.size(6.dp).clip(CircleShape).background(chrome.online))
+                            Text("Online", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium), color = chrome.online)
+                        }
                     }
                 }
             }

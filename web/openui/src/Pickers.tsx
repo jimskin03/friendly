@@ -38,7 +38,7 @@ export function PickerSheet({ kind, pickers, onClose }: { kind: PickerKind; pick
   }, [pickers.models, query]);
   const title = { assistant: "Assistant", model: "Model", reasoning: "Reasoning", mcp: "MCP servers", search: "Web search", options: "Chat options" }[kind];
   const all = kind === "options";
-  const show = (k: PickerKind) => kind === k || (all && (k !== "assistant" || pickers.assistants.length > 1) && (k !== "reasoning" || pickers.reasoning != null));
+  const show = (k: PickerKind) => kind === k || (all && k !== "assistant" && k !== "mcp" && (k !== "reasoning" || pickers.reasoning != null));
   const heading = (text: string) => all ? <div className="picker-section">{text}</div> : null;
   return (
     <>

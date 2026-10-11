@@ -154,6 +154,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 private const val MAX_QUEUED_PREVIEW = 2000
@@ -322,6 +323,8 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val searchEnabledMessage = stringResource(R.string.web_search_enabled)
+    val searchDisabledMessage = stringResource(R.string.web_search_disabled)
     val workspaceRepository: WorkspaceRepository = koinInject()
     val httpClient: HttpClient = koinInject()
     var showDesktopSheet by remember { mutableStateOf(false) }
@@ -798,8 +801,6 @@ private fun ChatPageContent(
                         onCancelClick = {
                             vm.stopGeneration()
                         },
-                        enableSearch = enableWebSearch,
-                        onUpdateSearchMode = { mode -> applySearchMode(mode) },
                         onSendClick = { fromVoiceInput ->
                             if (currentChatModel == null) {
                                 toaster.show("Please select a model first", type = ToastType.Error)
@@ -842,13 +843,6 @@ private fun ChatPageContent(
                                             assistant
                                         }
                                     }
-                                )
-                            )
-                        },
-                        onUpdateSearchService = { index ->
-                            vm.updateSettings(
-                                setting.copy(
-                                    searchServiceSelected = index
                                 )
                             )
                         },
@@ -942,7 +936,18 @@ private fun ChatPageContent(
                 assistant = assistant,
                 vm = vm,
                 attachmentPickerActions = attachmentPickerActions,
-                onStartVoiceMode = onStartVoiceMode,
+                enableSearch = enableWebSearch,
+                onUpdateSearchMode = { mode ->
+                    applySearchMode(mode)
+                    toaster.show(
+                        message = if (mode == SearchMode.OFF) searchDisabledMessage else searchEnabledMessage,
+                        duration = 1.seconds,
+                        type = if (mode == SearchMode.OFF) ToastType.Normal else ToastType.Success,
+                    )
+                },
+                onUpdateSearchService = { index ->
+                    vm.updateSettings(setting.copy(searchServiceSelected = index))
+                },
                 onDismiss = { showFilesSheet = false },
             )
         }
@@ -1055,12 +1060,11 @@ private fun ChatFilesPickerSheet(
     assistant: Assistant,
     vm: ChatVM,
     attachmentPickerActions: ChatAttachmentPickerActions,
-    onStartVoiceMode: () -> Unit,
+    enableSearch: Boolean,
+    onUpdateSearchMode: (SearchMode) -> Unit,
+    onUpdateSearchService: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
     var showInjectionSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
 
@@ -1113,14 +1117,9 @@ private fun ChatFilesPickerSheet(
             onPickVideo = attachmentPickerActions.onPickVideo,
             onPickAudio = attachmentPickerActions.onPickAudio,
             onPickFile = attachmentPickerActions.onPickFile,
-            onStartVoiceMode = if (voiceState.phase == VoicePhase.Off) {
-                {
-                    dismissAll()
-                    focusManager.clearFocus(force = true)
-                    keyboardController?.hide()
-                    onStartVoiceMode()
-                }
-            } else null,
+            enableSearch = enableSearch,
+            onUpdateSearchMode = onUpdateSearchMode,
+            onUpdateSearchService = onUpdateSearchService,
         )
     }
 }

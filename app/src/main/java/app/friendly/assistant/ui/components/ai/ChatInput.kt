@@ -122,7 +122,6 @@ import app.friendly.assistant.ui.context.LocalToaster
 import app.friendly.assistant.ui.hooks.ChatInputState
 import app.friendly.assistant.utils.SoundEffectPlayer
 import org.koin.compose.koinInject
-import kotlin.time.Duration.Companion.seconds
 import app.friendly.assistant.ui.pages.chat.VoicePhase
 import app.friendly.assistant.ui.pages.chat.VoiceSessionState
 import kotlin.uuid.Uuid
@@ -133,13 +132,10 @@ fun ChatInput(
     loading: Boolean,
     settings: Settings,
     hazeState: HazeState,
-    enableSearch: Boolean,
-    onUpdateSearchMode: (SearchMode) -> Unit,
     modifier: Modifier = Modifier,
     completionProviders: List<ChatCompletionProvider> = emptyList(),
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
-    onUpdateSearchService: (Int) -> Unit,
     onMoreClick: () -> Unit,
     onCancelClick: () -> Unit,
     onSendClick: (fromVoiceInput: Boolean) -> Unit,
@@ -308,30 +304,6 @@ fun ChatInput(
                                 state = modelListState,
                                 onlyIcon = true,
                                 modifier = Modifier,
-                            )
-
-                            // Search
-                            val enableSearchMsg = stringResource(R.string.web_search_enabled)
-                            val disableSearchMsg = stringResource(R.string.web_search_disabled)
-                            val chatModel = settings.getCurrentChatModel()
-                            SearchPickerButton(
-                                enableSearch = enableSearch,
-                                settings = settings,
-                                onUpdateSearchMode = { mode ->
-                                    onUpdateSearchMode(mode)
-                                    val enabled = mode != SearchMode.OFF
-                                    toaster.show(
-                                        message = if (enabled) enableSearchMsg else disableSearchMsg,
-                                        duration = 1.seconds,
-                                        type = if (enabled) {
-                                            ToastType.Success
-                                        } else {
-                                            ToastType.Normal
-                                        }
-                                    )
-                                },
-                                onUpdateSearchService = onUpdateSearchService,
-                                model = chatModel,
                             )
 
                             // Computer / Open desktop
