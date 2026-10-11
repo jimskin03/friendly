@@ -1,6 +1,6 @@
 import { Component, useCallback, useState, type ReactNode } from "react";
 import { Renderer, type ActionEvent } from "@openuidev/react-lang";
-import { openuiChatLibrary } from "@openuidev/react-ui/genui-lib";
+import { richLibrary } from "./richLibrary";
 import { Markdown, safeLinkTarget } from "./Markdown";
 import { postNative } from "./native";
 
@@ -45,7 +45,7 @@ export function RichResponse({ text, program, loading, interactive }: { text: st
   return (
     <RenderBoundary program={program} fallback={fallback}>
       <div className="rich-response" hidden={invalid && !loading}>
-        <Renderer response={program} library={openuiChatLibrary} isStreaming={loading}
+        <Renderer response={program} library={richLibrary} isStreaming={loading}
           toolProvider={null} publishObservability={false} onError={onError}
           onAction={event => dispatchRichAction(event, interactive && !loading)} />
       </div>

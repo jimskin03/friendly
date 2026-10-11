@@ -39,15 +39,19 @@ suspend fun createWorkspaceTools(
     cwd: String? = null,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
-    val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+    val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+    val approvalOverrides = workspace.toolApprovalOverrides()
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
+    fun needsPathApproval(path: String) = rootfsWriteNeedsApproval(path) {
+        workspaceRepository.rootfsPathContainsSymlink(workspace.root, it)
+    }
 
     val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
 
     return listOf(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createWriteFileTool(workspaceId, ::needsApproval, ::needsPathApproval, workspaceRepository),
+        createEditFileTool(workspaceId, ::needsApproval, ::needsPathApproval, workspaceRepository),
         createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
     )
 }
@@ -100,6 +104,7 @@ private fun createReadFileTool(
 private fun createWriteFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
+    needsPathApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
     name = "workspace_write_file",
@@ -123,7 +128,7 @@ private fun createWriteFileTool(
             required = listOf("path", "text"),
         )
     },
-    needsApproval = { needsApproval("workspace_write_file") || it.pathOutsideWritableRoots("path") },
+    needsApproval = { needsApproval("workspace_write_file") || it.pathNeedsApproval("path", needsPathApproval) },
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
@@ -137,6 +142,7 @@ private fun createWriteFileTool(
 private fun createEditFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
+    needsPathApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
     name = "workspace_edit_file",
@@ -166,7 +172,7 @@ private fun createEditFileTool(
             required = listOf("path", "old_text", "new_text"),
         )
     },
-    needsApproval = { needsApproval("workspace_edit_file") || it.pathOutsideWritableRoots("path") },
+    needsApproval = { needsApproval("workspace_edit_file") || it.pathNeedsApproval("path", needsPathApproval) },
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
@@ -404,16 +410,21 @@ private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): St
 
 private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp", "/skills")
 
-private fun kotlinx.serialization.json.JsonElement.pathOutsideWritableRoots(name: String): Boolean =
+private fun kotlinx.serialization.json.JsonElement.pathNeedsApproval(
+    name: String,
+    needsPathApproval: (String) -> Boolean,
+): Boolean =
     runCatching {
-        jsonObject.absolutePath(name).isOutsideWritableRoots()
+        needsPathApproval(jsonObject.absolutePath(name))
     }.getOrDefault(true)
 
-private fun String.isOutsideWritableRoots(): Boolean {
-    val normalized = trimEnd('/').ifBlank { "/" }
-    return WRITABLE_ROOT_PREFIXES.none { prefix ->
-        normalized == prefix || normalized.startsWith("$prefix/")
-    }
+internal fun rootfsWriteNeedsApproval(path: String, hasSymlink: (String) -> Boolean): Boolean {
+    if (!path.startsWith('/') || path.split('/').any { it == ".." }) return true
+    val normalized = java.nio.file.Paths.get(path).normalize().toString()
+    if (WRITABLE_ROOT_PREFIXES.none { prefix ->
+            normalized == prefix || normalized.startsWith("$prefix/")
+        }) return true
+    return runCatching { hasSymlink(path) }.getOrDefault(true)
 }
 
 private fun String.rootfsName(): String =

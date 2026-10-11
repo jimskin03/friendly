@@ -10,6 +10,7 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.internal.ServerSentEventReader
 import java.io.IOException
+import kotlin.math.min
 
 class SSEEventSource(
     private val request: Request,
@@ -85,8 +86,26 @@ class SSEEventSource(
     }
 
     private fun ResponseBody.isEventStream(): Boolean {
-        val contentType = contentType() ?: return false
-        return contentType.type == "text" && contentType.subtype == "event-stream"
+        val contentType = contentType()
+        if (contentType != null) {
+            return contentType.type == "text" && contentType.subtype == "event-stream"
+        }
+        // ChatGPT plan Responses streams are often SSE with no Content-Type header.
+        // OkHttp's EventSource rejects that as "Invalid content-type: null".
+        return missingTypeLooksLikeEventStream()
+    }
+
+    private fun ResponseBody.missingTypeLooksLikeEventStream(): Boolean {
+        val peeked = source().peek()
+        peeked.request(256)
+        if (peeked.buffer.size == 0L) return false
+        val count = min(256L, peeked.buffer.size)
+        val prefix = peeked.readUtf8(count).trimStart { it == '\uFEFF' || it.isWhitespace() }
+        return prefix.startsWith("data:") ||
+            prefix.startsWith("event:") ||
+            prefix.startsWith("id:") ||
+            prefix.startsWith("retry:") ||
+            prefix.startsWith(":")
     }
 
     override fun onFailure(

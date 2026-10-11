@@ -1,4 +1,4 @@
-﻿package app.friendly.assistant.ui.pages.setting
+package app.friendly.assistant.ui.pages.setting
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Package01
@@ -375,177 +375,31 @@ internal fun ModelSettingsForm(
     isEdit: Boolean,
     parentProvider: ProviderSetting? = null
 ) {
-    val pagerState = rememberPagerState { 3 }
-    val scope = rememberCoroutineScope()
-
     fun setModelId(id: String) {
-        val inputModality = ModelRegistry.MODEL_INPUT_MODALITIES.getData(id)
-        val outputModality = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(id)
-        val abilities = ModelRegistry.MODEL_ABILITIES.getData(id).ifEmpty { listOf(ModelAbility.TOOL) }
-        onModelChange(
-            model.copy(
-                modelId = id,
-                displayName = id,
-                inputModalities = inputModality,
-                outputModalities = outputModality,
-                abilities = abilities
-            )
-        )
+        onModelChange(model.copy(modelId = id, displayName = id).withAutoCapabilities())
     }
 
-    Column {
-        SecondaryTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = Color.Transparent,
-        ) {
-            Tab(
-                selected = pagerState.currentPage == 0,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(0)
-                    }
-                },
-                text = { Text(stringResource(R.string.setting_provider_page_basic_settings)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 1,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(1)
-                    }
-                },
-                text = { Text(stringResource(R.string.setting_provider_page_advanced_settings)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 2,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(2)
-                    }
-                },
-                text = { Text(stringResource(R.string.setting_page_built_in_tools)) }
-            )
-        }
-
-        HorizontalPager(
-            state = pagerState,
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 16.dp)
+    ) {
+        OutlinedTextField(
+            value = model.modelId,
+            onValueChange = { if (!isEdit) setModelId(it.trim()) },
+            label = { Text(stringResource(R.string.setting_provider_page_model_id)) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isEdit
+        )
+        OutlinedTextField(
+            value = model.displayName,
+            onValueChange = { onModelChange(model.copy(displayName = it)) },
+            label = { Text(stringResource(R.string.setting_provider_page_model_display_name)) },
             modifier = Modifier.fillMaxWidth()
-        ) { page ->
-            when (page) {
-                0 -> {
-
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(vertical = 16.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        OutlinedTextField(
-                            value = model.modelId,
-                            onValueChange = {
-                                if (!isEdit) {
-                                    setModelId(it.trim())
-                                }
-                            },
-                            label = { Text(stringResource(R.string.setting_provider_page_model_id)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = {
-                                if (!isEdit) {
-                                    Text(stringResource(R.string.setting_provider_page_model_id_placeholder))
-                                }
-                            },
-                            enabled = !isEdit
-                        )
-
-                        OutlinedTextField(
-                            value = model.displayName,
-                            onValueChange = {
-                                onModelChange(model.copy(displayName = it))
-                            },
-                            label = { Text(stringResource(if (isEdit) R.string.setting_provider_page_model_name else R.string.setting_provider_page_model_display_name)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = {
-                                if (!isEdit) {
-                                    Text(stringResource(R.string.setting_provider_page_model_display_name_placeholder))
-                                }
-                            }
-                        )
-
-                        ModelTypeSelector(
-                            selectedType = model.type,
-                            onTypeSelected = {
-                                onModelChange(model.copy(type = it))
-                            }
-                        )
-
-                        ModelModalitySelector(
-                            model = model,
-                            inputModalities = model.inputModalities,
-                            onUpdateInputModalities = {
-                                onModelChange(model.copy(inputModalities = it))
-                            },
-                            outputModalities = model.outputModalities,
-                            onUpdateOutputModalities = {
-                                onModelChange(model.copy(outputModalities = it))
-                            }
-                        )
-
-                        if (model.type == ModelType.CHAT) {
-                            ModalAbilitySelector(
-                                abilities = model.abilities,
-                                onUpdateAbilities = {
-                                    onModelChange(model.copy(abilities = it))
-                                }
-                            )
-                        }
-                    }
-                }
-
-                1 -> {
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        ProviderOverrideSettings(
-                            providerOverride = model.providerOverwrite,
-                            onUpdateProviderOverride = { providerOverride ->
-                                onModelChange(model.copy(providerOverwrite = providerOverride))
-                            },
-                            parentProvider = parentProvider
-                        )
-
-                        CustomHeaders(
-                            headers = model.customHeaders,
-                            onUpdate = { headers ->
-                                onModelChange(model.copy(customHeaders = headers))
-                            }
-                        )
-
-                        CustomBodies(
-                            customBodies = model.customBodies,
-                            onUpdate = { bodies ->
-                                onModelChange(model.copy(customBodies = bodies))
-                            }
-                        )
-                    }
-                }
-
-                2 -> {
-
-                    BuiltInToolsSettings(
-                        tools = model.tools,
-                        onUpdateTools = { tools ->
-                            onModelChange(model.copy(tools = tools))
-                        }
-                    )
-                }
-            }
-        }
+        )
+        ModelTypeSelector(
+            selectedType = model.type,
+            onTypeSelected = { onModelChange(model.copy(type = it)) }
+        )
     }
 }
 
@@ -557,8 +411,9 @@ internal fun ModelSettingsForm(
 internal fun Model.withAutoCapabilities(): Model {
     val id = modelId.trim()
     val name = displayName.trim().ifBlank { id }
+    val defaultTools = setOf(BuiltInTools.Search, BuiltInTools.UrlContext, BuiltInTools.ImageGeneration)
     if (id.contains("embed", ignoreCase = true)) {
-        return copy(modelId = id, displayName = name, type = ModelType.EMBEDDING, abilities = emptyList())
+        return copy(modelId = id, displayName = name, type = ModelType.EMBEDDING, abilities = emptyList(), tools = defaultTools)
     }
     return if (ModelRegistry.isKnown(id)) {
         copy(
@@ -568,6 +423,7 @@ internal fun Model.withAutoCapabilities(): Model {
             inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(id),
             outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(id),
             abilities = ModelRegistry.MODEL_ABILITIES.getData(id),
+            tools = defaultTools,
         )
     } else {
         copy(
@@ -577,6 +433,7 @@ internal fun Model.withAutoCapabilities(): Model {
             inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
             outputModalities = listOf(Modality.TEXT),
             abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            tools = defaultTools,
         )
     }
 }

@@ -22,6 +22,18 @@ describe("rich response generation contract", () => {
     expect(html).toContain("Compare months");
     expect(html).not.toContain("could not be displayed");
   });
+
+  it.each(["MarkDownRenderer", "TextContent"])("renders Markdown tables inside %s", component => {
+    const markdown = "**OpenUI Test**\n\n| Color |\n| --- |\n| red |\n| blue |\n| green |\n\n- Red\n- Blue";
+    const response = `root = Card([${component}(${JSON.stringify(markdown)})])`;
+    const html = renderToStaticMarkup(<RichResponse text={response} program={response} loading={false} interactive />);
+    expect(html).toContain("<strong>OpenUI Test</strong>");
+    expect(html).toContain("<table");
+    expect(html).toMatch(/<th\b[^>]*>[\s\S]*?Color[\s\S]*?<\/th>/);
+    for (const color of ["red", "blue", "green"]) expect(html).toMatch(new RegExp(`<td\\b[^>]*>${color}</td>`));
+    expect(html).toContain("<li>Red</li>");
+    expect(html).not.toContain("| --- |");
+  });
 });
 
 describe("rich response native actions", () => {

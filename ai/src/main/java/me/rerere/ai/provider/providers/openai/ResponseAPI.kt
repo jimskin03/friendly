@@ -58,10 +58,11 @@ import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
+import me.rerere.ai.util.SSEEventSource
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
-import me.rerere.common.http.await
 import me.rerere.common.http.SensitiveRequest
+import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -178,7 +179,12 @@ class ResponseAPI(
             .headers(headers)
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .header("Authorization", "Bearer $token")
-            .apply { if (oauth) tag(SensitiveRequest::class.java, SensitiveRequest) }
+            .apply {
+                if (oauth) {
+                    header("Accept", "text/event-stream")
+                    tag(SensitiveRequest::class.java, SensitiveRequest)
+                }
+            }
             .apply { if (!oauth) configureReferHeaders(providerSetting.baseUrl) }
             .apply { if (!oauth) configureSessionHeaders(providerSetting.baseUrl, params.sessionId) }
             .build()
@@ -245,8 +251,11 @@ class ResponseAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
-            .newEventSource(request, listener)
+        val eventSource = if (oauth) {
+            SSEEventSource.factory(client).newEventSource(request, listener)
+        } else {
+            EventSources.createFactory(client).newEventSource(request, listener)
+        }
 
         awaitClose {
             println("[awaitClose] Closing eventSource ")
@@ -264,9 +273,6 @@ class ResponseAPI(
         val oauth = providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH
         if (oauth) {
             require(stream) { "ChatGPT account requests must stream Responses API output" }
-            require(params.tools.isEmpty() && params.model.tools.isEmpty()) {
-                "This ChatGPT connection does not support tools yet"
-            }
             require(messages.all { message ->
                 message.parts.all { it is UIMessagePart.Text || it is UIMessagePart.Reasoning }
             }) { "This ChatGPT connection currently supports text-only conversations" }
@@ -318,12 +324,12 @@ class ResponseAPI(
                 }
             }
 
-            // tools
-
-
+            // The default assistant always exposes local tools such as get_time_info.
+            // This ChatGPT connection accepts text Responses requests only, so those
+            // tools are left off the body instead of failing the message.
             val useFunctionTools =
-                params.model.hasToolAbility && params.tools.isNotEmpty()
-            if (useFunctionTools || params.model.tools.isNotEmpty()) {
+                !oauth && params.model.hasToolAbility && params.tools.isNotEmpty()
+            if (useFunctionTools || (!oauth && params.model.tools.isNotEmpty())) {
                 putJsonArray("tools") {
                     if (useFunctionTools) {
                         params.tools.forEach { tool ->
