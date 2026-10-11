@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Voice
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Codesandbox
 import me.rerere.hugeicons.stroke.ComputerTerminal01
@@ -76,6 +75,7 @@ import app.friendly.assistant.data.model.Assistant
 import app.friendly.assistant.data.model.Conversation
 import app.friendly.assistant.data.repository.WorkspaceRepository
 import app.friendly.assistant.ui.components.ui.ExtensionSelector
+import app.friendly.assistant.ui.components.ai.SearchPickerButton
 import app.friendly.assistant.ui.components.ui.permission.PermissionCamera
 import app.friendly.assistant.ui.components.ui.permission.PermissionManager
 import app.friendly.assistant.ui.components.ui.permission.rememberPermissionState
@@ -105,7 +105,9 @@ internal fun FilesPicker(
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
     onPickFile: () -> Unit,
-    onStartVoiceMode: (() -> Unit)? = null,
+    enableSearch: Boolean,
+    onUpdateSearchMode: (SearchMode) -> Unit,
+    onUpdateSearchService: (Int) -> Unit,
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
@@ -135,13 +137,13 @@ internal fun FilesPicker(
 
             FilePickButton(onClick = onPickFile)
 
-            onStartVoiceMode?.let { start ->
-                BigIconTextButton(
-                    icon = { Icon(HugeIcons.Voice, contentDescription = null) },
-                    text = { Text(stringResource(R.string.chat_page_voice_title)) },
-                    onClick = start,
-                )
-            }
+            SearchPickerButton(
+                enableSearch = enableSearch,
+                settings = settings,
+                onUpdateSearchMode = onUpdateSearchMode,
+                onUpdateSearchService = onUpdateSearchService,
+                model = settings.getCurrentChatModel(),
+            )
         }
 
         HorizontalDivider(
