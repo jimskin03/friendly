@@ -56,6 +56,9 @@ class WorkspaceRepository(
 
     suspend fun getById(id: String): WorkspaceEntity? = dao.getById(id)
 
+    fun rootfsPathContainsSymlink(root: String, path: String): Boolean =
+        manager.rootfsPathContainsSymlink(root, path)
+
     suspend fun create(name: String): WorkspaceEntity {
         val id = Uuid.random().toString()
         val now = System.currentTimeMillis()

@@ -71,8 +71,8 @@ class WorkspaceFileSystem(
     }
 
     fun delete(root: File, path: String, recursive: Boolean = false): Boolean {
-        require(path.isNotBlank() && path != ".") { "Refusing to delete workspace root" }
         val file = resolvePath(root, path)
+        require(file != root.canonicalFile) { "Refusing to delete workspace root" }
         if (!file.exists()) return false
         return if (file.isDirectory) {
             require(recursive) { "Directory delete requires recursive = true" }
@@ -83,17 +83,35 @@ class WorkspaceFileSystem(
     }
 
     fun move(root: File, source: String, target: String, overwrite: Boolean = false): WorkspaceFileEntry {
-        require(source.isNotBlank() && source != ".") { "Refusing to move workspace root" }
         val sourceFile = resolvePath(root, source)
         val targetFile = resolvePath(root, target)
+        val rootFile = root.canonicalFile
+        require(sourceFile != rootFile && targetFile != rootFile) { "Refusing to move workspace root" }
         require(sourceFile.exists()) { "Source does not exist: $source" }
+        if (sourceFile == targetFile) return sourceFile.toEntry(root)
+        require(!targetFile.toPath().startsWith(sourceFile.toPath())) {
+            "Cannot move a directory into itself"
+        }
+        require(!sourceFile.toPath().startsWith(targetFile.toPath())) {
+            "Cannot replace a parent of the source"
+        }
         if (targetFile.exists()) {
             require(overwrite) { "Target already exists: $target" }
-            if (targetFile.isDirectory) {
-                targetFile.deleteRecursively()
-            } else {
-                targetFile.delete()
+            // Keep the old target until the move succeeds, so a failed rename cannot lose it.
+            val backup = File.createTempFile(".friendly-move-", ".bak", targetFile.parentFile)
+            check(backup.delete() && targetFile.renameTo(backup)) {
+                "Failed to stage existing target: $target"
             }
+            try {
+                check(sourceFile.renameTo(targetFile)) { "Failed to move $source to $target" }
+            } catch (error: Exception) {
+                if (!backup.renameTo(targetFile)) {
+                    error.addSuppressed(IllegalStateException("Failed to restore target from $backup"))
+                }
+                throw error
+            }
+            check(backup.deleteRecursively()) { "Failed to remove replaced target: $backup" }
+            return targetFile.toEntry(root)
         }
         targetFile.parentFile?.mkdirs()
         require(sourceFile.renameTo(targetFile)) {
