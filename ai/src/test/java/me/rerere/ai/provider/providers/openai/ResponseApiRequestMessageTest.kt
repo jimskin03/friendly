@@ -554,6 +554,22 @@ class ResponseApiRequestMessageTest {
         assertEquals("web_search", tools[1].jsonObject["type"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `chatgpt background requests can use the model default without forcing none effort`() {
+        val body = invokeBuildRequestBody(
+            ProviderSetting.OpenAI(
+                authMode = OpenAIAuthMode.CHATGPT_OAUTH,
+                oauthAccountId = "account",
+            ),
+            createReasoningParams(ReasoningLevel.AUTO),
+            stream = true,
+        )
+
+        val reasoning = body["reasoning"]!!.jsonObject
+        assertFalse("Provider default must omit reasoning.effort", reasoning.containsKey("effort"))
+        assertEquals("auto", reasoning["summary"]?.jsonPrimitive?.content)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createToolParams(
