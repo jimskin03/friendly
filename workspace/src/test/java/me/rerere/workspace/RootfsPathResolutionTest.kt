@@ -8,6 +8,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
 
 class RootfsPathResolutionTest {
     @get:Rule
@@ -93,6 +94,16 @@ class RootfsPathResolutionTest {
             manager.rootfsFileSize(root, "/skills/../secret.txt")
         }
         assertTrue(error.message!!.contains("escapes workspace root"))
+    }
+
+    @Test
+    fun writableBindMountSymlinkRequiresAdditionalApproval() {
+        manager = createManager()
+        val destination = tempFolder.newFolder("elsewhere")
+        Files.createSymbolicLink(File(manager.filesDir(root), "redirect").toPath(), destination.toPath())
+
+        assertTrue(manager.rootfsPathContainsSymlink(root, "/workspace/redirect/secret.txt"))
+        assertTrue(!manager.rootfsPathContainsSymlink(root, "/workspace/new-file.txt"))
     }
 
     @Test

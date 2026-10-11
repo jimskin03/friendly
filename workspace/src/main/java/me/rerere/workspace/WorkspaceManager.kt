@@ -3,6 +3,7 @@ package me.rerere.workspace
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
@@ -137,6 +138,18 @@ class WorkspaceManager(
         }
 
         return RootfsLocation(linuxDir(root), trimmed.trimStart('/'))
+    }
+
+    /** Conservative approval check: symlinks may redirect a rootfs path outside its apparent root. */
+    fun rootfsPathContainsSymlink(root: String, path: String): Boolean {
+        val location = resolveRootfsPath(root, path)
+        var current = location.rootDir
+        if (Files.isSymbolicLink(current.toPath())) return true
+        for (segment in location.relativePath.split('/').filter { it.isNotEmpty() }) {
+            current = File(current, segment)
+            if (Files.isSymbolicLink(current.toPath())) return true
+        }
+        return false
     }
 
     fun rootfsFileSize(root: String, path: String): Long =

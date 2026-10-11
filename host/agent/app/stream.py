@@ -12,6 +12,7 @@ Single concurrent session; TTL defaults to STREAM_TTL_SECONDS (15 min).
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import logging
@@ -20,6 +21,7 @@ import secrets
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -49,6 +51,7 @@ def _launch_desktop_workspace() -> None:
 HOST_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = HOST_ROOT / "logs"
 PID_DIR = HOST_ROOT / "data" / "pids"
+VIEWER_STATE_FILE = PID_DIR / "viewer-session.json"
 
 
 class StreamError(Exception):
@@ -119,6 +122,32 @@ def verify_viewer_token(token: str, settings: Settings | None = None) -> dict[st
         )
     except jwt.PyJWTError as e:
         raise StreamError(f"Invalid viewer token: {e}", code="bad_token") from e
+
+
+def _publish_viewer_session(session_id: str, mode: str, expires_at: datetime,
+                            token: str, settings: Settings) -> None:
+    """Publish only a digest; the websockify plugin also verifies the signed JWT."""
+    PID_DIR.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=".viewer-session-", dir=PID_DIR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            os.fchmod(output.fileno(), 0o600)
+            json.dump({
+                "session_id": session_id,
+                "mode": mode,
+                "expires_at": int(expires_at.timestamp()),
+                "token_hash": hashlib.sha256(token.encode()).hexdigest(),
+                "vnc_port": settings.vnc_port,
+            }, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(name, VIEWER_STATE_FILE)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def _revoke_viewer_session() -> None:
+    VIEWER_STATE_FILE.unlink(missing_ok=True)
 
 
 def _which_or_raise(name: str) -> str:
@@ -214,6 +243,9 @@ def _build_local_viewer_url(
             "autoconnect": "1",
             "reconnect": "1",
             "resize": "remote",
+            # Modern noVNC forwards the path setting to its WebSocket endpoint.
+            # Keep the top-level token for older versions of noVNC.
+            "path": f"websockify?token={token}",
             "token": token,
         }
     )
@@ -907,13 +939,10 @@ def _start_x11vnc(settings: Settings, mode: str) -> int:
             f"No X display on DISPLAY={settings.display}. Start idle stack first.",
             code="no_display",
         )
-    bind = settings.vnc_bind
     port = settings.vnc_port
-    # If our port already answers and belongs to a prior session we re-use;
-    # if something else holds it, fail clearly.
+    # Never reuse an unknown listener: its mode or authentication may differ.
     if _port_open("127.0.0.1", port):
-        logger.info("VNC port %s already open — reusing", port)
-        return 0  # unknown pid; treated as external/reused
+        raise StreamError(f"VNC port {port} is already in use", code="port_in_use")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     PID_DIR.mkdir(parents=True, exist_ok=True)
@@ -932,9 +961,10 @@ def _start_x11vnc(settings: Settings, mode: str) -> int:
         "-xrandr",
         "-quiet",
     ]
-    # Bind localhost only when configured
-    if bind in ("127.0.0.1", "localhost", "::1"):
-        argv.append("-localhost")
+    # Only the authenticated websockify gateway may reach the raw VNC listener.
+    argv.append("-localhost")
+    if mode == "view":
+        argv.append("-viewonly")
 
     env = {**os.environ, "DISPLAY": settings.display}
     with open(log, "ab") as lf:
@@ -948,7 +978,7 @@ def _start_x11vnc(settings: Settings, mode: str) -> int:
     if not _wait_port("127.0.0.1", port, timeout=8):
         _terminate(proc.pid, "x11vnc")
         raise StreamError(
-            f"x11vnc failed to listen on {bind}:{port} — see {log}",
+            f"x11vnc failed to listen on 127.0.0.1:{port} — see {log}",
             code="vnc_start_failed",
         )
     (PID_DIR / "x11vnc.pid").write_text(str(proc.pid))
@@ -963,11 +993,8 @@ def _start_websockify(settings: Settings) -> int:
     # Always prefer loopback for smoke / security default
     listen_host = "127.0.0.1" if bind in ("127.0.0.1", "localhost", "::1") else bind
     port = settings.novnc_port
-    target = f"127.0.0.1:{settings.vnc_port}"
-
     if _port_open("127.0.0.1", port):
-        logger.info("noVNC/websockify port %s already open — reusing", port)
-        return 0
+        raise StreamError(f"Viewer port {port} is already in use", code="port_in_use")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     PID_DIR.mkdir(parents=True, exist_ok=True)
@@ -976,12 +1003,19 @@ def _start_websockify(settings: Settings) -> int:
         "websockify",
         f"--web={web}",
         "--heartbeat=30",
+        "--token-plugin=app.viewer_token_plugin.ViewerTokenPlugin",
+        f"--token-source={VIEWER_STATE_FILE}",
         f"{listen_host}:{port}",
-        target,
     ]
+    # websockify may run from systemd with a different working directory.
+    agent_root = str(Path(__file__).resolve().parents[1])
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        filter(None, (agent_root, os.environ.get("PYTHONPATH", "")))
+    )}
     with open(log, "ab") as lf:
         proc = subprocess.Popen(
             argv,
+            env=env,
             stdout=lf,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -1103,50 +1137,58 @@ class StreamManager:
             now = datetime.now(timezone.utc)
             expires_at = now + timedelta(seconds=s.stream_ttl_seconds)
 
-            x11_pid = _start_x11vnc(s, mode)
-            try:
-                ws_pid = _start_websockify(s)
-            except StreamError:
-                if x11_pid:
-                    _terminate(x11_pid, "x11vnc")
-                raise
-
             token = mint_viewer_token(
                 session_id=session_id,
                 mode=mode,
                 expires_at=expires_at,
                 settings=s,
             )
-            local_url = _build_local_viewer_url(settings=s, token=token)
+            x11_pid = _start_x11vnc(s, mode)
+            try:
+                _publish_viewer_session(session_id, mode, expires_at, token, s)
+                ws_pid = _start_websockify(s)
+            except Exception:
+                _revoke_viewer_session()
+                if x11_pid:
+                    _terminate(x11_pid, "x11vnc")
+                raise
+            try:
+                local_url = _build_local_viewer_url(settings=s, token=token)
 
-            tunnel_mode = (s.tunnel_mode or "localhost").lower()
-            if tunnel_mode in ("auto",):
-                if shutil.which("tailscale"):
-                    tunnel_mode = "tailscale"
-                elif shutil.which("cloudflared"):
-                    tunnel_mode = "cloudflare"
+                tunnel_mode = (s.tunnel_mode or "localhost").lower()
+                if tunnel_mode in ("auto",):
+                    if shutil.which("tailscale"):
+                        tunnel_mode = "tailscale"
+                    elif shutil.which("cloudflared"):
+                        tunnel_mode = "cloudflare"
+                    else:
+                        tunnel_mode = "localhost"
+
+                if tunnel_mode in ("tailscale",):
+                    tunnel = _try_tailscale_serve(local_url, s)
+                elif tunnel_mode in ("cloudflare", "cloudflare_quick", "cf_quick"):
+                    tunnel = _try_cloudflare_tunnel(local_url, s)
                 else:
-                    tunnel_mode = "localhost"
-
-            if tunnel_mode in ("tailscale",):
-                tunnel = _try_tailscale_serve(local_url, s)
-            elif tunnel_mode in ("cloudflare", "cloudflare_quick", "cf_quick"):
-                tunnel = _try_cloudflare_tunnel(local_url, s)
-            else:
-                tunnel = {
-                    "mode": "localhost",
-                    "provisioned": False,
-                    "detail": (
-                        "Localhost viewer only (no Tailscale/cloudflared). "
-                        "Set TUNNEL_MODE=tailscale|cloudflare when credentials exist."
-                    ),
-                }
+                    tunnel = {
+                        "mode": "localhost",
+                        "provisioned": False,
+                        "detail": (
+                            "Localhost viewer only (no Tailscale/cloudflared). "
+                            "Set TUNNEL_MODE=tailscale|cloudflare when credentials exist."
+                        ),
+                    }
+            except Exception:
+                _revoke_viewer_session()
+                _terminate(ws_pid, "websockify")
+                _terminate(x11_pid, "x11vnc")
+                raise
 
             viewer_url = tunnel.get("viewer_url") or local_url
             explicit_localhost = (s.tunnel_mode or "localhost").lower() == "localhost"
             if remote_client and not explicit_localhost and _is_loopback_url(viewer_url):
                 # A 127.0.0.1 viewer is a black screen on the phone: fail with a fix instead.
                 _teardown_tunnel(tunnel, s)
+                _revoke_viewer_session()
                 if ws_pid:
                     _terminate(ws_pid, "websockify")
                 if x11_pid:
@@ -1201,6 +1243,7 @@ class StreamManager:
 
     def _stop_locked(self, sess: StreamSession) -> dict[str, Any]:
         self._cancel_timer()
+        _revoke_viewer_session()
         _teardown_tunnel(sess.tunnel, get_settings())
         # Only kill processes we started (pid != 0/None). Reused ports left alone
         # unless we own the pid file matching.

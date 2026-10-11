@@ -151,7 +151,7 @@ In Friendly chat, tools appear as `mcp__friendly_desktop__screenshot` etc. (sani
 ## Open desktop / streaming
 
 **Idle:** Xvfb + Openbox + Control API/MCP — no viewer URL, no public tunnel.  
-**Open desktop:** `POST /v1/stream/start` → starts **x11vnc** (localhost) + **websockify/noVNC** → returns `viewer_url` + JWT `token` (TTL ~15 min, one session).  
+**Open desktop:** `POST /v1/stream/start` → starts **x11vnc** (localhost) + **websockify/noVNC** → returns `viewer_url` + JWT `token` (TTL ~15 min, one session). The WebSocket gateway verifies that token against the active session before connecting to VNC; `view` sessions also enforce `-viewonly` in x11vnc.
 **Stop:** `POST /v1/stream/stop` → kills our VNC/noVNC processes and removes only the app-owned route on its dedicated Tailscale port; other Serve/Funnel config is preserved.
 
 ### Localhost smoke (this box)
