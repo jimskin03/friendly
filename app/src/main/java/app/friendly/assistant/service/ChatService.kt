@@ -91,10 +91,11 @@ private const val TAG = "ChatService"
 internal fun backgroundTextGenerationParams(
     model: Model,
     conversationId: Uuid,
-    reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
 ): TextGenerationParams = TextGenerationParams(
     model = model,
-    reasoningLevel = reasoningLevel,
+    // Some reasoning models reject effort "none". Let the provider choose its
+    // supported default for titles, suggestions and compression alike.
+    reasoningLevel = ReasoningLevel.AUTO,
     customHeaders = model.customHeaders,
     customBody = model.customBodies,
     sessionId = conversationId.toString(),
@@ -902,7 +903,7 @@ class ChatService(
                                 .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
                     ),
                 ),
-                params = backgroundTextGenerationParams(model, conversationId, ReasoningLevel.OFF),
+                params = backgroundTextGenerationParams(model, conversationId),
             )
 
 
@@ -953,7 +954,7 @@ class ChatService(
                                 .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
                     )
                 ),
-                params = backgroundTextGenerationParams(model, conversationId, ReasoningLevel.OFF),
+                params = backgroundTextGenerationParams(model, conversationId),
             )
             val suggestions =
                 result.message.toText().split("\n").map { it.trim() }
