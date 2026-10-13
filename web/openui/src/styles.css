@@ -423,4 +423,4 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 
 /* Issue #35: swatch in front of table cells holding just a hex colour. */
 .color-swatch-cell { display: inline-flex; align-items: center; gap: 6px; }
-.color-swatch { display: inline-block; flex: none; width: 0.9em; height: 0.9em; border-radius: 3px; border: 1px solid var(--line); box-sizing: border-box; }
+.color-swatch { display: inline-block; flex: none; width: 0.9em; height: 0.9em; border-radius: 50%; border: 1px solid var(--line); box-sizing: border-box; }
