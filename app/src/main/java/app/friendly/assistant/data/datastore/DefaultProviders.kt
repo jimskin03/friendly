@@ -10,6 +10,9 @@ import kotlin.uuid.Uuid
 
 val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
 
+/** Built-in OpenAI provider. Only this provider offers the "ChatGPT account" sign-in. */
+val BUILTIN_OPENAI_PROVIDER_ID = Uuid.parse("1eeea727-9ee5-4cae-93e6-6fb01a4d051e")
+
 /** Built-in provider slot formerly used for Vercel AI Gateway. */
 val BUILTIN_OLLAMA_PROVIDER_ID = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88")
 
@@ -19,7 +22,7 @@ private const val LEGACY_VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel
 
 val DEFAULT_PROVIDERS = listOf(
     ProviderSetting.OpenAI(
-        id = Uuid.parse("1eeea727-9ee5-4cae-93e6-6fb01a4d051e"),
+        id = BUILTIN_OPENAI_PROVIDER_ID,
         name = "OpenAI",
         baseUrl = "https://api.openai.com/v1",
         apiKey = "",
