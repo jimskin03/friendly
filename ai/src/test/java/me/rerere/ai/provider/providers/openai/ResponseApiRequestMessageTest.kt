@@ -2,6 +2,8 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -12,6 +14,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.BuiltInTools
+import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.OpenAIAuthMode
@@ -28,6 +31,7 @@ import me.rerere.ai.ui.toMetadata
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -516,7 +520,7 @@ class ResponseApiRequestMessageTest {
     }
 
     @Test
-    fun `chatgpt account request omits assistant and built-in tools`() {
+    fun `chatgpt account request sends assistant and built-in search tools`() {
         val provider = ProviderSetting.OpenAI(
             authMode = OpenAIAuthMode.CHATGPT_OAUTH,
             oauthAccountId = "account",
@@ -533,9 +537,120 @@ class ResponseApiRequestMessageTest {
             stream = true,
         )
 
-        assertFalse(body.containsKey("tools"))
+        val tools = body["tools"]!!.jsonArray
+        assertEquals(1, tools.size)
+        assertEquals("web_search", tools.single().jsonObject["type"]?.jsonPrimitive?.content)
+        val additionalTools = body["input"]!!.jsonArray.first().jsonObject
+        assertEquals("additional_tools", additionalTools["type"]?.jsonPrimitive?.content)
+        assertEquals("developer", additionalTools["role"]?.jsonPrimitive?.content)
+        val functions = additionalTools["tools"]!!.jsonArray
+        assertEquals(1, functions.size)
+        assertEquals("function", functions.single().jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("get_time_info", functions.single().jsonObject["name"]?.jsonPrimitive?.content)
+        assertTrue(functions.single().jsonObject["parameters"] is JsonObject)
         assertEquals("test-model", body["model"]?.jsonPrimitive?.content)
         assertEquals("false", body["store"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chatgpt follow-up replays reasoning tool calls and search history`() {
+        val searchCall = buildJsonObject {
+            put("type", "web_search_call")
+            put("id", "ws_1")
+            put("status", "completed")
+            put("action", buildJsonObject { put("type", "search") })
+        }
+        val messages = listOf(
+            UIMessage.user("Search for today's news"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(
+                        reasoning = "Checking the time first",
+                        reasoningType = ReasoningType.SUMMARY_TEXT,
+                        metadata = OpenAIReasoningMetadata(
+                            reasoningId = "rs_1",
+                            encryptedContent = "encrypted-reasoning",
+                        ).toMetadata(),
+                    ),
+                    createExecutedTool("call_1", "get_time_info", "{}", "2026-10-13"),
+                    UIMessagePart.ServerTool(
+                        toolCallId = "ws_1",
+                        toolName = "web_search",
+                        status = ServerToolStatus.COMPLETED,
+                        metadata = ServerToolMetadata(
+                            protocol = ServerToolProtocol.OPENAI_RESPONSES,
+                            call = searchCall,
+                        ).toMetadata(),
+                    ),
+                    UIMessagePart.Text("Here is the news"),
+                ),
+            ),
+            UIMessage.user("Tell me more"),
+        )
+        val body = api.buildRequestBody(
+            ProviderSetting.OpenAI(authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = "account"),
+            messages,
+            createToolParams(tools = listOf(createFunctionTool("get_time_info"))),
+            stream = true,
+        )
+        assertFalse(body.containsKey("tools"))
+        val input = body["input"]!!.jsonArray.map { it.jsonObject }
+        assertEquals("additional_tools", input.first()["type"]?.jsonPrimitive?.content)
+        val items = input.drop(1)
+        assertEquals(7, items.size)
+        assertEquals("encrypted-reasoning", items[1]["encrypted_content"]?.jsonPrimitive?.content)
+        assertEquals("function_call", items[2]["type"]?.jsonPrimitive?.content)
+        assertEquals("call_1", items[2]["call_id"]?.jsonPrimitive?.content)
+        assertEquals("get_time_info", items[2]["name"]?.jsonPrimitive?.content)
+        assertEquals("{}", items[2]["arguments"]?.jsonPrimitive?.content)
+        assertEquals("function_call_output", items[3]["type"]?.jsonPrimitive?.content)
+        assertEquals("call_1", items[3]["call_id"]?.jsonPrimitive?.content)
+        assertEquals("2026-10-13", items[3]["output"]?.jsonPrimitive?.content)
+        assertEquals(searchCall, items[4])
+        assertEquals("user", items.last()["role"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chatgpt search works without function tools and excludes image generation`() {
+        val body = invokeBuildRequestBody(
+            ProviderSetting.OpenAI(authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = "account"),
+            createToolParams(builtInTools = setOf(BuiltInTools.Search, BuiltInTools.ImageGeneration)),
+            stream = true,
+        )
+        val tools = body["tools"]!!.jsonArray
+        assertEquals(1, tools.size)
+        assertEquals("web_search", tools.single().jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals(1, body["input"]!!.jsonArray.size)
+        assertEquals("user", body["input"]!!.jsonArray.single().jsonObject["role"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chatgpt tool support preserves streaming storage and sampling restrictions`() {
+        val provider = ProviderSetting.OpenAI(
+            authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = "account",
+        )
+        val params = createToolParams(tools = listOf(createFunctionTool("get_time_info")))
+        assertThrows(IllegalArgumentException::class.java) {
+            invokeBuildRequestBody(provider, params, stream = false)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            invokeBuildRequestBody(provider, params.copy(temperature = 0.5f), stream = true)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            invokeBuildRequestBody(provider, params.copy(customBody = listOf(CustomBody("store", JsonPrimitive(true)))), stream = true)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            invokeBuildRequestBody(provider, params.copy(customBody = listOf(CustomBody("tools", buildJsonArray {
+                add(buildJsonObject { put("type", "image_generation") })
+            }))), stream = true)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            api.buildRequestBody(provider, listOf(UIMessage(
+                role = MessageRole.USER,
+                parts = listOf(UIMessagePart.Image("https://example.com/image.png")),
+            )), params, stream = true)
+        }
     }
 
     @Test

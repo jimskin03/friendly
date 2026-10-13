@@ -1076,7 +1076,7 @@
   <string name="setting_provider_openai_manage_usage">Manage usage</string>
   <string name="setting_provider_openai_sign_out">Sign out</string>
   <string name="setting_provider_openai_revocation_failed">Signed out here. Disconnect Friendly from your ChatGPT account settings if needed.</string>
-  <string name="setting_provider_openai_supported_scope">ChatGPT account mode currently supports text Responses API requests. Tools, image generation, custom sampling, and custom output limits are unavailable.</string>
+  <string name="setting_provider_openai_supported_scope">ChatGPT account mode supports text conversations, tools, and web search through the Responses API. Image generation, custom sampling, and custom output limits are unavailable.</string>
   <string name="setting_provider_page_save">Save</string>
   <string name="setting_provider_page_save_success">Save successful</string>
     <string name="setting_provider_page_select_all">Select All (%1$d)</string>
