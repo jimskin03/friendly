@@ -408,6 +408,57 @@
     <issue id="MissingTranslation" message="&quot;use_assistant&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;use_assistant&quot;&gt;Use&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~">
         <location file="src/main/res/values/strings.xml" line="20" column="11" />
     </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_connection_method&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_connection_method&quot;&gt;Connection method&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1063" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_api_key_method&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_api_key_method&quot;&gt;API key&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1064" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_chatgpt_method&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_chatgpt_method&quot;&gt;ChatGPT account&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1065" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_oauth_description&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_oauth_description&quot;&gt;Connect a ChatGPT account to use eligible models through the Responses API.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1066" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_consent_title&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_consent_title&quot;&gt;Use your ChatGPT account&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1067" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_consent_message&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_consent_message&quot;&gt;Friendly will send your prompts and conversation context to OpenAI using the account you authorize. OpenAI may apply your plan’s usage limits. You can disconnect this account from provider settings.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1068" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_consent_continue&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_consent_continue&quot;&gt;Continue&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1069" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_connect&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_connect&quot;&gt;Continue with ChatGPT&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1070" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_add_account&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_add_account&quot;&gt;Add another account&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1071" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_connected&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_connected&quot;&gt;Connected to %1$s&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1072" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_use_account&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_use_account&quot;&gt;Use %1$s&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1073" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_retry_account&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_retry_account&quot;&gt;Retry unfinished sign-in (%1$s)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1074" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_reconnect_account&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_reconnect_account&quot;&gt;Reconnect %1$s&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1075" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_manage_usage&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_manage_usage&quot;&gt;Manage usage&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1076" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_sign_out&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_sign_out&quot;&gt;Sign out&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1077" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_revocation_failed&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_revocation_failed&quot;&gt;Signed out here. Disconnect Friendly from your ChatGPT account settings if needed.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1078" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_provider_openai_supported_scope&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_provider_openai_supported_scope&quot;&gt;ChatGPT account mode currently supports text Responses API requests. Tools, image generation, custom sampling, and custom output limits are unavailable.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1079" column="11" />
+    </issue>
     <issue id="MissingTranslation" message="&quot;phone_automation&quot; is not translated in &quot;ar&quot; (Arabic), &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;phone_automation&quot;&gt;Phone Automation&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~">
         <location file="src/main/res/values/strings.xml" line="21" column="11" />
     </issue>

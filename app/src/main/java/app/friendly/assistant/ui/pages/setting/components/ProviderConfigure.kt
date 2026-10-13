@@ -38,6 +38,7 @@ import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
 import app.friendly.assistant.R
 import app.friendly.assistant.data.datastore.DEFAULT_PROVIDERS
+import app.friendly.assistant.data.datastore.BUILTIN_OPENAI_PROVIDER_ID
 import app.friendly.assistant.data.ai.openai.OpenAIAccountStore
 import app.friendly.assistant.data.ai.openai.OpenAIOAuthCoordinator
 import me.rerere.ai.provider.OpenAIAuthMode
@@ -197,6 +198,9 @@ private fun String.normalizePath(): String {
     return path.trimEnd('/')
 }
 
+internal fun ProviderSetting.OpenAI.supportsChatGptSignIn(): Boolean =
+    id == BUILTIN_OPENAI_PROVIDER_ID || authMode == OpenAIAuthMode.CHATGPT_OAUTH
+
 private fun String.isValidBaseUrl(): Boolean = this.toHttpUrlOrNull() != null
 
 private const val OPENAI_OFFICIAL_HOST = "api.openai.com"
@@ -263,28 +267,34 @@ private fun ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Text(stringResource(R.string.setting_provider_openai_connection_method), style = MaterialTheme.typography.titleSmall)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        val options = listOf(OpenAIAuthMode.API_KEY, OpenAIAuthMode.CHATGPT_OAUTH)
-        options.forEachIndexed { index, mode ->
-            SegmentedButton(
-                shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                label = { Text(if (mode == OpenAIAuthMode.API_KEY) stringResource(R.string.setting_provider_openai_api_key_method) else stringResource(R.string.setting_provider_openai_chatgpt_method)) },
-                selected = provider.authMode == mode,
-                enabled = !signingIn,
-                onClick = {
-                    oauthError = null
-                    if (mode == OpenAIAuthMode.CHATGPT_OAUTH) {
-                        onEdit(provider.copy(
-                            authMode = mode,
-                            apiKey = "",
-                            useResponseApi = true,
-                            baseUrl = "https://api.openai.com/v1",
-                            responsesPath = "/responses",
-                        ))
-                    } else onEdit(provider.copy(authMode = mode, oauthAccountId = null))
-                },
-            )
+    // ChatGPT account sign-in only applies to the built-in OpenAI provider (#42). Other
+    // OpenAI-compatible providers (DeepSeek, OpenRouter, Ollama, ...) only use an API key.
+    // A provider already switched to ChatGPT mode keeps the picker so it can switch back.
+    val offerChatGptSignIn = provider.supportsChatGptSignIn()
+    if (offerChatGptSignIn) {
+        Text(stringResource(R.string.setting_provider_openai_connection_method), style = MaterialTheme.typography.titleSmall)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            val options = listOf(OpenAIAuthMode.API_KEY, OpenAIAuthMode.CHATGPT_OAUTH)
+            options.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                    label = { Text(if (mode == OpenAIAuthMode.API_KEY) stringResource(R.string.setting_provider_openai_api_key_method) else stringResource(R.string.setting_provider_openai_chatgpt_method)) },
+                    selected = provider.authMode == mode,
+                    enabled = !signingIn,
+                    onClick = {
+                        oauthError = null
+                        if (mode == OpenAIAuthMode.CHATGPT_OAUTH) {
+                            onEdit(provider.copy(
+                                authMode = mode,
+                                apiKey = "",
+                                useResponseApi = true,
+                                baseUrl = "https://api.openai.com/v1",
+                                responsesPath = "/responses",
+                            ))
+                        } else onEdit(provider.copy(authMode = mode, oauthAccountId = null))
+                    },
+                )
+            }
         }
     }
 
@@ -297,6 +307,7 @@ private fun ProviderConfigureOpenAI(
                 showOAuthConsent = true
             }) { Text(stringResource(R.string.setting_provider_openai_connect)) }
         } else {
+            val revocationFailedMessage = stringResource(R.string.setting_provider_openai_revocation_failed)
             Text(stringResource(R.string.setting_provider_openai_connected, connected.email.ifBlank { connected.name.ifBlank { connected.subject.take(8) } }))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
@@ -308,7 +319,7 @@ private fun ProviderConfigureOpenAI(
                     scope.launch {
                         val remoteRevoked = oauthCoordinator.disconnect(connected.id)
                         onEdit(provider.copy(oauthAccountId = null))
-                        if (!remoteRevoked) oauthError = context.getString(R.string.setting_provider_openai_revocation_failed)
+                        if (!remoteRevoked) oauthError = revocationFailedMessage
                     }
                 }) { Text(stringResource(R.string.setting_provider_openai_sign_out)) }
             }
