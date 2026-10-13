@@ -6,6 +6,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import "katex/dist/katex.min.css";
 import { postNative } from "./native";
+import { withColorSwatch } from "./colorSwatch";
 
 // Raw HTML in model output is never rendered: react-markdown escapes it unless rehype-raw is
 // added (it is not). URLs go through the default transform (drops javascript:, data:, etc.)
@@ -77,6 +78,7 @@ const components: Components = {
       <table>{children}</table>
     </div>
   ),
+  td: ({ node: _node, children, ...props }) => <td {...props}>{withColorSwatch(children)}</td>,
 };
 
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
