@@ -415,3 +415,8 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .sheet-head + .picker-section { border-top: 0; margin-top: 0; padding-top: 4px; }
 .composer-tools { overflow: visible; min-width: 0; flex: 1; }
 .model-chip { max-width: none; flex: 0 1 auto; min-width: 0; }
+
+/* Issue #35: OpenUI's table header label is small, muted and unshaded, so on the
+   phone the header row read as just another body row. Match the plain-Markdown table. */
+.message-assistant .openui-table-head { background: var(--surface-container); }
+.message-assistant .openui-table-head .openui-table-head-label { color: var(--text); font-weight: 600; }
