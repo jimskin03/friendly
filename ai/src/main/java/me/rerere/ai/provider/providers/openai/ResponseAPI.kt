@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -274,8 +275,12 @@ class ResponseAPI(
         if (oauth) {
             require(stream) { "ChatGPT account requests must stream Responses API output" }
             require(messages.all { message ->
-                message.parts.all { it is UIMessagePart.Text || it is UIMessagePart.Reasoning }
-            }) { "This ChatGPT connection currently supports text-only conversations" }
+                message.parts.all {
+                    it is UIMessagePart.Text || it is UIMessagePart.Reasoning ||
+                        it is UIMessagePart.ServerTool ||
+                        (it is UIMessagePart.Tool && it.output.all { output -> output is UIMessagePart.Text })
+                }
+            }) { "This ChatGPT connection supports text conversations and tool results only" }
             require(params.temperature == null && params.topP == null && params.maxTokens == null) {
                 "This ChatGPT connection does not support custom sampling or output-token limits"
             }
@@ -284,6 +289,18 @@ class ResponseAPI(
         }
         val host = if (oauth) "api.openai.com" else providerSetting.baseUrl.toHttpUrl().host
         val capabilities = resolveResponseProviderCapabilities(host)
+        val functionTools = buildJsonArray {
+            if (params.model.hasToolAbility) {
+                params.tools.forEach { tool ->
+                    add(buildJsonObject {
+                        put("type", "function")
+                        put("name", tool.name)
+                        put("description", tool.description)
+                        put("parameters", json.encodeToJsonElement(tool.parameters()))
+                    })
+                }
+            }
+        }
         val body = buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
@@ -304,7 +321,18 @@ class ResponseAPI(
             }
 
             // messages
-            put("input", buildMessages(messages))
+            put("input", buildJsonArray {
+                // ChatGPT plan requests require functions in namespaces or additional_tools.
+                // Keep the existing unqualified call names by using additional_tools.
+                if (oauth && functionTools.isNotEmpty()) {
+                    add(buildJsonObject {
+                        put("type", "additional_tools")
+                        put("role", "developer")
+                        put("tools", functionTools)
+                    })
+                }
+                buildMessages(messages).forEach { add(it) }
+            })
 
             // reasoning
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
@@ -324,30 +352,16 @@ class ResponseAPI(
                 }
             }
 
-            // The default assistant always exposes local tools such as get_time_info.
-            // This ChatGPT connection accepts text Responses requests only, so those
-            // tools are left off the body instead of failing the message.
-            val useFunctionTools =
-                !oauth && params.model.hasToolAbility && params.tools.isNotEmpty()
-            if (useFunctionTools || (!oauth && params.model.tools.isNotEmpty())) {
+            val useFunctionTools = !oauth && functionTools.isNotEmpty()
+            // ChatGPT account mode supports search, but not image generation.
+            val builtInTools = params.model.tools.filter { !oauth || it == BuiltInTools.Search }
+            if (useFunctionTools || builtInTools.isNotEmpty()) {
                 putJsonArray("tools") {
                     if (useFunctionTools) {
-                        params.tools.forEach { tool ->
-                            add(buildJsonObject {
-                                put("type", "function")
-                                put("name", tool.name)
-                                put("description", tool.description)
-                                put(
-                                    "parameters",
-                                    json.encodeToJsonElement(
-                                        tool.parameters()
-                                    )
-                                )
-                            })
-                        }
+                        functionTools.forEach { add(it) }
                     }
                     // built-in tools
-                    params.model.tools.forEach { builtInTool ->
+                    builtInTools.forEach { builtInTool ->
                         when (builtInTool) {
                             BuiltInTools.Search -> {
                                 add(buildJsonObject {
@@ -369,11 +383,16 @@ class ResponseAPI(
             }
         }.mergeCustomBody(params.customBody)
         if (oauth) {
-            val supportedFields = setOf("model", "stream", "store", "instructions", "input", "reasoning", "include")
+            val supportedFields = setOf("model", "stream", "store", "instructions", "input", "reasoning", "include", "tools")
             require(body.keys.all { it in supportedFields }) { "A custom request body contains fields unavailable to ChatGPT connections" }
             require(body["stream"] == kotlinx.serialization.json.JsonPrimitive(true)) { "ChatGPT requests must use streaming" }
             require(body["store"] == kotlinx.serialization.json.JsonPrimitive(false)) { "ChatGPT requests must disable storage" }
             require(body["input"] is kotlinx.serialization.json.JsonArray) { "ChatGPT requests require an input array" }
+            body["tools"]?.let { tools ->
+                require(tools is JsonArray && tools.all {
+                    (it as? JsonObject)?.get("type") == JsonPrimitive("web_search")
+                }) { "ChatGPT connections only support web search in top-level tools; use additional_tools for functions" }
+            }
         }
         return body
     }
