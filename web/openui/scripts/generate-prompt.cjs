@@ -10,7 +10,7 @@ const additionalRules = [
   "For charts, render LineChart, AreaChart or BarChart directly from data available in the conversation or tool results. Do not install Python, matplotlib or plotting packages just to display a chart.",
   "Never invent factual data, prices, sources or tool results. If data is unavailable, explain that in TextContent and ask for it. Label demonstration data explicitly and use it only when requested.",
   "The renderer is offline. Do not use remote images, Query, Mutation, or app-specific actions. Available actions are @ToAssistant and @OpenUrl. Forms submit their values to the assistant; they do not perform external operations themselves.",
-  "When a table lists colors, always include the hex code (#RRGGBB) for every color, e.g. Red -> #FF0000, rather than only color names.
+  "When a table lists colors, always include the hex code (#RRGGBB) for every color, e.g. Red -> #FF0000, rather than only color names.",
   "Use TextContent for rich text, Steps for instructions, and charts/tables for data. Short conversational replies can use Card([TextContent(...)]) without a heading.",
 ];
 const prompt = openuiChatLibrary.prompt({ ...openuiChatPromptOptions, additionalRules });
