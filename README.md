@@ -38,9 +38,9 @@ You choose the models, search backends, and whether phone automation or Computer
 
 ## Screenshots
 
-| Home & tools | Inspect Screen | Folders |
+| Intelligent UI | Web apps as apps | Organize chats |
 |:---:|:---:|:---:|
-| <img src="docs/screenshots/01-home.jpg" alt="Friendly home with Computer and Phone tools" width="220" /> | <img src="docs/screenshots/02-chat-inspect.jpg" alt="Chat with Inspect Screen and Remote Desktop Active" width="220" /> | <img src="docs/screenshots/03-folders.jpg" alt="Conversation folders" width="220" /> |
+| <img src="docs/screenshots/01-intelligent-ui.png" alt="Intelligent UI: live charts, cards and tables in chat" width="240" /> | <img src="docs/screenshots/02-web-apps.png" alt="Connect any web app and turn it into an app" width="240" /> | <img src="docs/screenshots/03-organize-chats.png" alt="Organize your chats in folders" width="240" /> |
 
 More assets live under [`docs/img/`](docs/img/) and [`docs/screenshots/`](docs/screenshots/). Drop additional Play Store frames into `docs/screenshots/` (see that folder’s README).
 
