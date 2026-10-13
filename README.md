@@ -229,6 +229,59 @@ The **Play** build only accepts trusted HTTPS for the desktop Screen viewer and 
 9. **Browser won't open** (terminal works): snap Chromium can't run as the service user. Check `curl -s 127.0.0.1:8787/health` → `browser`, and `/opt/friendly-host/logs/browser.log`. Fix: re-run the setup script (installs Google Chrome `.deb` on amd64), or install a non-snap browser and set `CHROMIUM_BIN=` in `/etc/friendly-host.env`; then `sudo systemctl restart friendly-agent friendly-openbox friendly-tint2`.
 10. In Friendly: **Stop**, then **Start** the desktop stream.
 
+## Linking Hermes with Friendly
+
+Friendly links to a self-hosted [Hermes Agent](https://github.com/NousResearch/hermes-agent) server as a **custom OpenAI-compatible provider**: Friendly sends chats to Hermes' API server (`/v1/chat/completions`) and Hermes runs its own agent loop and tools on the server. There is no dedicated Hermes screen in Friendly; the link is a normal provider entry.
+
+### Prerequisites
+
+1. **Tailscale** on the Hermes server and the Android phone (same tailnet). Keep Hermes private — never expose it with Funnel (443/Funnel stay reserved for other services).
+2. **Hermes running** with its **API server enabled** (in `~/.hermes/.env`):
+   ```bash
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=<long-random-secret>   # Friendly sends this as the Bearer API key
+   # API_SERVER_PORT=8642                # default
+   ```
+   Restart Hermes (`hermes gateway` / your service) after editing.
+3. Check it on the server: `curl -s -H "Authorization: Bearer $API_SERVER_KEY" http://127.0.0.1:8642/v1/models`
+
+> Port **9119** is the Hermes web dashboard, not the chat API — don't use it as the Base URL.
+
+### Setup (server side)
+
+- **Nightly build:** plain HTTP over Tailscale works: `http://<tailscale-ip>:8642/v1` (`tailscale ip -4`). Make sure Hermes listens on an address reachable over Tailscale (not only `127.0.0.1`).
+- **Play build:** HTTPS with a trusted cert is required (cleartext and self-signed certs are rejected). Use Tailscale HTTPS on a free port:
+  ```bash
+  sudo tailscale serve --bg --https=8445 http://127.0.0.1:8642
+  ```
+  Base URL becomes `https://<machine>.<tailnet>.ts.net:8445/v1`.
+
+### Linking steps (in Friendly)
+
+1. **Settings → Providers → Add Provider**, choose the **OpenAI** (OpenAI-compatible) type.
+2. **Name:** `Hermes`.
+3. **API Base Url:** the URL from Setup (ends in `/v1`).
+4. **API Key:** your `API_SERVER_KEY`.
+5. Leave **Response API** off.
+6. **Models → Add Model**, **Model ID:** the id returned by `/v1/models` (e.g. `hermes-agent`).
+7. **Save**, enable the provider, then pick the Hermes model in a chat or assistant.
+
+### Verify
+
+- Tap **Test Connection** on the provider page.
+- Send a short message; the reply comes from Hermes (its tools and memory run server-side).
+
+### Troubleshooting
+
+- **Unreachable / timeout:** both devices online in Tailscale? `curl` the Base URL from another tailnet device; check Hermes binds to a non-localhost address or use `tailscale serve`.
+- **Cleartext / certificate errors (Play):** use the `https://…ts.net` URL with MagicDNS + HTTPS Certificates enabled, or install your own CA on the phone. Friendly has no trust-all option.
+- **401 Unauthorized:** API Key in Friendly must equal `API_SERVER_KEY`; restart Hermes after changing it.
+- **404:** Base URL must end in `/v1` and point at the API port (8642 or your serve port), not the dashboard (9119).
+- **Model not found:** use the exact id from `/v1/models`.
+- **Port 443 in use:** leave it (Funnel); serve Hermes on another HTTPS port such as 8445.
+
+---
+
 ## Architecture (brief)
 
 ```
