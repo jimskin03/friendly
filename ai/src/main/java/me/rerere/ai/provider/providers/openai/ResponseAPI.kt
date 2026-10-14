@@ -274,13 +274,17 @@ class ResponseAPI(
         val oauth = providerSetting.authMode == OpenAIAuthMode.CHATGPT_OAUTH
         if (oauth) {
             require(stream) { "ChatGPT account requests must stream Responses API output" }
+            // ChatGPT plan usage accepts image input, including function-tool screenshots.
+            // Keep these results intact for buildMessages to encode as input_image content.
             require(messages.all { message ->
                 message.parts.all {
-                    it is UIMessagePart.Text || it is UIMessagePart.Reasoning ||
+                    it is UIMessagePart.Text || it is UIMessagePart.Image || it is UIMessagePart.Reasoning ||
                         it is UIMessagePart.ServerTool ||
-                        (it is UIMessagePart.Tool && it.output.all { output -> output is UIMessagePart.Text })
+                        (it is UIMessagePart.Tool && it.output.all { output ->
+                            output is UIMessagePart.Text || output is UIMessagePart.Image
+                        })
                 }
-            }) { "This ChatGPT connection supports text conversations and tool results only" }
+            }) { "This ChatGPT connection supports text and image conversations and tool results only" }
             require(params.temperature == null && params.topP == null && params.maxTokens == null) {
                 "This ChatGPT connection does not support custom sampling or output-token limits"
             }

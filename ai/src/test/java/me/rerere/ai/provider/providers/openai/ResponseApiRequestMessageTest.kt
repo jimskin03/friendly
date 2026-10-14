@@ -645,12 +645,84 @@ class ResponseApiRequestMessageTest {
                 add(buildJsonObject { put("type", "image_generation") })
             }))), stream = true)
         }
-        assertThrows(IllegalArgumentException::class.java) {
-            api.buildRequestBody(provider, listOf(UIMessage(
-                role = MessageRole.USER,
-                parts = listOf(UIMessagePart.Image("https://example.com/image.png")),
-            )), params, stream = true)
+        for (part in listOf(UIMessagePart.Audio("file:///audio.mp3"), UIMessagePart.Video("file:///video.mp4"))) {
+            assertThrows(IllegalArgumentException::class.java) {
+                api.buildRequestBody(provider, listOf(UIMessage(
+                    role = MessageRole.USER,
+                    parts = listOf(part),
+                )), params, stream = true)
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                api.buildRequestBody(provider, listOf(UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(createExecutedTool("call_media", "media", "{}", "")
+                        .copy(output = listOf(part))),
+                )), params, stream = true)
+            }
         }
+    }
+
+    @Test
+    fun `chatgpt phone screenshot survives tool continuation and later history replay`() {
+        val provider = ProviderSetting.OpenAI(
+            authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = "account",
+        )
+        val params = createToolParams(tools = listOf(createFunctionTool("phone_screenshot")))
+        val imageUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="
+        val screenshotStatus = """{"success":true,"mode":"image","screenshot":true}"""
+        val screenshot = createExecutedTool("call_screen", "phone_screenshot", """{"screenshot":true}""", "")
+            .copy(output = listOf(UIMessagePart.Image(imageUrl), UIMessagePart.Text(screenshotStatus)))
+        val messages = listOf(
+            UIMessage.user("Open GrabFood and find lunch"),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(
+                createExecutedTool("call_launch", "phone_launch_app", """{"app_name":"Grab"}""", "Opened Grab"),
+                screenshot,
+            )),
+        )
+        val histories = listOf(messages, messages + listOf(
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("I can see the menu"))),
+            UIMessage.user("Continue"),
+        ))
+
+        for (history in histories) {
+            val body = api.buildRequestBody(provider, history, params, stream = true)
+            val input = body.getValue("input").jsonArray.map { it.jsonObject }
+            val call = input.single { it["type"]?.jsonPrimitive?.content == "function_call" &&
+                it["call_id"]?.jsonPrimitive?.content == "call_screen" }
+            assertEquals("phone_screenshot", call["name"]?.jsonPrimitive?.content)
+            assertEquals("""{"screenshot":true}""", call["arguments"]?.jsonPrimitive?.content)
+            val outputs = input.filter { it["type"]?.jsonPrimitive?.content == "function_call_output" }
+            assertEquals("Opened Grab", outputs.single {
+                it["call_id"]?.jsonPrimitive?.content == "call_launch"
+            }["output"]?.jsonPrimitive?.content)
+            val content = outputs.single {
+                it["call_id"]?.jsonPrimitive?.content == "call_screen"
+            }.getValue("output").jsonArray
+            assertEquals(2, content.size)
+            assertEquals("input_image", content[0].jsonObject["type"]?.jsonPrimitive?.content)
+            assertEquals(imageUrl, content[0].jsonObject["image_url"]?.jsonPrimitive?.content)
+            assertEquals("input_text", content[1].jsonObject["type"]?.jsonPrimitive?.content)
+            assertEquals(screenshotStatus, content[1].jsonObject["text"]?.jsonPrimitive?.content)
+            assertEquals(JsonPrimitive(true), body["stream"])
+            assertEquals(JsonPrimitive(false), body["store"])
+        }
+    }
+
+    @Test
+    fun `chatgpt image attachment is sent as image input`() {
+        val imageUrl = "https://example.com/image.png"
+        val body = api.buildRequestBody(
+            ProviderSetting.OpenAI(authMode = OpenAIAuthMode.CHATGPT_OAUTH, oauthAccountId = "account"),
+            listOf(UIMessage(role = MessageRole.USER, parts = listOf(
+                UIMessagePart.Text("What is on this screen?"), UIMessagePart.Image(imageUrl),
+            ))),
+            createToolParams(),
+            stream = true,
+        )
+        val content = body.getValue("input").jsonArray.single().jsonObject.getValue("content").jsonArray
+        assertEquals("input_text", content[0].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("input_image", content[1].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals(imageUrl, content[1].jsonObject["image_url"]?.jsonPrimitive?.content)
     }
 
     @Test
