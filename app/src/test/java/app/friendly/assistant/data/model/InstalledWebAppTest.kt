@@ -11,14 +11,14 @@ class InstalledWebAppTest {
     @Test
     fun `https urls are accepted`() {
         assertEquals(
-            "https://expensetracker.cryptgregresearch.org/",
-            normalizeHttpsStartUrl("  https://expensetracker.cryptgregresearch.org/  "),
+            "https://finance.cryptgregresearch.org/",
+            normalizeHttpsStartUrl("  https://finance.cryptgregresearch.org/  "),
         )
     }
 
     @Test
     fun `http urls are rejected`() {
-        assertNull(normalizeHttpsStartUrl("http://expensetracker.cryptgregresearch.org/"))
+        assertNull(normalizeHttpsStartUrl("http://finance.cryptgregresearch.org/"))
         assertNull(normalizeHttpsStartUrl("HTTP://example.com"))
     }
 
@@ -34,12 +34,52 @@ class InstalledWebAppTest {
         val apps = defaultInstalledWebApps()
         assertEquals(
             listOf(
-                "https://expensetracker.cryptgregresearch.org/",
+                "https://finance.cryptgregresearch.org/",
                 "https://bookmarks.cryptgregresearch.org/",
             ),
             apps.map { it.startUrl },
         )
         assertEquals(listOf("finance", "productivity"), apps.map { it.category })
+    }
+
+    @Test
+    fun `legacy finance url moves to finance host`() {
+        val defaults = defaultInstalledWebApps()
+        val finance = defaults.first()
+        val bookmarks = defaults[1]
+        val other = InstalledWebApp(startUrl = "https://expensetracker.cryptgregresearch.org/")
+        val legacy = listOf(
+            finance.copy(startUrl = "https://expensetracker.cryptgregresearch.org"),
+            bookmarks,
+            other,
+        )
+        val rewritten = rewriteLegacyDefaultFinanceUrl(legacy)
+        assertEquals(DEFAULT_FINANCE_START_URL, rewritten[0].startUrl)
+        assertEquals(bookmarks, rewritten[1])
+        assertEquals(other, rewritten[2])
+        assertEquals(rewritten, rewriteLegacyDefaultFinanceUrl(rewritten))
+    }
+
+    @Test
+    fun `user edited finance url is kept`() {
+        val finance = defaultInstalledWebApps().first().copy(startUrl = "https://example.com/ledger")
+        val result = rewriteLegacyDefaultFinanceUrl(listOf(finance))
+        assertEquals(listOf(finance), result)
+    }
+
+    @Test
+    fun `startup seeds once and rewrites only the legacy finance url`() {
+        assertEquals(
+            listOf(DEFAULT_FINANCE_START_URL, "https://bookmarks.cryptgregresearch.org/"),
+            installedWebAppsAfterStartup(seeded = false, apps = emptyList())?.map { it.startUrl },
+        )
+        val custom = defaultInstalledWebApps().first().copy(startUrl = "https://example.com/ledger")
+        assertNull(installedWebAppsAfterStartup(seeded = true, apps = listOf(custom)))
+        val legacy = custom.copy(startUrl = "https://expensetracker.cryptgregresearch.org/")
+        assertEquals(
+            DEFAULT_FINANCE_START_URL,
+            installedWebAppsAfterStartup(seeded = true, apps = listOf(legacy))?.single()?.startUrl,
+        )
     }
 
     @Test
