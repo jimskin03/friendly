@@ -86,11 +86,18 @@ fun canFavoriteWebApp(apps: List<InstalledWebApp>, id: Uuid, favorite: Boolean):
 private val FINANCE_APP_ID = Uuid.parse("6f0c1a2e-7b14-4d21-9c55-1a0e7b2d4f61")
 private val BOOKMARKS_APP_ID = Uuid.parse("2c9e5b71-0a34-4f88-b6d1-7e4a9c0d3b52")
 
+const val DEFAULT_FINANCE_START_URL = "https://finance.cryptgregresearch.org/"
+
+private val LEGACY_FINANCE_START_URLS = setOf(
+    "https://expensetracker.cryptgregresearch.org",
+    "https://expensetracker.cryptgregresearch.org/",
+)
+
 fun defaultInstalledWebApps(createdAt: Long = 0L): List<InstalledWebApp> = listOf(
     InstalledWebApp(
         id = FINANCE_APP_ID,
         name = "CryptGreg Finance",
-        startUrl = "https://expensetracker.cryptgregresearch.org/",
+        startUrl = DEFAULT_FINANCE_START_URL,
         createdAt = createdAt,
         description = "Personal finance",
         category = "finance",
@@ -104,6 +111,34 @@ fun defaultInstalledWebApps(createdAt: Long = 0L): List<InstalledWebApp> = listO
         category = "productivity",
     ),
 )
+
+/**
+ * Moves the built-in CryptGreg Finance app off the retired expense-tracker host.
+ * A user-edited URL, or any other app, is left alone.
+ */
+fun rewriteLegacyDefaultFinanceUrl(apps: List<InstalledWebApp>): List<InstalledWebApp> {
+    return apps.map { app ->
+        if (app.id == FINANCE_APP_ID && app.startUrl.trim() in LEGACY_FINANCE_START_URLS) {
+            app.copy(startUrl = DEFAULT_FINANCE_START_URL)
+        } else {
+            app
+        }
+    }
+}
+
+/**
+ * Seeds built-in apps once, then applies [rewriteLegacyDefaultFinanceUrl].
+ * Returns null when the stored list should be left as it is.
+ */
+fun installedWebAppsAfterStartup(
+    seeded: Boolean,
+    apps: List<InstalledWebApp>,
+): List<InstalledWebApp>? {
+    val base = if (seeded) apps else apps.ifEmpty { defaultInstalledWebApps() }
+    val migrated = rewriteLegacyDefaultFinanceUrl(base)
+    if (seeded && migrated == base) return null
+    return migrated
+}
 
 /**
  * Accepts only absolute https URLs. http and every other scheme are rejected.

@@ -49,7 +49,7 @@ import app.friendly.assistant.data.model.Assistant
 import app.friendly.assistant.data.model.HomeAction
 import app.friendly.assistant.data.model.InstalledWebApp
 import app.friendly.assistant.data.model.defaultHomeActions
-import app.friendly.assistant.data.model.defaultInstalledWebApps
+import app.friendly.assistant.data.model.installedWebAppsAfterStartup
 import app.friendly.assistant.data.model.normalizeHomeActions
 import app.friendly.assistant.data.model.Avatar
 import app.friendly.assistant.data.model.InjectionPosition
@@ -496,16 +496,20 @@ class SettingsStore(
 
     init {
         scope.launch {
-            settingsFlow.first { !it.init }
-            update { latest ->
-                if (latest.init || latest.installedWebAppsSeeded) {
-                    latest
-                } else {
-                    latest.copy(
-                        installedWebApps = latest.installedWebApps.ifEmpty { defaultInstalledWebApps() },
-                        installedWebAppsSeeded = true,
-                    )
-                }
+            val latest = settingsFlow.first { !it.init }
+            if (installedWebAppsAfterStartup(latest.installedWebAppsSeeded, latest.installedWebApps) == null) {
+                return@launch
+            }
+            update { current ->
+                if (current.init) return@update current
+                val apps = installedWebAppsAfterStartup(
+                    current.installedWebAppsSeeded,
+                    current.installedWebApps,
+                ) ?: return@update current
+                current.copy(
+                    installedWebApps = apps,
+                    installedWebAppsSeeded = true,
+                )
             }
         }
     }
